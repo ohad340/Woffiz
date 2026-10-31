@@ -13,8 +13,8 @@ export const metadata: Metadata = {
   applicationName: APP_NAME,
   appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: 'default' },
   icons: {
-    icon: [{ url: '/dev-icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
-    apple: [{ url: '/dev-icons/apple-touch-180.png', sizes: '180x180', type: 'image/png' }],
+    icon: [{ url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }],
+    apple: [{ url: '/icons/apple-touch-180.png', sizes: '180x180', type: 'image/png' }],
   },
   formatDetection: { telephone: false, email: false },
 }

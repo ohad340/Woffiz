@@ -57,3 +57,14 @@
   font: var(--text-support);
   color: var(--color-text-muted);
 }
+
+.logoHeading {
+  display: flex;
+  justify-content: center;
+}
+
+.logo {
+  inline-size: min(70%, 280px);
+  block-size: auto;
+  filter: drop-shadow(0 6px 10px rgba(19, 48, 77, 0.25));
+}

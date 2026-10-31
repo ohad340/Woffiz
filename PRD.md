@@ -24,7 +24,7 @@ The AI generates the plan and exercise instructions from puppy age, experience, 
 
 ### Proposed defaults
 These are implementation recommendations, not additional user decisions.
-- Working project identifier: puppy-training; final brand name remains open.
+- Working project identifier: puppy-training; the product name is Woffiz (owner-confirmed 2026-10-31).
 - One puppy per account in the MVP; owner-only account and a separate administrator role.
 - Managed email magic-link sign-in; a single protected account owns the puppy and progress.
 - Pre-generate videos into a reviewed media library rather than generate them during a session.
@@ -207,7 +207,7 @@ Initial hypotheses: at least 60% of completed onboardings lead to a first practi
 | Future regeneration changes history | High | Stable IDs, version checks and immutable completed content |
 | PWA installation differs by browser | Medium | Test target devices and provide contextual instructions |
 
-Open decisions: final brand name; hosting/auth/data providers; runtime model and API budget; video provider and generation budget; qualified reviewer; launch media coverage; pilot audience and timing. Development can begin with clearly labeled fixtures before these are resolved. Public launch cannot proceed without valid content, provider configuration and budget limits.
+Open decisions: hosting/auth/data providers; runtime model and API budget; video provider and generation budget; qualified reviewer; launch media coverage; pilot audience and timing. Development can begin with clearly labeled fixtures before these are resolved. Public launch cannot proceed without valid content, provider configuration and budget limits.
 
 ## 13. Delivery roadmap
 See ROADMAP.md for sequential phases, dependencies and acceptance criteria. Complete the deterministic practice loop with fixtures before connecting live AI. Integrate reviewed media before public launch. Each phase is independently reviewable; do not build the entire product in one prompt.

@@ -1,4 +1,5 @@
 import { Mail, PawPrint } from 'lucide-react'
+import Image from 'next/image'
 import { HeroScene } from '@/components/art/HeroScene'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
 import { Button } from '@/components/ui/Button'
@@ -17,7 +18,9 @@ export default function WelcomePage() {
       <FixtureBanner text="תצוגת פיתוח · אין עדיין התחברות אמיתית" />
       <main id="main" className={styles.main} tabIndex={-1}>
         <HeroScene labelledBy="welcome-title">
-          <h1 id="welcome-title">{APP_NAME}</h1>
+          <h1 id="welcome-title" className={styles.logoHeading}>
+            <Image className={styles.logo} src="/art/logo.webp" alt={APP_NAME} width={1100} height={794} unoptimized priority />
+          </h1>
           <p>תוכנית אימון אישית לגור שלכם, שלב אחרי שלב</p>
         </HeroScene>
 

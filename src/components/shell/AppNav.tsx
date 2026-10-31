@@ -3,8 +3,8 @@
 import { Dog, House, Map, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Mascot } from '@/components/art/Mascot'
-import { APP_SHORT_NAME } from '@/lib/app'
+import Image from 'next/image'
+import { APP_NAME } from '@/lib/app'
 import styles from './AppShell.module.css'
 
 const DESTINATIONS = [
@@ -19,8 +19,7 @@ export function AppNav() {
   return (
     <nav className={styles.nav} aria-label="ניווט ראשי">
       <span className={styles.brand}>
-        <Mascot className={styles.brandMascot} />
-        {APP_SHORT_NAME}
+        <Image className={styles.brandLogo} src="/art/logo.webp" alt={APP_NAME} width={1100} height={794} unoptimized />
       </span>
       <ul className={styles.navList}>
         {DESTINATIONS.map(({ href, label, Icon }) => {

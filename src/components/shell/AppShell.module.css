@@ -105,8 +105,9 @@
     color: var(--color-text);
   }
 
-  .brandMascot {
-    inline-size: 44px;
+  .brandLogo {
+    inline-size: auto;
+    block-size: 44px;
   }
 
   .navList {

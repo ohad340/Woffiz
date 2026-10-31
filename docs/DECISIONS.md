@@ -11,11 +11,11 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 3 | Plain CSS custom properties + CSS Modules, no Tailwind | Proposed | Tokens live once in `src/styles/tokens.css`, mirroring DESIGN_SYSTEM.md. Logical properties for RTL. |
 | 4 | Heebo self-hosted via `@fontsource/heebo` 5.3.0 (400/500/700) | Proposed | SIL Open Font License 1.1. No runtime request to Google. |
 | 5 | Lucide icons (`lucide-react` 1.66.0) | Proposed | Directional icons chosen per RTL (back = arrow pointing right). |
-| 6 | PWA: Next built-in `app/manifest.ts`; placeholder PNG icons generated at build by `ImageResponse`, labeled "DEV" | Proposed | No service worker in Phase 0 — public-asset caching is Phase 4. |
+| 6 | PWA: Next built-in `app/manifest.ts`; icons are the Woffiz logo on a light background (`public/icons`) | Confirmed | No service worker in Phase 0 — public-asset caching is Phase 4. |
 | 7 | Tests: Vitest 5 (domain rules), Playwright 1.64 + axe-core at 360/768/1280 | Proposed | `npx playwright install chromium` once per machine. |
 | 8 | All exact versions pinned (`--save-exact`); Node 24 in `.nvmrc`, `>=20.9` in engines | Proposed | |
 | 9 | Dev state preview via `?state=` (loading, empty, error, offline, generating, generation-error) | Proposed | Development-only; remove or gate before any public deployment. |
-| 10 | Working title "אילוף גורים (שם זמני)" in `src/lib/app.ts`; package `puppy-training` | Proposed | Final brand is open. |
+| 10 | App name and logo: **Woffiz** (owner-supplied logo in `public/art/logo.webp`, app icons in `public/icons`) | Confirmed | Replaces the working title. Package id stays `puppy-training`. |
 | 11 | Onboarding draft stored in `sessionStorage` only | Proposed | Server persistence is Phase 1. |
 | 12 | Map: semantic `<ol>` of buttons + decorative per-step SVG connector (`aria-hidden`); bounded window (3 before / 4 after current) with load-earlier/later; ordered list layout when the path container is ≤300px (narrow phones, 200% zoom) | Proposed | |
 
