@@ -1,9 +1,13 @@
-import { Mail, PawPrint } from 'lucide-react'
+import { PawPrint } from 'lucide-react'
 import Image from 'next/image'
 import { HeroScene } from '@/components/art/HeroScene'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
-import { Button } from '@/components/ui/Button'
+import { SignInForm } from '@/components/auth/SignInForm'
 import { APP_NAME } from '@/lib/app'
+import { devInboxEnabled } from '@/server/dev-inbox'
+import { getOverview } from '@/server/queries'
+import { getSessionUser } from '@/server/session'
+import { redirect } from 'next/navigation'
 import styles from './welcome.module.css'
 
 const POINTS = [
@@ -12,10 +16,15 @@ const POINTS = [
   'חינם, בעברית, ואפשר להתקין על מסך הבית.',
 ]
 
-export default function WelcomePage() {
+export const dynamic = 'force-dynamic'
+
+export default async function WelcomePage() {
+  const user = await getSessionUser()
+  if (user) redirect((await getOverview(user.id)) ? '/home' : '/onboarding')
+
   return (
     <>
-      <FixtureBanner text="תצוגת פיתוח · אין עדיין התחברות אמיתית" />
+      <FixtureBanner />
       <main id="main" className={styles.main} tabIndex={-1}>
         <HeroScene labelledBy="welcome-title">
           <h1 id="welcome-title" className={styles.logoHeading}>
@@ -41,10 +50,7 @@ export default function WelcomePage() {
         </div>
 
         <div className={styles.actions}>
-          <Button href="/onboarding" size="cta" fullWidth icon={<Mail size={22} aria-hidden="true" />}>
-            כניסה עם אימייל
-          </Button>
-          <p className={styles.note}>בגרסת הפיתוח הכפתור מדלג ישר לשאלון ההיכרות. התחברות אמיתית תתווסף בשלב הבא.</p>
+          <SignInForm devInbox={devInboxEnabled()} />
         </div>
         <p className={styles.legal}>מדיניות פרטיות ופרטי תמיכה יפורסמו לפני ההשקה.</p>
       </main>

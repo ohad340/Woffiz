@@ -2,30 +2,43 @@
 
 Hebrew, RTL, mobile-first PWA for puppy training. Product spec: [PRD.md](PRD.md), phases: [ROADMAP.md](ROADMAP.md), UI contract: [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md), decisions: [docs/DECISIONS.md](docs/DECISIONS.md).
 
-**Status: Phase 0 shell.** All data is a labeled development fixture (`src/fixtures`). No auth, persistence, AI or video yet.
+**Status: Phase 1 — persistent practice and progression.** Owners sign in with an email link, answer the onboarding questions, and get one fixed mixed-topic path. Practice reports and explicit mastery confirmations are stored on the server. The training content is **labeled development content** (not AI-generated, not reviewed) and there are no videos yet. No AI, billing, reminders or email provider.
 
-## Run
+## Run locally
+
+Requires Node 24 (see `.nvmrc`). No Docker or PostgreSQL install is needed: development uses Prisma's local PGlite server.
 
 ```bash
 npm install
+cp .env.example .env        # then set BETTER_AUTH_SECRET (see the comment in the file)
+npm run db:dev              # local database + migration shadow database (data persists between runs)
+npm run db:migrate          # apply migrations
 npm run dev
 ```
 
-Open http://localhost:3000 — routes: `/`, `/onboarding`, `/map`, `/review`, `/puppy`.
-Preview states with `?state=loading|empty|error|offline` (map, review) or `?state=generating|generation-error` (onboarding).
+Open http://localhost:3000. There is no email provider yet: on the sign-in screen the app shows the sign-in link under **"מצב פיתוח — לא נשלח מייל"** (and prints it to the server log). That stand-in is on only when `DEV_EMAIL_INBOX=true`, `APP_ENV=local` **and** `BETTER_AUTH_URL` points at localhost; any deployed environment fails at least one and cannot sign anyone in until a real provider is added (Phase 4).
+
+Preview states with `?state=loading|empty|error|offline` (map, review) or `?state=generating|generation-error` (onboarding). Development only.
 
 ## Checks
 
 ```bash
-npm run check            # typecheck, lint, unit tests, production build
-npx playwright install chromium   # once
-npm run test:e2e         # RTL, overflow, axe, keyboard, reduced motion at 360/768/1280
+npm run check                     # typecheck, lint, unit tests, production build
+npm run db:test:dev               # second local database for tests (wiped by the suites)
+npm run test:integration          # progression, idempotency, ownership, auth — against PGlite locally
+npm run test:e2e                  # Playwright at 360/768/1280: real sign-in, full practice loop, axe, RTL
 ```
+
+`.env` needs `TEST_DATABASE_URL` for the last two (the printed URL of `npm run db:test:dev`).
+
+**Concurrency and row-locking tests run only on standard PostgreSQL.** PGlite serves one connection, so locally they are skipped and reported as skipped, not passed. The GitHub Actions workflow (`.github/workflows/ci.yml`) runs them against a `postgres:17` service with `TEST_DB_KIND=postgres`.
 
 ## Layout
 
+- `prisma/` — schema and migrations (`prisma.config.ts` at the root)
+- `src/server/` — server-only code: auth, progression (`progress.ts`), onboarding, idempotency, queries
+- `src/app/api/` — route handlers (auth, onboarding, attempts, mastery, dev inbox)
+- `src/components/` — UI (`ui`, `map`, `exercise`, `onboarding`, `auth`, `art`)
+- `src/fixtures/devPlan.ts` — the labeled development plan used to create every plan
 - `src/styles/tokens.css` — design tokens (keep in sync with DESIGN_SYSTEM.md)
-- `src/components/ui` — Button, fields, choice cards, card/badge/skeleton, sheet, state messages
-- `src/components/map` — winding level map
-- `src/domain` — level types and single-path invariants
-- `e2e/` — Playwright UI tests
+- `test/integration/` and `e2e/` — database and browser tests

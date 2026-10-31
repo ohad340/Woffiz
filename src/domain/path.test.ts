@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEMO_LEVELS } from '@/fixtures/demoPlan'
+import { DEV_PLAN } from '@/fixtures/devPlan'
 import { assertValidPath, expandWindow, findCurrentIndex, initialWindow, isPathComplete, PathInvariantError } from './path'
 import type { Level, LevelState } from './types'
 
@@ -17,10 +17,20 @@ function path(states: LevelState[]): Level[] {
 }
 
 describe('assertValidPath', () => {
-  it('accepts the demo fixture as one mixed-topic path with one current level', () => {
-    expect(() => assertValidPath(DEMO_LEVELS)).not.toThrow()
-    expect(DEMO_LEVELS.filter((l) => l.state === 'current')).toHaveLength(1)
-    expect(new Set(DEMO_LEVELS.map((l) => l.topic)).size).toBe(5)
+  it('accepts the development plan as one mixed-topic path with one current level', () => {
+    const levels: Level[] = DEV_PLAN.map((entry, i) => ({
+      id: `dev-${i + 1}`,
+      position: i + 1,
+      topic: entry.topic.toLowerCase() as Level['topic'],
+      title: entry.content.title,
+      goal: entry.content.goal,
+      masteryCriterion: entry.content.successCriterion,
+      estimatedMinutes: entry.estimatedMinutes,
+      state: i === 0 ? 'current' : 'locked',
+    }))
+    expect(() => assertValidPath(levels)).not.toThrow()
+    expect(levels.filter((l) => l.state === 'current')).toHaveLength(1)
+    expect(new Set(levels.map((l) => l.topic)).size).toBe(5)
   })
 
   it('accepts a finished path with no current level', () => {

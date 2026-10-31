@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import { RotateCcw } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Badge, Card, Skeleton } from '@/components/ui/Card'
 import { StateMessage } from '@/components/ui/StateMessage'
 import { TOPIC_LABELS } from '@/domain/types'
-import { DEMO_LEVELS } from '@/fixtures/demoPlan'
 import { parseDevState } from '@/lib/devState'
+import { requireOverview } from '@/server/queries'
+import { requireUserOrRedirect } from '@/server/session'
 import styles from '../page.module.css'
 
 export const metadata: Metadata = { title: 'חזרה' }
@@ -16,13 +18,15 @@ export default async function ReviewPage({
   searchParams: Promise<Record<string, string | string[]>>
 }) {
   const state = parseDevState((await searchParams).state)
-  const completed = state === 'empty' ? [] : DEMO_LEVELS.filter((level) => level.state === 'completed')
+  const user = await requireUserOrRedirect()
+  const overview = await requireOverview(user.id)
+  const completed = state === 'empty' ? [] : overview.levels.filter((level) => level.state === 'completed')
 
   return (
     <div className={styles.narrow}>
       <div className={styles.sectionStack}>
         <h1 className={styles.pageTitle}>חזרה על שלבים</h1>
-        <p className={styles.lead}>אפשר לתרגל שוב כל שלב שהושלם. תרגול חוזר לא משנה את ההתקדמות במפה.</p>
+        <p className={styles.lead}>אפשר לתרגל שוב כל שלב שהושלם. תרגול חוזר לא משנה את ההתקדמות במסלול.</p>
       </div>
 
       {state === 'loading' ? (
@@ -47,7 +51,7 @@ export default async function ReviewPage({
             </Button>
           }
         >
-          אחרי שתשלימו שלב במפה, הוא יופיע כאן לתרגול חוזר.
+          אחרי שתאשרו שהגור שולט בשלב, הוא יופיע כאן לתרגול חוזר.
         </StateMessage>
       ) : (
         <ol className={styles.list} aria-label="שלבים שהושלמו">
@@ -65,7 +69,9 @@ export default async function ReviewPage({
                     <Badge>{TOPIC_LABELS[level.topic]}</Badge>
                   </div>
                   <h2 id={`review-${level.id}`} className={styles.reviewTitle}>
-                    שלב {level.position}: {level.title}
+                    <Link href={`/exercise/${level.id}`}>
+                      שלב {level.position}: {level.title}
+                    </Link>
                   </h2>
                   <p className={styles.muted}>{level.goal}</p>
                 </div>

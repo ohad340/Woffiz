@@ -1,0 +1,230 @@
+// Woffiz data model (PRD section 8). The Better Auth User is the PRD "Account": it owns one puppy.
+// Better Auth's provider-link table is named Account here too; do not confuse the two.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  ADMIN
+}
+
+enum PlanStatus {
+  ACTIVE
+  COMPLETED
+}
+
+enum LevelState {
+  LOCKED
+  CURRENT
+  COMPLETED
+}
+
+enum Topic {
+  TOILET
+  BITING
+  SLEEP
+  ALONE
+  COMMANDS
+}
+
+enum Outcome {
+  INDEPENDENT
+  WITH_HELP
+  STRUGGLING
+}
+
+enum AttemptMode {
+  CURRENT
+  REVIEW
+}
+
+// ----- Better Auth (core schema) -----
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?
+  role          Role     @default(OWNER)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions        Session[]
+  accounts        Account[]
+  puppy           Puppy?
+  idempotencyKeys IdempotencyKey[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ----- Product data -----
+
+model Puppy {
+  id             String    @id @default(uuid()) @db.Uuid
+  ownerId        String    @unique
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name           String    @default("")
+  // Onboarding answers (age band, skills, difficulties, limitations, practice time). Untrusted text.
+  profileJson    Json      @default("{}")
+  onboardingStep Int       @default(0)
+  // Set once onboarding has produced a plan. Completion is idempotent.
+  onboardedAt    DateTime?
+  revision       Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  plans    Plan[]
+  attempts Attempt[]
+}
+
+model Plan {
+  id             String     @id @default(uuid()) @db.Uuid
+  puppyId        String     @db.Uuid
+  puppy          Puppy      @relation(fields: [puppyId], references: [id], onDelete: Cascade)
+  version        Int        @default(1)
+  status         PlanStatus @default(ACTIVE)
+  // Where the content came from. Phase 1 plans are always the labeled development fixture.
+  source         String     @default("dev-fixture")
+  // Optimistic counter, bumped by every frontier change. Clients send the value they saw.
+  revision       Int        @default(0)
+  currentLevelId String?    @db.Uuid
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  levels Level[]
+
+  @@unique([puppyId, version])
+}
+
+model Level {
+  id             String     @id @default(uuid()) @db.Uuid
+  planId         String     @db.Uuid
+  plan           Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  position       Int
+  topic          Topic
+  state          LevelState @default(LOCKED)
+  contentVersion Int        @default(1)
+
+  exerciseVersions ExerciseVersion[]
+  attempts         Attempt[]
+  masteryEvent     MasteryEvent?
+
+  @@unique([planId, position])
+  @@index([planId, state])
+}
+
+model ExerciseVersion {
+  id               String   @id @default(uuid()) @db.Uuid
+  levelId          String   @db.Uuid
+  level            Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  version          Int      @default(1)
+  // Hebrew content: title, goal, preparation, steps, successCriterion, stopConditions, easierVariant.
+  contentJson      Json
+  criterionVersion Int      @default(1)
+  // Reviewed media arrives in Phase 3; always null here.
+  mediaId          String?
+  createdAt        DateTime @default(now())
+
+  attempts Attempt[]
+
+  @@unique([levelId, version])
+}
+
+model Attempt {
+  id                String          @id @default(uuid()) @db.Uuid
+  puppyId           String          @db.Uuid
+  puppy             Puppy           @relation(fields: [puppyId], references: [id], onDelete: Cascade)
+  levelId           String          @db.Uuid
+  level             Level           @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  exerciseVersionId String          @db.Uuid
+  exerciseVersion   ExerciseVersion @relation(fields: [exerciseVersionId], references: [id])
+  outcome           Outcome
+  mode              AttemptMode
+  createdAt         DateTime        @default(now())
+
+  masteryEvent MasteryEvent?
+
+  @@index([puppyId, createdAt(sort: Desc)])
+  @@index([levelId])
+}
+
+model MasteryEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  // Unique: at most one completion per level, so a level can never unlock twice.
+  levelId          String   @unique @db.Uuid
+  level            Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  attemptId        String   @unique @db.Uuid
+  attempt          Attempt  @relation(fields: [attemptId], references: [id])
+  criterionVersion Int
+  confirmedAt      DateTime @default(now())
+}
+
+// A key is scoped to (user, operation) and bound to a hash of the request payload.
+// The saved response is written in the same transaction as the mutation it describes.
+model IdempotencyKey {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operation    String
+  key          String
+  requestHash  String
+  responseJson Json
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, operation, key])
+}

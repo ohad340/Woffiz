@@ -117,3 +117,12 @@
 .guideBubble::after {
   display: none;
 }
+
+.saveError {
+  margin-block-end: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: #fdecea;
+  color: var(--color-error);
+  font-weight: 500;
+}

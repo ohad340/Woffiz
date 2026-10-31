@@ -30,14 +30,39 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 17 | Coins, stars and prize chest from the mockup omitted | Confirmed | No reward system exists; no fake achievements. Progress chip shows real completed/total. |
 | 18 | Map direction bottom-to-top follows the artwork; DOM order stays level order | Proposed | Keyboard and screen readers still go 1 → n. |
 
-## Provider decisions (not needed for Phase 0)
+## Phase 1 — 2026-10-31
+
+| # | Decision | Status | Notes |
+|---|---|---|---|
+| 19 | Prisma **7.10.1** (stable) with `@prisma/adapter-pg` 7.10.1 and `pg` 8.23.1 | Confirmed | Prisma 8 is only a release candidate (8.0.0-rc.29): not used. Engines: Node ^20.19 / ^22.12 / >=24; this repo pins Node 24. |
+| 20 | Better Auth **1.7.14** with the magic-link plugin; peer range includes Next 16 and Prisma 7 | Confirmed | Token stored hashed, single use (consumed atomically), 5-minute default lifetime. |
+| 21 | zod 4.6.7 validates every API body (strict: unknown fields rejected) | Confirmed | |
+| 22 | Local DB: `prisma dev` (PGlite) with named servers `woffiz` and `woffiz-test`; state persists per name; migration shadow DB on its own port | Confirmed | PGlite serves one connection: `DATABASE_POOL_MAX=1` locally. Dev and test data are separate. |
+| 23 | Concurrency / row-locking acceptance tests run on standard PostgreSQL only (CI `postgres:17`, `TEST_DB_KIND=postgres`); locally they are skipped and reported as skipped | Confirmed | A PGlite pass is never counted as verifying them. |
+| 24 | Dev email stand-in needs **all** of: `DEV_EMAIL_INBOX=true`, `APP_ENV=local`, `BETTER_AUTH_URL` on localhost. Off otherwise (inbox route answers 404, nothing is logged) | Confirmed | Without a provider, deployed sign-in fails closed. Provider chosen in Phase 4. |
+| 25 | Idempotency keys: unique per (user, operation, key), bound to a SHA-256 of the canonical payload; saved result commits in the same transaction as the mutation; reuse with another payload is rejected (422) | Confirmed | A retry returns the original result even after the plan advanced. |
+| 26 | Progression only in `src/server/progress.ts` under a plan row lock; DB constraints back it (one ACTIVE plan per puppy, one CURRENT level per plan, one MasteryEvent per level) | Confirmed | |
+| 27 | Mastery needs a CURRENT-mode, INDEPENDENT attempt by the owner's puppy on the current level, against the latest exercise and displayed criterion version, plus a fresh plan revision. Review attempts never qualify | Confirmed | |
+| 28 | Onboarding completion is idempotent (locks the puppy row; unique owner/plan constraints); new accounts are OWNER; `role` is not client-settable | Confirmed | |
+| 29 | "צריך להקל?" shows a predefined easier variant stored with the exercise; no AI | Confirmed | |
+| 30 | One Prisma client per process (`globalThis`) even in production | Confirmed | Next bundles routes separately; each bundle would otherwise open its own pool. |
+
+## Provider decisions
 
 | Area | Recommendation to evaluate | Status |
 |---|---|---|
 | Hosting | Vercel (native Next.js, HTTPS, previews) | Open — no account/resources created |
-| Database | Managed PostgreSQL (e.g. Neon or Supabase) + Prisma | Open — Phase 1 |
-| Auth | Email magic link (Auth.js + email provider, or Supabase Auth) | Open — Phase 1 |
+| Database | **Supabase** (managed PostgreSQL) or Neon, with Prisma | Open — **not needed for Phase 1**, which is verified on local PGlite plus CI PostgreSQL. See below |
+| Auth | Better Auth (chosen). Email delivery provider (e.g. Resend) | Open — Phase 4 |
 | Runtime AI | Anthropic via server-only adapter; model ID chosen and recorded in Phase 2 | Open — needs API key and spend ceiling |
 | Video | AI video vendor + qualified reviewer | Open — Phase 3 |
 
-No paid resources were provisioned.
+### When a hosted database is needed (Supabase)
+
+Not provisioned: creating a project is an account and billing decision for the owner. When it is time (a deployed pilot, Phase 4):
+
+1. Create a Supabase project in a region close to the users; keep it on the free tier until the pilot budget is agreed.
+2. Use two connection strings: the **direct** connection for `prisma migrate deploy` (`DATABASE_URL` in the migration job) and the **pooled** (Supavisor, transaction mode) one for the running app. Leave `DATABASE_POOL_MAX` unset.
+3. Do not use Supabase Auth or its client libraries: authentication stays Better Auth; only the Postgres database is used. Keep Row Level Security **on** with no policies for the app tables, since the app connects server-side with its own role and enforces ownership in code.
+4. Never expose the service-role key or the database URL to the browser; set them only as server environment variables.
+5. Set `APP_ENV=production` (anything but `local`) so the development inbox stays off, and add the email provider before inviting anyone.
