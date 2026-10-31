@@ -4,7 +4,6 @@ import { Check, Lock, Timer } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { VideoUnavailable } from '@/components/media/VideoUnavailable'
 import { Badge } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Sheet } from '@/components/ui/Sheet'
@@ -37,22 +36,14 @@ const MEDAL_TONES = ['green', 'blue', 'purple'] as const
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max)
 
-export function MapView({
-  puppy,
-  levels,
-  openCurrent = false,
-}: {
-  puppy: Puppy
-  levels: Level[]
-  openCurrent?: boolean
-}) {
+export function MapView({ puppy, levels }: { puppy: Puppy; levels: Level[] }) {
   const currentIndex = findCurrentIndex(levels)
   const current = currentIndex === -1 ? undefined : levels[currentIndex]
   const maxStart = Math.max(0, levels.length - WINDOW)
 
   // Start so the current level lands in the middle of the artwork.
   const [start, setStart] = useState(() => clamp((currentIndex === -1 ? levels.length - 1 : currentIndex) - 3, 0, maxStart))
-  const [openId, setOpenId] = useState<string | null>(openCurrent && current ? current.id : null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState('')
   const currentRef = useRef<HTMLLIElement>(null)
 
@@ -208,16 +199,13 @@ function LevelDetails({ level }: { level: Level }) {
         <strong>המטרה: </strong>
         {level.goal}
       </p>
-      <VideoUnavailable />
       <div className={styles.criterion}>
         <h3 className={styles.criterionTitle}>מתי זה נחשב שליטה?</h3>
         <p>{level.masteryCriterion}</p>
       </div>
-      <p className={styles.phaseNote}>
-        {level.state === 'completed'
-          ? 'תרגול חוזר לא משנה את ההתקדמות במסלול. מסך התרגול המלא יתווסף בשלב הפיתוח הבא.'
-          : 'מסך התרגיל המלא והדיווח על תרגול יתווספו בשלב הפיתוח הבא.'}
-      </p>
+      <Button href={`/exercise/${level.id}`} size="cta" fullWidth>
+        {level.state === 'completed' ? 'תרגול חוזר' : 'פתיחת התרגיל'}
+      </Button>
     </>
   )
 }

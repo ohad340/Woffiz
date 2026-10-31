@@ -1,0 +1,24 @@
+.form,
+.sent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.error {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: #fdecea;
+  color: var(--color-error);
+  font-weight: 500;
+}
+
+.devNote {
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: #fff2cc;
+  color: var(--color-on-cta);
+  font: var(--text-support);
+  font-weight: 800;
+}

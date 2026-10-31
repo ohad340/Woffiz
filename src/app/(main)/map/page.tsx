@@ -4,16 +4,15 @@ import { OfflineNotice } from '@/components/shell/OfflineNotice'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Card'
 import { StateMessage } from '@/components/ui/StateMessage'
-import { assertValidPath } from '@/domain/path'
-import { DEMO_LEVELS, DEMO_PUPPY } from '@/fixtures/demoPlan'
 import { parseDevState } from '@/lib/devState'
+import { requireOverview } from '@/server/queries'
+import { requireUserOrRedirect } from '@/server/session'
 import styles from '../page.module.css'
 
 export const metadata: Metadata = { title: 'המפה' }
 
 export default async function MapPage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
-  const params = await searchParams
-  const state = parseDevState(params.state)
+  const state = parseDevState((await searchParams).state)
 
   if (state === 'loading') {
     return (
@@ -62,12 +61,13 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
     )
   }
 
-  assertValidPath(DEMO_LEVELS)
+  const user = await requireUserOrRedirect()
+  const overview = await requireOverview(user.id)
 
   return (
     <>
       <OfflineNotice forced={state === 'offline'} />
-      <MapView puppy={DEMO_PUPPY} levels={DEMO_LEVELS} openCurrent={params.open === 'current'} />
+      <MapView puppy={overview.puppy} levels={overview.levels} />
     </>
   )
 }

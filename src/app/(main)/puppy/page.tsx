@@ -1,13 +1,21 @@
 import type { Metadata } from 'next'
 import { Mascot } from '@/components/art/Mascot'
-import { Button } from '@/components/ui/Button'
+import { SignOutButton } from '@/components/auth/SignOutButton'
 import { Card } from '@/components/ui/Card'
-import { DEMO_PUPPY } from '@/fixtures/demoPlan'
+import { getRecentAttempts, requireOverview } from '@/server/queries'
+import { requireUserOrRedirect } from '@/server/session'
 import styles from '../page.module.css'
 
 export const metadata: Metadata = { title: 'הגור שלי' }
 
-export default function PuppyPage() {
+const OUTCOME_LABELS = { INDEPENDENT: 'הצליח לבד', WITH_HELP: 'הצליח עם עזרה', STRUGGLING: 'עדיין מתקשה' } as const
+const dateFormat = new Intl.DateTimeFormat('he-IL', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Jerusalem' })
+
+export default async function PuppyPage() {
+  const user = await requireUserOrRedirect()
+  const [overview, attempts] = await Promise.all([requireOverview(user.id), getRecentAttempts(user.id)])
+  const puppy = overview.puppy
+
   return (
     <div className={styles.narrow}>
       <div className={styles.profileHero}>
@@ -17,38 +25,44 @@ export default function PuppyPage() {
         <div>
           <h1 className={styles.pageTitle}>הגור שלי</h1>
           <p className={styles.muted}>
-            {DEMO_PUPPY.name} · {DEMO_PUPPY.ageLabel}
+            {puppy.name}
+            {puppy.ageLabel && ` · ${puppy.ageLabel}`}
           </p>
         </div>
       </div>
-
-      <Card aria-labelledby="profile-title">
-        <h2 id="profile-title" className={styles.cardTitle}>
-          פרטי הגור
-        </h2>
-        <dl className={styles.dl}>
-          <dt>שם</dt>
-          <dd>{DEMO_PUPPY.name}</dd>
-          <dt>גיל</dt>
-          <dd>{DEMO_PUPPY.ageLabel}</dd>
-        </dl>
-      </Card>
 
       <Card aria-labelledby="recent-title">
         <h2 id="recent-title" className={styles.cardTitle}>
           תרגולים אחרונים
         </h2>
-        <p className={styles.muted}>עוד אין דיווחי תרגול. דיווחים יישמרו החל מהשלב הבא של הפיתוח.</p>
+        {attempts.length === 0 ? (
+          <p className={styles.muted}>עוד אין דיווחי תרגול. אחרי התרגיל הראשון הם יופיעו כאן.</p>
+        ) : (
+          <ul className={styles.list}>
+            {attempts.map((attempt) => (
+              <li key={attempt.id} className={styles.attempt}>
+                <span>
+                  שלב {attempt.levelPosition}: {attempt.levelTitle}
+                  {attempt.mode === 'REVIEW' && ' (תרגול חוזר)'}
+                </span>
+                <span className={styles.muted}>
+                  {OUTCOME_LABELS[attempt.outcome]} · {dateFormat.format(attempt.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
 
       <Card aria-labelledby="account-title" className={styles.sectionStack}>
         <h2 id="account-title" className={styles.cardTitle}>
           חשבון
         </h2>
-        <p className={styles.muted}>עריכת פרטים, התנתקות ומחיקת חשבון יתווספו יחד עם ההתחברות האמיתית.</p>
-        <Button href="/onboarding" variant="secondary">
-          עריכת שאלון ההיכרות (דמו)
-        </Button>
+        <p>
+          מחוברים בתור <span className="ltr-value">{user.email}</span>
+        </p>
+        <SignOutButton />
+        <p className={styles.muted}>עריכת פרטים ומחיקת חשבון יתווספו בהמשך.</p>
       </Card>
     </div>
   )

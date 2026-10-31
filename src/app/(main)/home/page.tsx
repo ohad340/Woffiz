@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { HeroScene } from '@/components/art/HeroScene'
 import { Mascot } from '@/components/art/Mascot'
 import { Button } from '@/components/ui/Button'
-import { assertValidPath, pathProgress } from '@/domain/path'
-import { DEMO_LEVELS, DEMO_PUPPY } from '@/fixtures/demoPlan'
+import { requireOverview } from '@/server/queries'
+import { requireUserOrRedirect } from '@/server/session'
 import styles from './home.module.css'
 
 export const metadata: Metadata = { title: 'בית' }
@@ -19,9 +19,11 @@ type Tile = {
   progress?: number
 }
 
-export default function HomePage() {
-  assertValidPath(DEMO_LEVELS)
-  const { completed, total, current } = pathProgress(DEMO_LEVELS)
+export default async function HomePage() {
+  const user = await requireUserOrRedirect()
+  const overview = await requireOverview(user.id)
+  const { completed, current, puppy } = overview
+  const total = overview.levels.length
 
   const tiles: Tile[] = [
     {
@@ -36,7 +38,7 @@ export default function HomePage() {
     ...(current
       ? [
           {
-            href: '/map?open=current',
+            href: `/exercise/${current.id}`,
             title: 'האימון של היום',
             meta: `${current.title} · כ-${current.estimatedMinutes} דק׳`,
             tone: 'orange' as const,
@@ -44,7 +46,7 @@ export default function HomePage() {
           },
         ]
       : []),
-    { href: '/puppy', title: 'הגור שלי', meta: DEMO_PUPPY.name, tone: 'blue', Icon: Dog },
+    { href: '/puppy', title: 'הגור שלי', meta: puppy.name, tone: 'blue', Icon: Dog },
   ]
 
   return (
@@ -58,9 +60,9 @@ export default function HomePage() {
                 <Mascot />
               </span>
               <div>
-                <p className={styles.puppyName}>{DEMO_PUPPY.name}</p>
+                <p className={styles.puppyName}>{puppy.name}</p>
                 <p className={styles.puppyMeta}>
-                  {current ? `שלב ${current.position} · ${DEMO_PUPPY.ageLabel}` : 'כל השלבים הושלמו'}
+                  {current ? `שלב ${current.position} · ${puppy.ageLabel}` : 'כל השלבים הושלמו'}
                 </p>
               </div>
             </div>
@@ -79,13 +81,13 @@ export default function HomePage() {
         }
       >
         <h1 id="home-title">איזה כיף שחזרתם!</h1>
-        <p>ממשיכים במסע האימון של {DEMO_PUPPY.name}</p>
+        <p>ממשיכים במסע האימון של {puppy.name}</p>
       </HeroScene>
 
       <div className={styles.ctaWrap}>
         {current ? (
           <Button
-            href="/map?open=current"
+            href={`/exercise/${current.id}`}
             size="cta"
             fullWidth
             icon={<Play size={24} fill="currentColor" aria-hidden="true" />}

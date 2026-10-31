@@ -41,7 +41,7 @@ const TIME_OPTIONS: Choice[] = [
   { value: '15', label: '15 דקות ויותר ביום' },
 ]
 
-type Draft = {
+export type Draft = {
   name: string
   age: string | null
   skills: string[]
@@ -50,19 +50,8 @@ type Draft = {
   time: string | null
 }
 
-const EMPTY_DRAFT: Draft = { name: '', age: null, skills: [], difficulties: [], limitations: '', time: null }
-const STORAGE_KEY = 'onboarding-draft-v1'
 const STEPS = ['הגור', 'מה הוא כבר יודע', 'מה קשה', 'זמן ומגבלות', 'סיכום'] as const
 const GUIDE_LINES = ['ספרו לי על הגור שלכם!', 'כל דבר קטן נחשב!', 'לא נורא, נעבוד על זה יחד.', 'גם 5 דקות ביום זה מעולה.', 'כמעט סיימנו!'] as const
-
-function readDraft(): Draft | null {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    return raw ? { ...EMPTY_DRAFT, ...(JSON.parse(raw) as Partial<Draft>) } : null
-  } catch {
-    return null
-  }
-}
 
 function labelsFor(options: Choice[], values: readonly string[]) {
   const labels = options.filter((o) => values.includes(o.value)).map((o) => o.label)
@@ -71,31 +60,22 @@ function labelsFor(options: Choice[], values: readonly string[]) {
 
 type PreviewState = 'generating' | 'generation-error' | null
 
-export function OnboardingFlow({ previewState }: { previewState: PreviewState }) {
+export function OnboardingFlow({
+  previewState,
+  initial,
+}: {
+  previewState: PreviewState
+  /** Answers and step restored from the server, so a refresh or a new device continues where you left off. */
+  initial: { answers: Draft; step: number }
+}) {
   const router = useRouter()
-  const [step, setStep] = useState(0)
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
-  const [restored, setRestored] = useState(false)
+  const [step, setStep] = useState(initial.step)
+  const [draft, setDraft] = useState<Draft>(initial.answers)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>()
   const [errors, setErrors] = useState<Partial<Record<keyof Draft, string>>>({})
   const headingRef = useRef<HTMLHeadingElement>(null)
   const firstRender = useRef(true)
-
-  // Restore a saved draft after mount (session storage is browser-only).
-  useEffect(() => {
-    const saved = readDraft()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time sync from browser storage
-    if (saved) setDraft(saved)
-    setRestored(true)
-  }, [])
-
-  useEffect(() => {
-    if (!restored) return
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
-    } catch {
-      // Storage unavailable (private mode): answers stay in memory only.
-    }
-  }, [draft, restored])
 
   // Step change is navigation: move focus to the new step heading.
   useEffect(() => {
@@ -122,8 +102,40 @@ export function OnboardingFlow({ previewState }: { previewState: PreviewState })
     return Object.keys(next).length === 0
   }
 
-  const goNext = () => {
-    if (validate(step)) setStep((s) => Math.min(s + 1, STEPS.length - 1))
+  /** POSTs JSON with the same-origin cookie. Returns an error message, or null on success. */
+  async function post(path: string, body: unknown): Promise<string | null> {
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (response.ok) return null
+      const data = (await response.json().catch(() => null)) as { message?: string } | null
+      return data?.message ?? 'לא הצלחנו לשמור. נסו שוב.'
+    } catch {
+      return 'אין חיבור. התשובות נשארו במסך, אפשר לנסות שוב.'
+    }
+  }
+
+  // Each step is saved on the server before moving on; a failure keeps every answer in place.
+  const submitStep = async () => {
+    if (!validate(step)) return
+    setSaving(true)
+    setSaveError(undefined)
+    if (isSummary) {
+      const failure = await post('/api/onboarding/complete', {})
+      setSaving(false)
+      if (failure) return setSaveError(failure)
+      router.push('/home')
+      router.refresh()
+      return
+    }
+    const nextStep = Math.min(step + 1, STEPS.length - 1)
+    const failure = await post('/api/onboarding/draft', { step: nextStep, answers: draft })
+    setSaving(false)
+    if (failure) return setSaveError(failure)
+    setStep(nextStep)
   }
 
   if (previewState === 'generating') {
@@ -190,8 +202,7 @@ export function OnboardingFlow({ previewState }: { previewState: PreviewState })
         noValidate
         onSubmit={(event) => {
           event.preventDefault()
-          if (isSummary) router.push('/home')
-          else goNext()
+          void submitStep()
         }}
       >
         <h1 ref={headingRef} tabIndex={-1} className={styles.heading}>
@@ -295,15 +306,18 @@ export function OnboardingFlow({ previewState }: { previewState: PreviewState })
                 </div>
               ))}
             </dl>
-            <p className={styles.devNote}>
-              בגרסת הפיתוח לא נוצרת תוכנית אישית. הכפתור יציג מסלול דמו קבוע.
-            </p>
+            <p className={styles.devNote}>בשלב הפיתוח המסלול הוא מסלול הדגמה קבוע, לא תוכנית אישית.</p>
           </>
         )}
 
         <div className={styles.footer}>
-          <Button type="submit" size="cta" fullWidth>
-            {isSummary ? 'המשך לבית (דמו)' : 'המשך'}
+          {saveError && (
+            <p className={styles.saveError} role="alert">
+              {saveError}
+            </p>
+          )}
+          <Button type="submit" size="cta" fullWidth loading={saving} loadingLabel={isSummary ? 'מכינים את המסלול…' : 'שומרים…'}>
+            {isSummary ? 'מכינים את המסלול' : 'המשך'}
           </Button>
         </div>
       </form>

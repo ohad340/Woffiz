@@ -1,0 +1,167 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-inline-size: var(--width-form);
+  margin-inline: auto;
+  padding-block-end: calc(var(--cta-height) + var(--space-8));
+}
+
+@media (min-width: 1024px) {
+  .screen {
+    padding-block-end: var(--space-8);
+  }
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-start;
+  min-block-size: 44px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.duration {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: var(--text-support);
+  color: var(--color-text-muted);
+}
+
+.title {
+  font: var(--text-page-title);
+}
+
+.goal {
+  max-inline-size: 60ch;
+  font-size: 1.0625rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.sectionTitle {
+  font: var(--text-section-title);
+  font-weight: 800;
+}
+
+.list,
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-6);
+  max-inline-size: 60ch;
+}
+
+.steps li::marker {
+  font-weight: 800;
+  color: var(--color-primary);
+}
+
+.criterion {
+  padding: var(--space-4) 20px;
+  border-inline-start: 6px solid var(--color-success);
+  border-radius: var(--radius-md);
+  background: #dff5e6;
+}
+
+.criterionTitle {
+  margin-block-end: var(--space-1);
+  font: var(--text-card-title);
+  font-weight: 800;
+}
+
+.criterionNote {
+  margin-block-start: var(--space-2);
+  font: var(--text-support);
+  color: var(--color-text-muted);
+}
+
+.stop {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: #fdf0dd;
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.stop svg {
+  flex: none;
+  margin-block-start: 3px;
+}
+
+.stop ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.easier {
+  display: flex;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.lockNote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-border-subtle);
+  font-weight: 500;
+}
+
+/* The report action stays reachable above the bottom navigation on phones. */
+.practiceBar {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: calc(var(--nav-height) + env(safe-area-inset-bottom));
+  z-index: 15;
+  padding: var(--space-3) var(--gutter);
+  background: linear-gradient(to top, var(--color-bg) 70%, transparent);
+}
+
+.practiceBar > * {
+  max-inline-size: var(--width-form);
+  margin-inline: auto;
+}
+
+@media (min-width: 1024px) {
+  .practiceBar {
+    position: static;
+    padding: 0;
+    background: none;
+  }
+}
