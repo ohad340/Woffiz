@@ -1,0 +1,95 @@
+.group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-block-end: var(--space-2);
+  font-weight: 700;
+}
+
+.hint {
+  margin-block-end: var(--space-3);
+  font: var(--text-support);
+  color: var(--color-text-muted);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.option {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-block-size: var(--control-height);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color var(--duration-button) ease, background-color var(--duration-button) ease;
+}
+
+.option[data-checked] {
+  border: 2px solid var(--color-primary);
+  padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px);
+  background: var(--color-secondary);
+}
+
+.option:has(.input:focus-visible) {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.input {
+  position: absolute;
+  opacity: 0;
+  inline-size: 1px;
+  block-size: 1px;
+}
+
+.marker {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  margin-block-start: 2px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-on-primary);
+}
+
+.option[data-checked] .marker {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+}
+
+.optionLabel {
+  font-weight: 500;
+}
+
+.description {
+  font: var(--text-support);
+  color: var(--color-text-muted);
+}
+
+.error {
+  margin-block-start: var(--space-2);
+  font: var(--text-support);
+  font-weight: 500;
+  color: var(--color-error);
+}

@@ -1,0 +1,124 @@
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height);
+  padding-block: var(--space-2);
+  padding-inline: var(--space-6);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  font: var(--text-button);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-button) ease,
+    border-color var(--duration-button) ease,
+    transform var(--duration-button) ease;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+}
+
+.cta {
+  min-block-size: var(--cta-height);
+}
+
+.full {
+  inline-size: 100%;
+}
+
+.label,
+.hiddenLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hiddenLabel {
+  visibility: hidden;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.spinner {
+  inline-size: 18px;
+  block-size: 18px;
+  border: 2px solid currentColor;
+  border-block-start-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.primary:hover:not(:disabled),
+.primary:active:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.secondary {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--color-secondary);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--color-primary);
+  padding-inline: var(--space-3);
+}
+
+.ghost:hover:not(:disabled) {
+  background: var(--color-secondary);
+}
+
+.destructive {
+  background: var(--color-surface);
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.destructive:hover:not(:disabled) {
+  background: #fdecea;
+}
+
+.primary:disabled,
+.secondary:disabled,
+.destructive:disabled {
+  background: var(--color-border-subtle);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-muted);
+}
+
+.primary[aria-busy='true']:disabled {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}

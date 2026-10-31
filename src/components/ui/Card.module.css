@@ -1,0 +1,75 @@
+.card {
+  padding: 20px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-block: 2px;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-full);
+  font: var(--text-badge);
+  white-space: nowrap;
+}
+
+.neutral {
+  background: var(--color-border-subtle);
+  color: var(--color-text);
+}
+
+.success {
+  background: var(--color-secondary);
+  color: var(--color-success);
+}
+
+.warning {
+  background: #fdf0dd;
+  color: var(--color-warning);
+}
+
+.info {
+  background: #e3edf6;
+  color: var(--color-info);
+}
+
+.accent {
+  background: var(--color-accent);
+  color: var(--color-text);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skeletonLine {
+  display: block;
+  block-size: 20px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-border-subtle), var(--color-secondary), var(--color-border-subtle));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeletonLine:nth-child(3n + 2) {
+  inline-size: 80%;
+}
+
+.skeletonLine:nth-child(3n + 3) {
+  inline-size: 60%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
