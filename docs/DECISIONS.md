@@ -52,8 +52,20 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | # | Decision | Status | Notes |
 |---|---|---|---|
 | 31 | Replace the email-link sign-in with email + password; remove the development inbox | Confirmed | Fewer moving parts; no mail needed locally. |
-| 32 | Email verification and password reset are **not implemented** | Open — required before registration is opened anywhere but a local machine | Both need an email provider (Phase 4). Locally a forgotten password means a new account. |
-| 33 | Known limits: in-memory rate limiting (per server instance), no account lockout, no "show password" toggle | Open | Move rate limits to the database before running several instances. |
+| 32 | Email verification and password reset are **not implemented** | Superseded by 34–40 | |
+| 33 | Known limits: in-memory rate limiting (per server instance), no account lockout, no "show password" toggle | Open | Move rate limits to the database before running several instances. Also applies to the per-address email limit (39). |
+
+## Resend email authentication — 2026-10-31
+
+| # | Decision | Status | Notes |
+|---|---|---|---|
+| 34 | Resend via its REST API (`POST https://api.resend.com/emails`, `fetch`, 10 s timeout, idempotency key), no SDK dependency. Settings only from server env: `RESEND_API_KEY`, `EMAIL_FROM`, `TESTER_EMAIL` | Confirmed | Sender `onboarding@resend.dev` for the test phase. Logs carry the status and Resend error name only: never the recipient, link or key. |
+| 35 | Better Auth 1.7.14 built-in flows: `requireEmailVerification`, `sendOnSignUp`, no send on sign-in, `autoSignInAfterVerification`, 1 h verification JWT; `sendResetPassword`, 1 h single-use reset token, `revokeSessionsOnPasswordReset` | Confirmed | Verification links are stateless JWTs: reusing one after verification changes nothing and creates no session (tested). Reset tokens are consumed on use. |
+| 36 | Unverified accounts are blocked from all owner data: pages redirect to `/verify-email`, APIs answer 403 `EMAIL_NOT_VERIFIED`. Existing accounts are **not** auto-verified | Confirmed | Checked on every request (not only at sign-in) because sessions created before this change still exist. |
+| 37 | Test phase: with Resend configured, registration is limited to `TESTER_EMAIL` in every environment (hook before `/sign-up/email` + database hook), and mail is delivered only to `TESTER_EMAIL` | Confirmed | Other recipients get the same neutral answer and no mail. Incomplete settings close registration; they never skip verification. |
+| 38 | Local outbox transport (`EMAIL_TRANSPORT=outbox`) writes JSON files instead of sending; honored only on a local machine. With `LOCAL_SIGNUP=true` it keeps open local registration. e2e uses it; integration tests mock delivery | Confirmed | The old local flags alone no longer open registration: without a way to verify, an account would be unusable. |
+| 39 | Enumeration and abuse: duplicate sign-up, resend and reset answers are identical for known and unknown addresses; email endpoints answer in ≥ 1 s; 3 requests per IP per minute and 3 per address per 15 min (counted for every address, so a 429 reveals nothing) | Confirmed | Re-registering an unverified address re-sends the link (recovers from a failed send). |
+| 40 | Provider failures are never reported as success: Better Auth swallows errors in its sign-up/reset email callbacks, so the auth route marks failures per request (`AsyncLocalStorage`) and answers 503 `EMAIL_SEND_FAILED` | Confirmed | Trade-off: during an outage a 503 only happens for an existing address, which weakly reveals it. Truthful failure was required. |
 
 ## Provider decisions
 
@@ -61,7 +73,7 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 |---|---|---|
 | Hosting | Vercel (native Next.js, HTTPS, previews) | Open — no account/resources created |
 | Database | **Supabase** (managed PostgreSQL) or Neon, with Prisma | Open — **not needed for Phase 1**, which is verified on local PGlite plus CI PostgreSQL. See below |
-| Auth | Better Auth with email + password (chosen). Email delivery provider (e.g. Resend) for verification and reset | Open — Phase 4 |
+| Auth | Better Auth with email + password (chosen). Resend for verification and reset (test sender, tester address only) | Confirmed for the test phase. A verified sending domain is needed before anyone but the tester can register |
 | Runtime AI | Anthropic via server-only adapter; model ID chosen and recorded in Phase 2 | Open — needs API key and spend ceiling |
 | Video | AI video vendor + qualified reviewer | Open — Phase 3 |
 
@@ -73,4 +85,4 @@ Not provisioned: creating a project is an account and billing decision for the o
 2. Use two connection strings: the **direct** connection for `prisma migrate deploy` (`DATABASE_URL` in the migration job) and the **pooled** (Supavisor, transaction mode) one for the running app. Leave `DATABASE_POOL_MAX` unset.
 3. Do not use Supabase Auth or its client libraries: authentication stays Better Auth; only the Postgres database is used. Keep Row Level Security **on** with no policies for the app tables, since the app connects server-side with its own role and enforces ownership in code.
 4. Never expose the service-role key or the database URL to the browser; set them only as server environment variables.
-5. Leave `APP_ENV` unset or not `local` and `LOCAL_SIGNUP` unset so registration stays closed; add the email provider with mandatory verification and password reset before inviting anyone.
+5. Leave `APP_ENV` unset or not `local` and `LOCAL_SIGNUP` unset. Registration is then closed, or limited to `TESTER_EMAIL` when the Resend settings are present.

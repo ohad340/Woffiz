@@ -1,16 +1,15 @@
 /**
- * Sign-up is open only on a developer's machine until the product can verify email addresses.
- * ALL of these must hold; any deployed environment fails at least one, so nobody can register there:
+ * Open sign-up (any address) exists only on a developer's machine, and only together with the local
+ * email outbox (see email/config.ts). ALL of these must hold; any deployed environment fails at least one:
  *
  *   1. LOCAL_SIGNUP=true
  *   2. APP_ENV=local
  *   3. BETTER_AUTH_URL points at this machine (localhost / 127.0.0.1 / [::1])
  *
- * Opening it elsewhere needs a real email provider with mandatory address verification and
- * password reset first (see docs/DECISIONS.md).
+ * Elsewhere registration is closed or limited to TESTER_EMAIL (see docs/DECISIONS.md).
  */
 
-type Env = Record<string, string | undefined>
+export type Env = Record<string, string | undefined>
 
 function isLocalUrl(value: string | undefined) {
   if (!value) return false
@@ -22,6 +21,11 @@ function isLocalUrl(value: string | undefined) {
   }
 }
 
+/** APP_ENV=local and BETTER_AUTH_URL on this machine. */
+export function isLocalMachine(env: Env = process.env): boolean {
+  return env.APP_ENV === 'local' && isLocalUrl(env.BETTER_AUTH_URL)
+}
+
 export function signUpEnabled(env: Env = process.env): boolean {
-  return env.LOCAL_SIGNUP === 'true' && env.APP_ENV === 'local' && isLocalUrl(env.BETTER_AUTH_URL)
+  return env.LOCAL_SIGNUP === 'true' && isLocalMachine(env)
 }

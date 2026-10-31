@@ -4,7 +4,7 @@ import { HeroScene } from '@/components/art/HeroScene'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
 import { AuthForm } from '@/components/auth/AuthForm'
 import { APP_NAME } from '@/lib/app'
-import { signUpEnabled } from '@/server/local-mode'
+import { signUpPolicy } from '@/server/email/config'
 import { getOverview } from '@/server/queries'
 import { getSessionUser } from '@/server/session'
 import { redirect } from 'next/navigation'
@@ -20,6 +20,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function WelcomePage() {
   const user = await getSessionUser()
+  if (user && !user.emailVerified) redirect('/verify-email')
   if (user) redirect((await getOverview(user.id)) ? '/home' : '/onboarding')
 
   return (
@@ -50,7 +51,7 @@ export default async function WelcomePage() {
         </div>
 
         <div className={styles.actions}>
-          <AuthForm signUpOpen={signUpEnabled()} />
+          <AuthForm signUp={signUpPolicy().kind} />
         </div>
         <p className={styles.legal}>מדיניות פרטיות ופרטי תמיכה יפורסמו לפני ההשקה.</p>
       </main>

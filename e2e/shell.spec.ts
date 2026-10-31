@@ -19,6 +19,22 @@ test('welcome page is Hebrew RTL, has no overflow and no serious a11y violations
   await expect(page.getByRole('note')).toContainText('תצוגת פיתוח')
 })
 
+const ACCOUNT_ROUTES = [
+  '/verify-email',
+  '/verify-email?verified=1',
+  '/verify-email?verified=1&error=TOKEN_EXPIRED',
+  '/forgot-password',
+  '/reset-password?token=e2e-placeholder',
+  '/reset-password?error=INVALID_TOKEN',
+]
+
+for (const route of ACCOUNT_ROUTES) {
+  test(`${route} is Hebrew RTL, has no horizontal overflow and no serious a11y violations`, async ({ page }) => {
+    await page.goto(route)
+    await expectHealthyPage(page)
+  })
+}
+
 const OWNER_ROUTES = [
   '/home',
   '/map',

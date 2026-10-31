@@ -44,3 +44,19 @@
   color: var(--color-on-cta);
   font-weight: 500;
 }
+
+.link {
+  color: var(--color-primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.error .link {
+  color: inherit;
+}
+
+.forgot {
+  display: flex;
+  justify-content: center;
+}

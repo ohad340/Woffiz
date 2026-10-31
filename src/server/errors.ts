@@ -1,5 +1,6 @@
 export type ErrorCode =
   | 'UNAUTHENTICATED'
+  | 'EMAIL_NOT_VERIFIED'
   | 'FORBIDDEN_ORIGIN'
   | 'VALIDATION'
   | 'NOT_FOUND'
@@ -14,6 +15,7 @@ export type ErrorCode =
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
+  EMAIL_NOT_VERIFIED: 403,
   FORBIDDEN_ORIGIN: 403,
   VALIDATION: 400,
   NOT_FOUND: 404,
@@ -30,6 +32,7 @@ const STATUS: Record<ErrorCode, number> = {
 /** Hebrew messages safe to show owners. Never include internals or other users' data. */
 const MESSAGE: Record<ErrorCode, string> = {
   UNAUTHENTICATED: 'צריך להתחבר כדי להמשיך.',
+  EMAIL_NOT_VERIFIED: 'צריך לאמת את כתובת האימייל לפני שממשיכים.',
   FORBIDDEN_ORIGIN: 'הבקשה נדחתה.',
   VALIDATION: 'הנתונים שנשלחו אינם תקינים.',
   NOT_FOUND: 'לא מצאנו את מה שחיפשתם.',
