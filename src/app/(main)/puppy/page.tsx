@@ -12,7 +12,7 @@ export default function PuppyPage() {
     <div className={styles.narrow}>
       <div className={styles.profileHero}>
         <span className={styles.profileAvatar}>
-          <Mascot pose="head" />
+          <Mascot />
         </span>
         <div>
           <h1 className={styles.pageTitle}>הגור שלי</h1>

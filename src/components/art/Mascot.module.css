@@ -1,7 +1,7 @@
 .mascot {
   display: block;
-  overflow: visible;
-  filter: drop-shadow(0 6px 8px rgba(29, 43, 58, 0.18));
+  block-size: auto;
+  border-radius: var(--radius-full);
 }
 
 .bubble {

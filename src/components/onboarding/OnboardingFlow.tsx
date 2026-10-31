@@ -181,7 +181,7 @@ export function OnboardingFlow({ previewState }: { previewState: PreviewState })
       </div>
 
       <div className={styles.guide} aria-hidden="true">
-        <Mascot pose="head" className={styles.guideMascot} />
+        <Mascot className={styles.guideMascot} />
         <SpeechBubble className={styles.guideBubble}>{GUIDE_LINES[step]}</SpeechBubble>
       </div>
 

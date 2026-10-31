@@ -1,10 +1,14 @@
 .hero {
   position: relative;
+  display: flex;
+  flex-direction: column;
   margin-inline: calc(var(--gutter) * -1);
   overflow: hidden;
+  padding-block-end: 36px;
+  /* Ends on the artwork's own sky colour so the image fades in seamlessly. */
   background:
-    radial-gradient(circle at 80% 8%, rgba(255, 255, 255, 0.55), transparent 30%),
-    linear-gradient(180deg, #4aa9f0 0%, #7cc8f7 40%, #c9ecfd 75%);
+    linear-gradient(180deg, transparent calc(100% - 40px), #6fbc4b calc(100% - 40px)),
+    linear-gradient(180deg, #3a9be8 0%, #78c3f5 45%, #ade6fc 100%);
 }
 
 @media (min-width: 600px) {
@@ -13,30 +17,6 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
   }
-}
-
-.cloud {
-  position: absolute;
-  opacity: 0.95;
-}
-
-.cloudA {
-  inset-block-start: 64px;
-  inset-inline-end: 4%;
-  inline-size: 96px;
-}
-
-.cloudB {
-  inset-block-start: 150px;
-  inset-inline-start: -10px;
-  inline-size: 74px;
-}
-
-.cloudC {
-  inset-block-start: 190px;
-  inset-inline-end: 30%;
-  inline-size: 56px;
-  opacity: 0.8;
 }
 
 .top {
@@ -48,7 +28,7 @@
 .text {
   position: relative;
   z-index: 1;
-  padding: var(--space-4) var(--gutter) 0;
+  padding: var(--space-4) var(--gutter) var(--space-2);
   text-align: center;
 }
 
@@ -70,56 +50,9 @@
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-.stage {
-  position: relative;
-  block-size: 258px;
-}
-
-.hills {
-  position: absolute;
-  inset: auto 0 0;
+.scene {
+  display: block;
   inline-size: 100%;
-  block-size: 200px;
-}
-
-.sign {
-  position: absolute;
-  inset-block-end: 40px;
-  inset-inline-start: 3%;
-  transform: rotate(5deg);
-}
-
-.sign p {
-  font-size: 0.9375rem;
-  padding-inline: var(--space-3);
-}
-
-.mascotWrap {
-  position: absolute;
-  inset-block-end: 34px;
-  inset-inline-start: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  translate: 50% 0;
-}
-
-.bubble {
-  max-inline-size: none;
-  white-space: nowrap;
-  margin-block-end: var(--space-2);
-}
-
-.mascot {
-  inline-size: 200px;
-}
-
-@media (max-width: 360px) {
-  .sign {
-    inset-inline-start: 1%;
-  }
-
-  .mascot {
-    inline-size: 168px;
-  }
+  block-size: auto;
+  margin-block-start: -8px;
 }

@@ -51,18 +51,11 @@ export default function HomePage() {
     <div className={styles.home}>
       <HeroScene
         labelledBy="home-title"
-        sign={
-          <>
-            כל גור
-            <br />
-            יכול להצליח!
-          </>
-        }
         top={
           <div className={styles.topRow}>
             <div className={styles.profile}>
               <span className={styles.avatar}>
-                <Mascot pose="head" />
+                <Mascot />
               </span>
               <div>
                 <p className={styles.puppyName}>{DEMO_PUPPY.name}</p>
@@ -112,7 +105,7 @@ export default function HomePage() {
             <li key={title}>
               <Link href={href} className={styles.tile} data-tone={tone}>
                 <span className={styles.tileArt} aria-hidden="true">
-                  <Mascot pose="head" className={styles.tileMascot} />
+                  <Mascot className={styles.tileMascot} />
                   <span className={styles.tileBadge}>
                     <Icon size={18} strokeWidth={2.6} />
                   </span>

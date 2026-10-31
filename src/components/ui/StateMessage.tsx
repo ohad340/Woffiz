@@ -17,7 +17,7 @@ export function StateMessage({ kind, title, children, action, headingLevel = 'h2
   return (
     <div className={styles.state} data-kind={kind} role={kind === 'error' ? 'alert' : undefined}>
       {kind === 'empty' ? (
-        <Mascot pose="sit" className={styles.mascot} />
+        <Mascot className={styles.mascot} />
       ) : kind === 'error' ? (
         <AlertCircle className={styles.icon} size={36} aria-hidden="true" />
       ) : (

@@ -13,39 +13,76 @@
   }
 }
 
-/* ----- Header over the scene ----- */
+/* ----- Banner: artwork cut from the approved reference, with real controls over it ----- */
 
-.header {
+.banner {
+  container: banner / inline-size;
+  position: relative;
+  z-index: 2;
+  margin-inline: calc(var(--gutter) * -1);
+  padding-block-start: 28px;
+  /* Same blue as the artwork's top edge; the ropes hang from the page top. */
+  background: #3797ea;
+}
+
+@media (min-width: 600px) {
+  .banner {
+    margin-inline: 0;
+    border-start-start-radius: var(--radius-lg);
+    border-start-end-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+}
+
+.rope {
   position: absolute;
-  z-index: 5;
   inset-block-start: 0;
-  inset-inline: 0;
-  display: flex;
-  justify-content: center;
-  pointer-events: none;
+  inline-size: 6px;
+  block-size: 40px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(180deg, #c99a5b 0 4px, #a8773b 4px 8px);
 }
 
-.header > * {
-  pointer-events: auto;
+.rope[data-side='a'] {
+  left: 25.9%;
 }
 
+.rope[data-side='b'] {
+  left: 72.5%;
+}
+
+.bannerArt {
+  display: block;
+  inline-size: 100%;
+  block-size: auto;
+}
+
+/* Positions are physical on purpose: they track pixels in the artwork. */
 .back {
   position: absolute;
-  inset-block-start: var(--space-4);
-  inset-inline-start: var(--space-4);
-  display: grid;
-  place-items: center;
-  inline-size: 48px;
-  block-size: 48px;
+  left: 0;
+  top: calc(28px + 0.8cqw);
+  inline-size: 10.4cqw;
+  aspect-ratio: 1;
   border-radius: var(--radius-full);
-  background: var(--color-surface);
-  box-shadow: 0 4px 0 rgba(29, 43, 58, 0.18), var(--shadow-card);
-  color: var(--color-text);
 }
 
-.title h1 {
-  font-size: 1.625rem;
-  padding: var(--space-2) var(--space-8);
+.bannerBubble {
+  position: absolute;
+  left: 50.2%;
+  top: calc(28px + 27.2cqw);
+  inline-size: 32cqw;
+  block-size: 29.6cqw;
+  display: grid;
+  place-items: center;
+  padding: 1cqw;
+  border-radius: 50%;
+  background: #fff;
+  color: #13304d;
+  font-size: 4.6cqw;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
 }
 
 /* ----- Landscape ----- */
@@ -56,24 +93,14 @@
   display: flex;
   flex-direction: column-reverse;
   margin-inline: calc(var(--gutter) * -1);
-  padding: 112px var(--space-2) var(--space-4);
+  margin-block-start: -20px;
+  padding: 36px var(--space-2) var(--space-4);
   overflow: hidden;
   background:
     radial-gradient(ellipse 50% 5% at 22% 30%, rgba(255, 255, 255, 0.16), transparent),
     radial-gradient(ellipse 45% 4% at 80% 60%, rgba(255, 255, 255, 0.14), transparent),
     radial-gradient(ellipse 50% 5% at 35% 88%, rgba(40, 110, 30, 0.12), transparent),
     linear-gradient(180deg, #8fdc6c 0%, var(--scene-grass) 40%, #69bd49 100%);
-}
-
-/* Sky band behind the hanging sign. */
-.landscape::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto;
-  block-size: 96px;
-  background:
-    radial-gradient(ellipse 60% 70% at 50% 100%, #8fdc6c 49%, transparent 50%),
-    linear-gradient(180deg, #4aa9f0, #a9dcfb);
 }
 
 @media (min-width: 600px) {
@@ -86,10 +113,10 @@
 
 .river {
   position: absolute;
-  inset-block: 80px 0;
+  inset-block: 0;
   inset-inline-end: 0;
   inline-size: 22%;
-  block-size: calc(100% - 80px);
+  block-size: 100%;
   pointer-events: none;
 }
 
@@ -208,36 +235,6 @@
   inset-block-end: 0;
   inset-inline-start: calc(50% - 70px);
   inline-size: 140px;
-}
-
-.startPup {
-  position: absolute;
-  inset-block-end: 14px;
-  inset-inline-start: calc(50% - 50px);
-  inline-size: 100px;
-}
-
-/* Goal at the top of the trail */
-
-.goal {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-block-end: var(--space-2);
-}
-
-.trophy {
-  inline-size: 120px;
-  margin-block-end: -24px;
-}
-
-.pedestal {
-  inline-size: 110px;
-  block-size: 34px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 30%, #c9d2da, #8794a1);
-  box-shadow: 0 6px 0 #6d7a86;
 }
 
 /* Nodes */
@@ -402,7 +399,9 @@
 }
 
 .guideMascot {
-  inline-size: 100%;
+  inline-size: 84px;
+  border: 4px solid #fff;
+  box-shadow: 0 6px 14px rgba(29, 43, 58, 0.25);
 }
 
 .more {

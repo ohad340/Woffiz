@@ -1,11 +1,11 @@
 'use client'
 
-import { ArrowRight, Check, Lock, Timer } from 'lucide-react'
+import { Check, Lock, Timer } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bridge, Bush, Flowers, Pine, River, Rock, RoundTree, Trophy } from '@/components/art/Decor'
+import { Bridge, Bush, Flowers, Pine, River, Rock, RoundTree } from '@/components/art/Decor'
 import { Mascot, SpeechBubble } from '@/components/art/Mascot'
-import { WoodSign } from '@/components/art/WoodSign'
 import { VideoUnavailable } from '@/components/media/VideoUnavailable'
 import { Badge } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -92,13 +92,27 @@ export function MapView({
 
   return (
     <div className={styles.view}>
-      <header className={styles.header}>
-        <Link href="/home" className={styles.back} aria-label="חזרה לבית">
-          <ArrowRight size={24} strokeWidth={3} aria-hidden="true" />
-        </Link>
-        <WoodSign hanging as="h1" className={styles.title}>
-          מפת האימון
-        </WoodSign>
+      <header className={styles.banner}>
+        <span className={styles.rope} data-side="a" aria-hidden="true" />
+        <span className={styles.rope} data-side="b" aria-hidden="true" />
+        <Image
+          className={styles.bannerArt}
+          src="/art/map-banner.webp"
+          alt=""
+          aria-hidden="true"
+          width={896}
+          height={538}
+          unoptimized
+          priority
+        />
+        <h1 className="visually-hidden">מפת האילוף</h1>
+        {/* Real controls laid over the matching spots in the artwork. */}
+        <Link href="/home" className={styles.back} aria-label="חזרה לבית" />
+        <p className={styles.bannerBubble}>
+          מעולה!
+          <br />
+          בואו נמשיך
+        </p>
         <p className="visually-hidden">
           {complete
             ? `כל השלבים של ${puppy.name} הושלמו`
@@ -124,7 +138,6 @@ export function MapView({
         {window.start === 0 && (
           <div className={styles.start} aria-hidden="true">
             <Rock className={styles.startRock} />
-            <Mascot pose="back" className={styles.startPup} />
           </div>
         )}
 
@@ -173,12 +186,8 @@ export function MapView({
                 )}
                 {isCurrent && (
                   <div className={styles.guide} data-side={mascotSide} aria-hidden="true">
-                    <SpeechBubble className={styles.guideBubble}>
-                      מעולה!
-                      <br />
-                      בואו נמשיך
-                    </SpeechBubble>
-                    <Mascot pose="sit" className={styles.guideMascot} />
+                    <SpeechBubble className={styles.guideBubble}>בואו נתרגל!</SpeechBubble>
+                    <Mascot className={styles.guideMascot} />
                   </div>
                 )}
                 <button
@@ -212,13 +221,6 @@ export function MapView({
             )
           })}
         </ol>
-
-        {window.end === levels.length && (
-          <div className={styles.goal} aria-hidden="true">
-            <Trophy className={styles.trophy} />
-            <span className={styles.pedestal} />
-          </div>
-        )}
 
         {window.end < levels.length && (
           <div className={styles.more}>

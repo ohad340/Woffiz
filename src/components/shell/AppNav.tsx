@@ -19,7 +19,7 @@ export function AppNav() {
   return (
     <nav className={styles.nav} aria-label="ניווט ראשי">
       <span className={styles.brand}>
-        <Mascot pose="head" className={styles.brandMascot} />
+        <Mascot className={styles.brandMascot} />
         {APP_SHORT_NAME}
       </span>
       <ul className={styles.navList}>
