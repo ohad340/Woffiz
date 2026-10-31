@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { DEV_PLAN } from '@/fixtures/devPlan'
 import { prisma, type Tx } from './db'
 import { AppError } from './errors'
@@ -5,8 +6,14 @@ import { EMPTY_ANSWERS, onboardingAnswersSchema, type OnboardingAnswers } from '
 
 export const ONBOARDING_STEPS = 5
 
+/**
+ * Creates the owner's puppy row if it is missing. A plain upsert is not safe under concurrency
+ * (parallel first requests both try to insert and one hits the unique constraint), so the insert
+ * itself is conflict-tolerant and the row is read back afterwards.
+ */
 async function ensurePuppy(tx: Tx, ownerId: string) {
-  return tx.puppy.upsert({ where: { ownerId }, create: { ownerId }, update: {} })
+  await tx.$executeRaw`INSERT INTO "Puppy" ("id", "ownerId", "updatedAt") VALUES (${randomUUID()}::uuid, ${ownerId}, now()) ON CONFLICT ("ownerId") DO NOTHING`
+  return tx.puppy.findUniqueOrThrow({ where: { ownerId } })
 }
 
 /** Serializes concurrent requests for the same puppy (draft saves and completion). */

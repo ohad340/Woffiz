@@ -14,7 +14,7 @@ describe.runIf(REAL_POSTGRES)('concurrency on standard PostgreSQL', () => {
 
   it('uses independent database connections', async () => {
     const pids = await Promise.all(
-      Array.from({ length: 5 }, () => prisma.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid, pg_sleep(0.3)`),
+      Array.from({ length: 5 }, () => prisma.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid FROM pg_sleep(0.3)`),
     )
     expect(new Set(pids.map((rows) => rows[0]!.pid)).size).toBeGreaterThanOrEqual(3)
   })
@@ -33,7 +33,7 @@ describe.runIf(REAL_POSTGRES)('concurrency on standard PostgreSQL', () => {
     )
     expect(results.every((r) => r.status === 'fulfilled')).toBe(true)
     const values = results.map((r) => (r as PromiseFulfilledResult<unknown>).value)
-    expect(new Set(values.map((v) => JSON.stringify(v))).size).toBe(1)
+    for (const value of values) expect(value).toEqual(values[0])
 
     const levels = await prisma.level.findMany({ where: { planId: plan.id }, orderBy: { position: 'asc' } })
     expect(levels.filter((l) => l.state === 'CURRENT').map((l) => l.position)).toEqual([2])
@@ -50,7 +50,8 @@ describe.runIf(REAL_POSTGRES)('concurrency on standard PostgreSQL', () => {
     const input = { levelId: level.id, attemptId: attempt.attemptId, criterionVersion: 1, planRevision: 0, idempotencyKey: key() }
 
     const results = await Promise.all(Array.from({ length: 8 }, () => confirmMastery(user.id, input)))
-    expect(new Set(results.map((r) => JSON.stringify(r))).size).toBe(1)
+    // Same values; key order may differ between the original object and the stored JSON.
+    for (const result of results) expect(result).toEqual(results[0])
     expect(await prisma.masteryEvent.count()).toBe(1)
     expect(await prisma.idempotencyKey.count({ where: { operation: 'mastery.confirm' } })).toBe(1)
   })
