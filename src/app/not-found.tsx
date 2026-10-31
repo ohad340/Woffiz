@@ -10,8 +10,8 @@ export default function NotFound() {
         headingLevel="h1"
         title="הדף לא נמצא"
         action={
-          <Button href="/map" size="cta">
-            חזרה למפה
+          <Button href="/home" size="cta">
+            חזרה לבית
           </Button>
         }
       />

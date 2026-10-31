@@ -12,7 +12,8 @@ import styles from '../page.module.css'
 export const metadata: Metadata = { title: 'המפה' }
 
 export default async function MapPage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
-  const state = parseDevState((await searchParams).state)
+  const params = await searchParams
+  const state = parseDevState(params.state)
 
   if (state === 'loading') {
     return (
@@ -66,7 +67,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
   return (
     <>
       <OfflineNotice forced={state === 'offline'} />
-      <MapView puppy={DEMO_PUPPY} levels={DEMO_LEVELS} />
+      <MapView puppy={DEMO_PUPPY} levels={DEMO_LEVELS} openCurrent={params.open === 'current'} />
     </>
   )
 }

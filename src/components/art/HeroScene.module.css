@@ -1,0 +1,125 @@
+.hero {
+  position: relative;
+  margin-inline: calc(var(--gutter) * -1);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 80% 8%, rgba(255, 255, 255, 0.55), transparent 30%),
+    linear-gradient(180deg, #4aa9f0 0%, #7cc8f7 40%, #c9ecfd 75%);
+}
+
+@media (min-width: 600px) {
+  .hero {
+    margin-inline: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+.cloud {
+  position: absolute;
+  opacity: 0.95;
+}
+
+.cloudA {
+  inset-block-start: 64px;
+  inset-inline-end: 4%;
+  inline-size: 96px;
+}
+
+.cloudB {
+  inset-block-start: 150px;
+  inset-inline-start: -10px;
+  inline-size: 74px;
+}
+
+.cloudC {
+  inset-block-start: 190px;
+  inset-inline-end: 30%;
+  inline-size: 56px;
+  opacity: 0.8;
+}
+
+.top {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-4) var(--gutter) 0;
+}
+
+.text {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-4) var(--gutter) 0;
+  text-align: center;
+}
+
+.text h1 {
+  font: var(--text-display);
+  font-size: clamp(1.875rem, 8vw, 2.5rem);
+  color: #13304d;
+  /* White outline, like a game title. */
+  text-shadow:
+    -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff,
+    0 4px 0 rgba(255, 255, 255, 0.9), 0 6px 12px rgba(19, 48, 77, 0.25);
+}
+
+.text p {
+  margin-block-start: var(--space-1);
+  font-size: 1.0625rem;
+  font-weight: 800;
+  color: #13304d;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.stage {
+  position: relative;
+  block-size: 258px;
+}
+
+.hills {
+  position: absolute;
+  inset: auto 0 0;
+  inline-size: 100%;
+  block-size: 200px;
+}
+
+.sign {
+  position: absolute;
+  inset-block-end: 40px;
+  inset-inline-start: 3%;
+  transform: rotate(5deg);
+}
+
+.sign p {
+  font-size: 0.9375rem;
+  padding-inline: var(--space-3);
+}
+
+.mascotWrap {
+  position: absolute;
+  inset-block-end: 34px;
+  inset-inline-start: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  translate: 50% 0;
+}
+
+.bubble {
+  max-inline-size: none;
+  white-space: nowrap;
+  margin-block-end: var(--space-2);
+}
+
+.mascot {
+  inline-size: 200px;
+}
+
+@media (max-width: 360px) {
+  .sign {
+    inset-inline-start: 1%;
+  }
+
+  .mascot {
+    inline-size: 168px;
+  }
+}

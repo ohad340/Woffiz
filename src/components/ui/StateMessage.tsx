@@ -1,15 +1,10 @@
-import { AlertCircle, Inbox, WifiOff } from 'lucide-react'
+import { AlertCircle, WifiOff } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Mascot } from '@/components/art/Mascot'
 import styles from './StateMessage.module.css'
 
-const ICONS = {
-  empty: Inbox,
-  error: AlertCircle,
-  offline: WifiOff,
-} as const
-
 type StateMessageProps = {
-  kind: keyof typeof ICONS
+  kind: 'empty' | 'error' | 'offline'
   title: string
   children?: ReactNode
   action?: ReactNode
@@ -18,11 +13,16 @@ type StateMessageProps = {
 
 /** Empty / error / offline message with a concrete next action. */
 export function StateMessage({ kind, title, children, action, headingLevel = 'h2' }: StateMessageProps) {
-  const Icon = ICONS[kind]
   const Heading = headingLevel
   return (
     <div className={styles.state} data-kind={kind} role={kind === 'error' ? 'alert' : undefined}>
-      <Icon className={styles.icon} size={32} aria-hidden="true" />
+      {kind === 'empty' ? (
+        <Mascot pose="sit" className={styles.mascot} />
+      ) : kind === 'error' ? (
+        <AlertCircle className={styles.icon} size={36} aria-hidden="true" />
+      ) : (
+        <WifiOff className={styles.icon} size={36} aria-hidden="true" />
+      )}
       <Heading className={styles.title}>{title}</Heading>
       {children && <div className={styles.body}>{children}</div>}
       {action && <div className={styles.action}>{action}</div>}

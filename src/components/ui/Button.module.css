@@ -1,4 +1,5 @@
 .button {
+  --lip: 4px;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -16,11 +17,14 @@
   transition:
     background-color var(--duration-button) ease,
     border-color var(--duration-button) ease,
+    box-shadow var(--duration-button) ease,
     transform var(--duration-button) ease;
 }
 
+/* Pressed: the button sinks onto its 3D lip. */
 .button:active:not(:disabled) {
-  transform: scale(0.98);
+  transform: translateY(var(--lip));
+  box-shadow: none;
 }
 
 .button:disabled {
@@ -29,6 +33,8 @@
 
 .cta {
   min-block-size: var(--cta-height);
+  border-radius: var(--radius-lg);
+  font-size: 1.25rem;
 }
 
 .full {
@@ -71,19 +77,21 @@
 }
 
 .primary {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
+  background: linear-gradient(180deg, #ffd65c 0%, var(--color-cta) 55%);
+  border-color: var(--color-cta-edge);
+  color: var(--color-on-cta);
+  box-shadow: 0 var(--lip) 0 var(--color-cta-edge), 0 8px 16px rgba(224, 138, 0, 0.3);
 }
 
-.primary:hover:not(:disabled),
-.primary:active:not(:disabled) {
-  background: var(--color-primary-hover);
+.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffcf3f 0%, var(--color-cta-hover) 55%);
 }
 
 .secondary {
   background: var(--color-surface);
   border-color: var(--color-primary);
   color: var(--color-primary);
+  box-shadow: 0 var(--lip) 0 var(--color-border-subtle);
 }
 
 .secondary:hover:not(:disabled) {
@@ -91,6 +99,7 @@
 }
 
 .ghost {
+  --lip: 0px;
   background: transparent;
   color: var(--color-primary);
   padding-inline: var(--space-3);
@@ -104,6 +113,7 @@
   background: var(--color-surface);
   border-color: var(--color-error);
   color: var(--color-error);
+  box-shadow: 0 var(--lip) 0 #f3c7c2;
 }
 
 .destructive:hover:not(:disabled) {
@@ -116,9 +126,10 @@
   background: var(--color-border-subtle);
   border-color: var(--color-border-subtle);
   color: var(--color-text-muted);
+  box-shadow: none;
 }
 
 .primary[aria-busy='true']:disabled {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
+  background: var(--color-cta);
+  color: var(--color-on-cta);
 }

@@ -3,6 +3,7 @@
 import { ArrowRight, Pencil } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { Mascot, SpeechBubble } from '@/components/art/Mascot'
 import { Button } from '@/components/ui/Button'
 import { Card, Skeleton } from '@/components/ui/Card'
 import { ChoiceGroup, type Choice } from '@/components/ui/ChoiceGroup'
@@ -52,6 +53,7 @@ type Draft = {
 const EMPTY_DRAFT: Draft = { name: '', age: null, skills: [], difficulties: [], limitations: '', time: null }
 const STORAGE_KEY = 'onboarding-draft-v1'
 const STEPS = ['הגור', 'מה הוא כבר יודע', 'מה קשה', 'זמן ומגבלות', 'סיכום'] as const
+const GUIDE_LINES = ['ספרו לי על הגור שלכם!', 'כל דבר קטן נחשב!', 'לא נורא, נעבוד על זה יחד.', 'גם 5 דקות ביום זה מעולה.', 'כמעט סיימנו!'] as const
 
 function readDraft(): Draft | null {
   try {
@@ -178,12 +180,17 @@ export function OnboardingFlow({ previewState }: { previewState: PreviewState })
         <span style={{ inlineSize: `${((step + 1) / STEPS.length) * 100}%` }} />
       </div>
 
+      <div className={styles.guide} aria-hidden="true">
+        <Mascot pose="head" className={styles.guideMascot} />
+        <SpeechBubble className={styles.guideBubble}>{GUIDE_LINES[step]}</SpeechBubble>
+      </div>
+
       <form
         className={styles.stack}
         noValidate
         onSubmit={(event) => {
           event.preventDefault()
-          if (isSummary) router.push('/map')
+          if (isSummary) router.push('/home')
           else goNext()
         }}
       >
@@ -289,14 +296,14 @@ export function OnboardingFlow({ previewState }: { previewState: PreviewState })
               ))}
             </dl>
             <p className={styles.devNote}>
-              בגרסת הפיתוח לא נוצרת תוכנית אישית. הכפתור יציג מפת דמו קבועה.
+              בגרסת הפיתוח לא נוצרת תוכנית אישית. הכפתור יציג מסלול דמו קבוע.
             </p>
           </>
         )}
 
         <div className={styles.footer}>
           <Button type="submit" size="cta" fullWidth>
-            {isSummary ? 'המשך למפת הדמו' : 'המשך'}
+            {isSummary ? 'המשך לבית (דמו)' : 'המשך'}
           </Button>
         </div>
       </form>

@@ -1,0 +1,230 @@
+.home {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: var(--width-form);
+  margin-inline: auto;
+  margin-block-start: calc(var(--space-4) * -1);
+}
+
+@media (min-width: 600px) {
+  .home {
+    margin-block-start: 0;
+  }
+}
+
+/* ----- Profile row over the sky ----- */
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-inline-size: 0;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 56px;
+  block-size: 56px;
+  padding: 4px;
+  border: 3px solid #fff;
+  border-radius: var(--radius-full);
+  background: #fff4e4;
+  box-shadow: 0 4px 10px rgba(19, 48, 77, 0.25);
+}
+
+.puppyName {
+  font: var(--text-card-title);
+  font-weight: 800;
+  color: #13304d;
+}
+
+.puppyMeta {
+  font: var(--text-support);
+  font-weight: 700;
+  color: #13304d;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding-block: 4px;
+  padding-inline: 4px 14px;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-full);
+  background: #1758b8;
+  box-shadow: 0 4px 0 #0e3f87;
+  color: #fff;
+  font-size: 1.0625rem;
+  font-weight: 800;
+}
+
+.chipIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 30px;
+  block-size: 30px;
+  border: 2px solid #fff;
+  border-radius: var(--radius-full);
+  background: radial-gradient(circle at 35% 30%, #fff1a6, #ffc22e 60%, #e08a00);
+  color: #6b3a00;
+}
+
+/* ----- CTA ----- */
+
+.ctaWrap {
+  position: relative;
+  z-index: 2;
+  margin-block-start: -38px;
+  padding-inline: var(--space-4);
+}
+
+/* ----- White sheet with tiles ----- */
+
+.sheet {
+  margin-block-start: -26px;
+  margin-inline: calc(var(--gutter) * -1);
+  padding: calc(26px + var(--space-6)) var(--gutter) var(--space-6);
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+@media (min-width: 600px) {
+  .sheet {
+    margin-inline: 0;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+  }
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 2px;
+  min-block-size: 156px;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-radius: 22px;
+  color: #fff;
+  text-decoration: none;
+  overflow: hidden;
+  box-shadow: 0 5px 0 var(--tile-edge), 0 10px 18px rgba(29, 43, 58, 0.14);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(255, 255, 255, 0.28), transparent 45%),
+    var(--tile-bg);
+  transition: transform var(--duration-button) ease, box-shadow var(--duration-button) ease;
+}
+
+.tile:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 var(--tile-edge);
+}
+
+.tile[data-tone='green'] {
+  --tile-bg: linear-gradient(160deg, #1a9466, var(--card-green));
+  --tile-edge: #0e6646;
+}
+
+.tile[data-tone='purple'] {
+  --tile-bg: linear-gradient(160deg, #7f58e6, var(--card-purple));
+  --tile-edge: #4f2fa6;
+}
+
+.tile[data-tone='orange'] {
+  --tile-bg: linear-gradient(160deg, #c2620f, var(--card-orange));
+  --tile-edge: #7f3a05;
+}
+
+.tile[data-tone='blue'] {
+  --tile-bg: linear-gradient(160deg, #2a7ee0, var(--card-blue));
+  --tile-edge: #13499a;
+}
+
+.tileArt {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 8px;
+  inline-size: 76px;
+}
+
+.tileMascot {
+  inline-size: 100%;
+}
+
+.tileBadge {
+  position: absolute;
+  inset-block-end: -6px;
+  inset-inline-start: -8px;
+  display: grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border: 2px solid #fff;
+  border-radius: var(--radius-full);
+  background: var(--color-cta);
+  color: var(--color-on-cta);
+}
+
+.chevron {
+  position: absolute;
+  inset-block-start: var(--space-3);
+  inset-inline-start: var(--space-3);
+  display: grid;
+  place-items: center;
+  inline-size: 28px;
+  block-size: 28px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.tileTitle {
+  font: var(--text-card-title);
+  font-size: 1.1875rem;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.tileMeta {
+  overflow: hidden;
+  font: var(--text-support);
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.bar {
+  display: block;
+  block-size: 8px;
+  margin-block-start: var(--space-1);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: #ffd84a;
+}

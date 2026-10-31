@@ -11,14 +11,18 @@
   padding-block-start: var(--space-4);
 }
 
+/* ----- Bottom tab bar (mobile) ----- */
+
 .nav {
   position: fixed;
   inset-inline: 0;
   inset-block-end: 0;
   z-index: 20;
   padding-block-end: env(safe-area-inset-bottom);
-  border-block-start: 1px solid var(--color-border-subtle);
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
   background: var(--color-surface);
+  box-shadow: 0 -6px 20px rgba(29, 43, 58, 0.12);
 }
 
 .brand {
@@ -27,10 +31,10 @@
 
 .navList {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   max-inline-size: var(--width-map);
   margin-inline: auto;
-  padding: 0;
+  padding: 0 var(--space-2);
   list-style: none;
 }
 
@@ -41,23 +45,39 @@
   justify-content: center;
   gap: 2px;
   min-block-size: var(--nav-height);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-1);
+  border-radius: var(--radius-md);
   color: var(--color-text-muted);
   font: var(--text-support);
+  font-weight: 700;
   text-decoration: none;
   outline-offset: -3px;
 }
 
-.navLink[aria-current='page'] {
-  color: var(--color-primary);
-  font-weight: 700;
+.navIcon {
+  display: grid;
+  place-items: center;
+  inline-size: 48px;
+  block-size: 32px;
+  border-radius: var(--radius-full);
+  transition: background-color var(--duration-button) ease, transform var(--duration-button) var(--ease-bounce);
 }
 
-.navLink[aria-current='page'] > span {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+.navLink:active .navIcon {
+  transform: scale(0.9);
 }
+
+.navLink[aria-current='page'] {
+  color: var(--color-primary-hover);
+  font-weight: 800;
+}
+
+.navLink[aria-current='page'] .navIcon {
+  background: var(--color-secondary);
+  transform: translateY(-2px);
+}
+
+/* ----- Top bar (desktop) ----- */
 
 @media (min-width: 1024px) {
   .shell {
@@ -71,37 +91,48 @@
     align-items: center;
     justify-content: space-between;
     gap: var(--space-6);
-    max-inline-size: none;
     padding-inline: max(var(--gutter), calc((100% - var(--width-shell)) / 2 + var(--gutter)));
-    border-block: 0 1px solid var(--color-border-subtle);
-    border-block-end: 1px solid var(--color-border-subtle);
+    border-radius: 0;
+    box-shadow: 0 4px 16px rgba(29, 43, 58, 0.08);
   }
 
   .brand {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font: var(--text-card-title);
-    color: var(--color-primary);
+    font-weight: 800;
+    color: var(--color-text);
+  }
+
+  .brandMascot {
+    inline-size: 44px;
   }
 
   .navList {
     display: flex;
     gap: var(--space-2);
     margin: 0;
+    padding: 0;
   }
 
   .navLink {
     flex-direction: row;
-    gap: var(--space-2);
-    min-block-size: var(--control-height);
-    padding-inline: var(--space-4);
-    border-radius: var(--radius-md);
+    gap: var(--space-1);
+    min-block-size: 56px;
+    padding-inline: var(--space-2) var(--space-4);
     font: var(--text-body);
+    font-weight: 700;
     outline-offset: 2px;
   }
 
   .navLink[aria-current='page'] {
     background: var(--color-secondary);
-    font-weight: 700;
+  }
+
+  .navLink[aria-current='page'] .navIcon {
+    background: transparent;
+    transform: none;
   }
 }
 
@@ -110,9 +141,9 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--gutter);
-  background: var(--color-accent);
-  color: var(--color-text);
+  padding: 6px var(--gutter);
+  background: #fff2cc;
+  color: var(--color-on-cta);
   font: var(--text-support);
   font-weight: 500;
   text-align: center;
@@ -123,9 +154,9 @@
   align-items: flex-start;
   gap: var(--space-2);
   max-inline-size: var(--width-map);
-  margin: var(--space-4) auto 0;
+  margin: 0 auto var(--space-4);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-warning);
+  border: 2px solid var(--color-warning);
   border-radius: var(--radius-md);
   background: #fdf0dd;
   color: var(--color-warning);

@@ -39,6 +39,14 @@ export function isPathComplete(levels: readonly Level[]): boolean {
   return levels.length > 0 && levels.every((level) => level.state === 'completed')
 }
 
+export function pathProgress(levels: readonly Level[]) {
+  return {
+    completed: levels.filter((level) => level.state === 'completed').length,
+    total: levels.length,
+    current: levels.find((level) => level.state === 'current'),
+  }
+}
+
 export type PathWindow = { start: number; end: number }
 
 /** Bounded segment around the frontier for long plans; `end` is exclusive. */

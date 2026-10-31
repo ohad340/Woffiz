@@ -66,15 +66,23 @@ test.describe('map', () => {
   })
 })
 
+test('no screen runs looping animations', async ({ page }) => {
+  for (const route of ['/', '/home', '/map', '/onboarding']) {
+    await page.goto(route)
+    const looping = await page.evaluate(() =>
+      document.getAnimations().filter((a) => a.effect?.getTiming().iterations === Infinity).length,
+    )
+    expect(looping, route).toBe(0)
+  }
+})
+
 test.describe('reduced motion', () => {
   test.use({ reducedMotion: 'reduce' })
 
-  test('animations are effectively disabled', async ({ page }) => {
+  test('opening a level sheet does not animate', async ({ page }) => {
     await page.goto('/map')
-    const duration = await page
-      .locator('button[aria-current="step"] span')
-      .first()
-      .evaluate((el) => getComputedStyle(el).animationDuration)
+    await page.getByRole('button', { name: /פה רך/ }).click()
+    const duration = await page.getByRole('dialog').evaluate((el) => getComputedStyle(el).animationDuration)
     expect(parseFloat(duration)).toBeLessThan(0.001)
   })
 })

@@ -156,13 +156,13 @@ Account deletion deletes personal profiles, plans and attempts and removes linke
 ## 9. UX and design
 Design goal: make the next useful practice action obvious while showing gradual progress. Reward consistency without implying the puppy has failed.
 
-Screens: introduction/sign-in, onboarding, generation state, map, exercise, feedback, completion, puppy/settings and restricted media administration. Bottom navigation uses map, review and puppy; review is a list of completed exercises, not an independent training track.
+Screens: introduction/sign-in, onboarding, generation state, map, exercise, feedback, completion, puppy/settings and restricted media administration. Bottom navigation uses home, map, review and puppy; review is a list of completed exercises, not an independent training track.
 
 The map is a single vertically winding path. Nodes have number, topic label and state icon; future nodes explain their prerequisite when selected. On long plans, show a bounded region around the current level, with accessible controls to load more. Preserve scroll and keyboard focus.
 
 Exercise layout: title and goal, video, preparation, numbered steps, mastery criterion, optional easier guidance and bottom practice-report action. Feedback contains three outcome choices followed by explicit mastery confirmation when appropriate.
 
-Proposed visual direction: cream background, dark green primary controls, mint surfaces and warm orange accents. Rounded cards, readable Hebrew typography and modest unlock animation. Full implementation details: DESIGN_SYSTEM.md.
+Visual direction (owner-approved 2026-10-31): colorful cartoon adventure style with a recurring puppy mascot, sky-and-hills scenery, yellow CTA and a climbing trail map. No looping animations. Full implementation details: DESIGN_SYSTEM.md.
 
 Accessibility: visible labels, semantic controls, keyboard access, screen-reader state announcements, sufficient contrast and no color-only meaning. Respect reduced motion. Use RTL logical layout and isolate mixed-direction text.
 

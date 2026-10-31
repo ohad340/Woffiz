@@ -1,45 +1,45 @@
 # Puppy Training App Design System
-Version: 1.0 | 2026-10-29 | Status: proposed implementation specification
-Confirmed direction: playful and polished, pleasant colors, winding path, small animations.
+Version: 2.0 | 2026-10-31 | Status: implemented in the shell (v2 "playful adventure")
+Confirmed direction: colorful cartoon adventure game look (owner reference mockup, 2026-10-31),
+bright sky, green landscape, warm yellow CTA, a recurring puppy mascot, winding climbing trail.
+v2 replaces the v1 cream/dark-green palette and three-tab navigation.
 All numeric tokens, exact colors and component details below are proposed defaults.
 Product language: Hebrew only. Engineering documentation: English.
 
 ## 1. Design goal
-Help puppy owners immediately identify the next practice action and feel comfortable repeating a difficult exercise. The map communicates progress without pressuring owners to rush their puppy. Use original visual assets, not copied Candy Crush branding.
+Help puppy owners immediately identify the next practice action and feel comfortable repeating a difficult exercise. The map communicates progress without pressuring owners to rush their puppy. Use original visual assets, not copied branding from any existing game.
 
 ## 2. Visual language
-Warm, clear, rounded, calm and lightly playful.
-Use generous whitespace, simple outlined icons and restrained success animation.
+Bright, rounded, cartoon-illustrated and game-like, but calm in motion.
+Illustrations are original inline SVG (mascot, hills, trees, river, bridge, trophy) with soft gradients.
+Chunky "3D" controls: a darker lip under buttons, tiles and map medallions.
 One primary action per screen. Keep operational AI/provider details out of ordinary screens.
 Avoid dense dashboards, neon gradients, excessive confetti and guilt-inducing streak loss.
 Dark mode is deferred.
 
 ## 3. Color tokens
+Source of truth in code: `src/styles/tokens.css`.
 | Role | CSS token | Value | Use |
 |---|---|---|---|
-| Primary | --color-primary | #17624F | Main buttons with white text |
-| Primary pressed | --color-primary-hover | #104B3D | Hover/pressed |
-| Secondary | --color-secondary | #DDF2E8 | Mint surfaces with dark text |
-| Accent | --color-accent | #F2AD69 | Small warm accents with dark text |
-| Background | --color-bg | #FBF8F1 | Cream page |
-| Surface | --color-surface | #FFFFFF | Cards and forms |
-| Text | --color-text | #202B26 | Default text |
-| Muted | --color-text-muted | #59645F | Supporting text |
-| Border | --color-border | #7C8982 | Meaningful input/control boundaries |
-| Subtle border | --color-border-subtle | #E0E6E1 | Decorative dividers only |
-| Success | --color-success | #17624F | Check icon and completion text |
-| Warning | --color-warning | #865000 | Warning text/icons on cream |
-| Error | --color-error | #B42318 | Errors on white |
-| Info | --color-info | #285B86 | Informational text/icons |
-| Focus | --color-focus | #285B86 | Visible focus ring |
+| CTA | --color-cta / --color-cta-edge / --color-on-cta | #FFC22E / #E08A00 / #3D2600 | Main action (yellow, dark text, 3D lip) |
+| Primary | --color-primary / --color-primary-hover | #1F6FD1 / #1858A8 | Links, secondary buttons, active nav |
+| Sky surface | --color-secondary | #D9EFFF | Light surfaces, active nav pill |
+| Background | --color-bg | #E4F4FE | Page (with a sky gradient at the top) |
+| Surface | --color-surface | #FFFFFF | Cards, sheets, forms |
+| Text / muted | --color-text / --color-text-muted | #1D2B3A / #4E5D6C | Body and supporting text |
+| Success / warning / error / info | --color-success etc. | #19703A / #8A5300 / #B42318 / #1F5FAE | Status text and icons |
+| Focus | --color-focus | #1F5FAE | 3px focus ring |
+| Scene | --scene-* | sky, grass, path, water, wood | Illustrations only |
+| Tiles | --card-green/purple/blue/orange | #158A5E / #7046D6 / #1F6FD1 / #B4540A | Home tiles, white text (4.5:1 or better) |
+| Map medallions | --node-* and per-tone variables | gold, blue, green done; orange current; grey locked | Level nodes |
 
-Verify final combinations: 4.5:1 normal text, 3:1 large text and meaningful controls.
-Mint and orange are background accents, not body text on white.
+Verify combinations: 4.5:1 normal text, 3:1 large text and meaningful controls (axe runs in e2e).
+Text on illustrated backgrounds sits on solid plaques, signs or white outlines.
 Locked levels remain readable; communicate lock with an icon and a label, not opacity alone.
 
 ## 4. Typography
 Proposed font: locally hosted Heebo, with Arial and sans-serif fallback.
-Use one family, weights 400, 500 and 700. Obtain the font and license during implementation.
+Use one family, weights 400, 500, 700 and 800 (800 for display titles, buttons and tiles). Obtain the font and license during implementation.
 | Style | Size | Weight | Line height |
 |---|---|---|---|
 | Page title | 28px / 1.75rem | 700 | 1.3 |
@@ -74,10 +74,11 @@ Use content-driven heights, not fixed text containers.
 Prefer borders and spacing over stacking multiple shadows.
 
 ## 7. Information architecture
-Primary navigation: map (המפה), review (חזרה), puppy (הגור שלי).
+Primary navigation: home (בית), map (המפה), review (חזרה), puppy (הגור שלי).
 Review lists completed levels; it is not a separate topic path.
 Settings live under puppy. Administrator tools are separate and access-controlled.
-Do not add a chat tab, shop, leaderboard or topic tabs.
+Do not add a chat tab, shop, leaderboard, rewards/prizes tab or topic tabs. No coins, stars or prizes
+unless real data and an approved feature exist; the reference art's coins and prize chest are omitted.
 
 ## 8. Screen composition
 ### Welcome and sign-in
@@ -90,14 +91,21 @@ Show progress and back action. Save partially completed answers.
 Allow uncertain age/experience and visibly label optional fields.
 Use a summary step before plan creation. Do not repeat questions already answered.
 
+### Home
+Full-bleed sky scene: profile row (mascot avatar, puppy name, real progress chip), outlined title,
+waving mascot and a wooden sign. Yellow CTA “המשך לאימון” opens the current level on the map.
+White sheet below with 2x2 colored tiles: map progress, review, today's exercise, puppy.
+
 ### Map
-Top: puppy name and small profile/avatar; no mandatory photo.
-Below: current-level summary and “ממשיכים לתרגל”.
-Main area: one winding vertical path with alternating offsets; only vertical scrolling.
+Top: hanging wooden sign title and a back button to home.
+Main area: one winding trail that climbs bottom-to-top (level 1 at the bottom, a decorative trophy
+at the end, the mascot seen from behind at the start); only vertical scrolling.
+The mascot sits beside the current level with a short speech bubble.
 Each node includes level number, short topic label and state symbol.
-Current node has a strong ring; completed has a check; locked has a lock.
+Completed nodes are colored medallions (gold/blue/green) with a check badge; the current node is larger,
+orange, with a soft static halo; locked nodes are grey with a lock icon. Labels are cream plaques.
 Use a decorative SVG curve behind semantic buttons, not a canvas-only interface.
-DOM order is level order regardless of visual offsets. Hide decorative path from assistive technology.
+DOM order is level order regardless of visual offsets or the bottom-up direction. Hide decorative path from assistive technology.
 Center the current region on return without stealing keyboard focus.
 For long plans, render a bounded segment and provide accessible load-earlier/load-later controls.
 Locked nodes can explain “השלימו את השלב הקודם כדי לפתוח”; they cannot start exercises.
@@ -138,18 +146,27 @@ Cards: 20px padding, 16px radius; clickable cards use semantic links/buttons.
 Dialogs/sheets: named heading, focus trap, Escape dismissal where safe, focus restoration.
 Feedback: radio group with accessible group label; selection uses border and check, not color alone.
 Toasts: noncritical success only; durable errors remain inline until resolved.
-Bottom nav: three labeled destinations; active state has icon plus text.
+Bottom nav: four labeled destinations on a rounded white bar; active state has a tinted icon pill plus bold text.
 Video: poster, native or equivalently accessible controls, Hebrew captions and transcript toggle.
-Map node: 64px nominal circle; label area permits wrapping and never overlaps adjacent nodes.
+Map node: 72px nominal circle (86px current); label area permits wrapping and never overlaps adjacent nodes.
 Do not rely on tooltips for essential mobile instructions.
 
 ## 10. Iconography and motion
 Proposed library: Lucide, 2px stroke, 20px or 24px icons.
 Mirror directional navigation in RTL; do not mirror media playback controls or checks.
 Transitions: 150ms for buttons, 220ms for panels, 400ms maximum unlock emphasis.
-No autoplay audio, looping bounce or required animation to understand state.
+No looping animations at all (owner feedback 2026-10-31): no idle wagging, waving,
+pulsing halos, drifting clouds or pop-ins. Allowed: press feedback (button sinks onto its lip),
+panel transitions and a one-time unlock emphasis after server-confirmed mastery.
+No autoplay audio or required animation to understand state.
 Respect prefers-reduced-motion: immediate state changes with a static success message.
 Announce new unlocks with a polite live region.
+
+## 10a. Mascot
+One original puppy: golden-brown fur, cream face blaze, floppy darker ears, blue bandana with a white paw.
+Poses: wave (home/welcome), sit (map guide, empty states), head (avatar, tiles, onboarding), back (trail start).
+Always decorative (aria-hidden); speech bubble text is short Hebrew and never the only source of information.
+For launch, professionally illustrated raster assets in the same style may replace the SVG.
 
 ## 11. Responsive rules
 | Width | Behavior |

@@ -1,9 +1,13 @@
 'use client'
 
-import { Check, Lock, PawPrint, Timer } from 'lucide-react'
+import { ArrowRight, Check, Lock, Timer } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bridge, Bush, Flowers, Pine, River, Rock, RoundTree, Trophy } from '@/components/art/Decor'
+import { Mascot, SpeechBubble } from '@/components/art/Mascot'
+import { WoodSign } from '@/components/art/WoodSign'
 import { VideoUnavailable } from '@/components/media/VideoUnavailable'
-import { Badge, Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Sheet } from '@/components/ui/Sheet'
 import { expandWindow, findCurrentIndex, initialWindow, isPathComplete, type PathWindow } from '@/domain/path'
@@ -11,20 +15,65 @@ import { LEVEL_STATE_LABELS, TOPIC_LABELS, type Level, type Puppy } from '@/doma
 import styles from './MapView.module.css'
 
 /** Inline-start offsets (percent of path width) giving the winding shape. */
-const OFFSETS = [50, 74, 50, 26] as const
+const OFFSETS = [50, 70, 50, 30] as const
 const offsetAt = (index: number) => OFFSETS[index % OFFSETS.length]!
 
-const STATE_ICONS = { completed: Check, current: PawPrint, locked: Lock } as const
+/** Completed medallions rotate through warm game colors (decorative only). */
+const MEDAL_TONES = ['gold', 'blue', 'green'] as const
 
-export function MapView({ puppy, levels }: { puppy: Puppy; levels: Level[] }) {
+/** Scenery rotates with the row so each stretch of the trail looks different. */
+function RowDecor({ index, hideStart, hideEnd }: { index: number; hideStart: boolean; hideEnd: boolean }) {
+  const pattern = index % 4
+  const d = styles.deco
+  return (
+    <div className={styles.decor} aria-hidden="true">
+      {pattern === 0 && (
+        <>
+          {!hideStart && <Flowers className={`${d} ${styles.decoStart} ${styles.low}`} />}
+          {!hideEnd && <Bush className={`${d} ${styles.decoEndNear} ${styles.low}`} />}
+        </>
+      )}
+      {pattern === 1 && !hideStart && (
+        <>
+          <RoundTree className={`${d} ${styles.decoStart} ${styles.tall}`} />
+          <Pine className={`${d} ${styles.decoStartFar} ${styles.tallSmall}`} />
+        </>
+      )}
+      {pattern === 2 && (
+        <>
+          {!hideStart && <Rock className={`${d} ${styles.decoStart} ${styles.low}`} />}
+          {!hideEnd && <Flowers className={`${d} ${styles.decoEndNear} ${styles.low}`} />}
+        </>
+      )}
+      {pattern === 3 && !hideEnd && (
+        <>
+          <Pine className={`${d} ${styles.decoEndNear} ${styles.tall}`} />
+          <Bridge className={`${d} ${styles.bridge}`} />
+        </>
+      )}
+    </div>
+  )
+}
+
+export function MapView({
+  puppy,
+  levels,
+  openCurrent = false,
+}: {
+  puppy: Puppy
+  levels: Level[]
+  openCurrent?: boolean
+}) {
+  const currentIndex = findCurrentIndex(levels)
+  const current = currentIndex === -1 ? undefined : levels[currentIndex]
+
   const [window, setWindow] = useState<PathWindow>(() => initialWindow(levels))
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(openCurrent && current ? current.id : null)
   const [announcement, setAnnouncement] = useState('')
   const currentRef = useRef<HTMLLIElement>(null)
 
-  const currentIndex = findCurrentIndex(levels)
-  const current = currentIndex === -1 ? undefined : levels[currentIndex]
   const complete = isPathComplete(levels)
+  const completedCount = levels.filter((level) => level.state === 'completed').length
   const visible = useMemo(() => levels.slice(window.start, window.end), [levels, window])
   const openLevel = levels.find((level) => level.id === openId)
 
@@ -44,103 +93,118 @@ export function MapView({ puppy, levels }: { puppy: Puppy; levels: Level[] }) {
   return (
     <div className={styles.view}>
       <header className={styles.header}>
-        <span className={styles.avatar} aria-hidden="true">
-          <PawPrint size={24} />
-        </span>
-        <div>
-          <h1 className={styles.puppyName}>{puppy.name}</h1>
-          <p className={styles.puppyMeta}>
-            {complete ? 'כל השלבים בתוכנית הושלמו' : `שלב ${current?.position} מתוך ${levels.length}`}
-          </p>
-        </div>
+        <Link href="/home" className={styles.back} aria-label="חזרה לבית">
+          <ArrowRight size={24} strokeWidth={3} aria-hidden="true" />
+        </Link>
+        <WoodSign hanging as="h1" className={styles.title}>
+          מפת האימון
+        </WoodSign>
+        <p className="visually-hidden">
+          {complete
+            ? `כל השלבים של ${puppy.name} הושלמו`
+            : `${completedCount} מתוך ${levels.length} שלבים הושלמו. השלב הנוכחי: ${current?.position}, ${current?.title}.`}
+        </p>
       </header>
 
-      {current && (
-        <Card className={styles.summary} aria-labelledby="current-summary-title">
-          <div className={styles.summaryMeta}>
-            <Badge tone="accent">{TOPIC_LABELS[current.topic]}</Badge>
-            <span className={styles.duration}>
-              <Timer size={16} aria-hidden="true" />
-              כ-{current.estimatedMinutes} דקות
-            </span>
-          </div>
-          <h2 id="current-summary-title" className={styles.summaryTitle}>
-            {current.title}
-          </h2>
-          <p className={styles.summaryGoal}>{current.goal}</p>
-          <Button size="cta" fullWidth onClick={() => setOpenId(current.id)}>
-            ממשיכים לתרגל
-          </Button>
-        </Card>
-      )}
-
-      {complete && (
-        <Card className={styles.summary}>
-          <h2 className={styles.summaryTitle}>סיימתם את כל השלבים בתוכנית</h2>
-          <p className={styles.summaryGoal}>אפשר להמשיך לתרגל כל שלב שהושלם.</p>
-          <Button href="/review" size="cta" fullWidth>
-            חוזרים לתרגל
-          </Button>
-        </Card>
-      )}
-
-      <section className={styles.pathSection} aria-labelledby="path-title">
+      {/* The trail climbs: level 1 at the bottom, the goal at the top. DOM order stays 1 → n. */}
+      <section className={styles.landscape} aria-labelledby="path-title">
         <h2 id="path-title" className="visually-hidden">
           מסלול האימון
         </h2>
+        <River className={styles.river} />
 
         {window.start > 0 && (
           <div className={styles.more}>
-            <Button variant="ghost" onClick={() => expand('earlier')}>
+            <Button variant="secondary" onClick={() => expand('earlier')}>
               הצגת שלבים קודמים ({window.start})
             </Button>
+          </div>
+        )}
+
+        {window.start === 0 && (
+          <div className={styles.start} aria-hidden="true">
+            <Rock className={styles.startRock} />
+            <Mascot pose="back" className={styles.startPup} />
           </div>
         )}
 
         <ol className={styles.path}>
           {visible.map((level, i) => {
             const index = window.start + i
-            const next = visible[i + 1]
-            const Icon = STATE_ICONS[level.state]
-            const from = 100 - offsetAt(index)
-            const to = 100 - offsetAt(index + 1)
+            const prev = i > 0 ? visible[i - 1] : undefined
+            const x = offsetAt(index)
+            const isCurrent = level.state === 'current'
+            const mascotSide = x >= 50 ? 'start' : 'end'
+            // The trail segment from this node down to the previous level.
+            const from = 100 - x
+            const to = 100 - offsetAt(index - 1)
             return (
               <li
                 key={level.id}
-                ref={level.state === 'current' ? currentRef : undefined}
+                ref={isCurrent ? currentRef : undefined}
                 className={styles.step}
-                style={{ '--x': offsetAt(index) } as React.CSSProperties}
+                style={{ '--x': x } as React.CSSProperties}
                 data-state={level.state}
+                data-tone={level.state === 'completed' ? MEDAL_TONES[index % MEDAL_TONES.length] : undefined}
               >
-                {next && (
+                <RowDecor
+                  index={index}
+                  hideStart={isCurrent && mascotSide === 'start'}
+                  hideEnd={isCurrent && mascotSide === 'end'}
+                />
+                {prev && (
                   <svg
                     className={styles.connector}
-                    data-done={level.state === 'completed' || undefined}
+                    data-done={prev.state === 'completed' || undefined}
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                     aria-hidden="true"
                     focusable="false"
                   >
-                    <path d={`M ${from} 0 C ${from} 55, ${to} 45, ${to} 100`} vectorEffect="non-scaling-stroke" />
+                    {['trackEdge', 'track', 'trackDots'].map((cls) => (
+                      <path
+                        key={cls}
+                        className={styles[cls]}
+                        d={`M ${from} 0 C ${from} 55, ${to} 45, ${to} 100`}
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    ))}
                   </svg>
+                )}
+                {isCurrent && (
+                  <div className={styles.guide} data-side={mascotSide} aria-hidden="true">
+                    <SpeechBubble className={styles.guideBubble}>
+                      מעולה!
+                      <br />
+                      בואו נמשיך
+                    </SpeechBubble>
+                    <Mascot pose="sit" className={styles.guideMascot} />
+                  </div>
                 )}
                 <button
                   type="button"
                   className={styles.node}
                   onClick={() => setOpenId(level.id)}
-                  aria-current={level.state === 'current' ? 'step' : undefined}
+                  aria-current={isCurrent ? 'step' : undefined}
                 >
                   <span className={styles.circle}>
-                    <span className="visually-hidden">שלב </span>
-                    {level.position}
-                    <span className={styles.stateIcon} aria-hidden="true">
-                      <Icon size={14} strokeWidth={3} />
-                    </span>
+                    {level.state === 'locked' ? (
+                      <Lock size={30} strokeWidth={2.8} aria-hidden="true" />
+                    ) : (
+                      <span aria-hidden="true">{level.position}</span>
+                    )}
+                    {level.state === 'completed' && (
+                      <span className={styles.stateIcon} aria-hidden="true">
+                        <Check size={14} strokeWidth={3.5} />
+                      </span>
+                    )}
                   </span>
                   <span className={styles.label}>
-                    <span className={styles.title}>{level.title}</span>
-                    <span className={styles.topic}>
-                      {TOPIC_LABELS[level.topic]} · {LEVEL_STATE_LABELS[level.state]}
+                    <span className={styles.levelNo}>שלב {level.position}</span>
+                    <span className={styles.levelTitle}>{level.title}</span>
+                    <span className="visually-hidden">
+                      {' '}
+                      {TOPIC_LABELS[level.topic]}, {LEVEL_STATE_LABELS[level.state]}
                     </span>
                   </span>
                 </button>
@@ -149,9 +213,16 @@ export function MapView({ puppy, levels }: { puppy: Puppy; levels: Level[] }) {
           })}
         </ol>
 
+        {window.end === levels.length && (
+          <div className={styles.goal} aria-hidden="true">
+            <Trophy className={styles.trophy} />
+            <span className={styles.pedestal} />
+          </div>
+        )}
+
         {window.end < levels.length && (
           <div className={styles.more}>
-            <Button variant="ghost" onClick={() => expand('later')}>
+            <Button variant="secondary" onClick={() => expand('later')}>
               הצגת שלבים נוספים ({levels.length - window.end})
             </Button>
           </div>

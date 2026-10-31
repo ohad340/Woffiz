@@ -21,7 +21,7 @@ export default async function ReviewPage({
   return (
     <div className={styles.narrow}>
       <div className={styles.sectionStack}>
-        <h1>חזרה על שלבים</h1>
+        <h1 className={styles.pageTitle}>חזרה על שלבים</h1>
         <p className={styles.lead}>אפשר לתרגל שוב כל שלב שהושלם. תרגול חוזר לא משנה את ההתקדמות במפה.</p>
       </div>
 
@@ -54,16 +54,21 @@ export default async function ReviewPage({
           {completed.map((level) => (
             <li key={level.id}>
               <Card className={styles.reviewCard} aria-labelledby={`review-${level.id}`}>
-                <div className={styles.reviewMeta}>
-                  <Badge tone="success" icon={<RotateCcw size={12} aria-hidden="true" />}>
-                    תרגול חוזר
-                  </Badge>
-                  <Badge>{TOPIC_LABELS[level.topic]}</Badge>
+                <span className={styles.medal} aria-hidden="true">
+                  {level.position}
+                </span>
+                <div className={styles.reviewBody}>
+                  <div className={styles.reviewMeta}>
+                    <Badge tone="success" icon={<RotateCcw size={12} aria-hidden="true" />}>
+                      תרגול חוזר
+                    </Badge>
+                    <Badge>{TOPIC_LABELS[level.topic]}</Badge>
+                  </div>
+                  <h2 id={`review-${level.id}`} className={styles.reviewTitle}>
+                    שלב {level.position}: {level.title}
+                  </h2>
+                  <p className={styles.muted}>{level.goal}</p>
                 </div>
-                <h2 id={`review-${level.id}`} className={styles.reviewTitle}>
-                  שלב {level.position}: {level.title}
-                </h2>
-                <p className={styles.muted}>{level.goal}</p>
               </Card>
             </li>
           ))}

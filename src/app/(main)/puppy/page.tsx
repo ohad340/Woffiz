@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { Mascot } from '@/components/art/Mascot'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { DEMO_PUPPY } from '@/fixtures/demoPlan'
@@ -9,7 +10,17 @@ export const metadata: Metadata = { title: 'הגור שלי' }
 export default function PuppyPage() {
   return (
     <div className={styles.narrow}>
-      <h1>הגור שלי</h1>
+      <div className={styles.profileHero}>
+        <span className={styles.profileAvatar}>
+          <Mascot pose="head" />
+        </span>
+        <div>
+          <h1 className={styles.pageTitle}>הגור שלי</h1>
+          <p className={styles.muted}>
+            {DEMO_PUPPY.name} · {DEMO_PUPPY.ageLabel}
+          </p>
+        </div>
+      </div>
 
       <Card aria-labelledby="profile-title">
         <h2 id="profile-title" className={styles.cardTitle}>

@@ -23,7 +23,7 @@
 }
 
 .success {
-  background: var(--color-secondary);
+  background: #dff5e6;
   color: var(--color-success);
 }
 

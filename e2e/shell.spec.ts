@@ -6,6 +6,7 @@ const ROUTES = [
   '/onboarding',
   '/onboarding?state=generating',
   '/onboarding?state=generation-error',
+  '/home',
   '/map',
   '/map?state=loading',
   '/map?state=empty',
@@ -33,7 +34,7 @@ for (const route of ROUTES) {
 }
 
 test('every development screen is labeled as fixture data', async ({ page }) => {
-  for (const route of ['/', '/onboarding', '/map', '/review', '/puppy']) {
+  for (const route of ['/', '/onboarding', '/home', '/map', '/review', '/puppy']) {
     await page.goto(route)
     await expect(page.getByRole('note')).toContainText('תצוגת פיתוח')
   }

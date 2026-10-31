@@ -1,0 +1,34 @@
+.mascot {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 6px 8px rgba(29, 43, 58, 0.18));
+}
+
+.bubble {
+  position: relative;
+  display: inline-block;
+  max-inline-size: 18ch;
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid rgba(29, 43, 58, 0.12);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: 0 6px 14px rgba(29, 43, 58, 0.16);
+  color: var(--color-text);
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.bubble::after {
+  /* Physical borders on purpose: a rotated square's corner forms the tail. */
+  content: '';
+  position: absolute;
+  inset-block-end: -9px;
+  left: calc(50% - 8px);
+  inline-size: 16px;
+  block-size: 16px;
+  background: var(--color-surface);
+  border-right: inherit;
+  border-bottom: inherit;
+  transform: rotate(45deg);
+}

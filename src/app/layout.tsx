@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import '@fontsource/heebo/400.css'
 import '@fontsource/heebo/500.css'
 import '@fontsource/heebo/700.css'
+import '@fontsource/heebo/800.css'
 import '@/styles/tokens.css'
 import '@/styles/base.css'
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/app'
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#FBF8F1',
+  themeColor: '#5BB8F5',
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',

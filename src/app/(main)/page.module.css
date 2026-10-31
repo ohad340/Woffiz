@@ -21,8 +21,32 @@
 
 .reviewCard {
   display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop), var(--shadow-card);
+}
+
+.reviewBody {
+  display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-inline-size: 0;
+}
+
+.medal {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 52px;
+  block-size: 52px;
+  border: 4px solid #fff;
+  border-radius: var(--radius-full);
+  background: radial-gradient(circle at 35% 30%, #4cc477, var(--node-done) 70%);
+  box-shadow: 0 0 0 2px var(--node-done-edge), 0 4px 0 var(--node-done-edge);
+  color: #fff;
+  font: var(--text-section-title);
+  font-weight: 800;
 }
 
 .reviewMeta {
@@ -61,4 +85,36 @@
 .reviewTitle,
 .cardTitle {
   font: var(--text-card-title);
+}
+
+.pageTitle {
+  font: var(--text-page-title);
+}
+
+.profileHero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--scene-sky-top), var(--scene-sky-bottom));
+  box-shadow: var(--shadow-card);
+}
+
+.profileHero .muted {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.profileAvatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 88px;
+  block-size: 88px;
+  padding: 6px;
+  border: 4px solid #fff;
+  border-radius: var(--radius-full);
+  background: var(--color-secondary);
+  box-shadow: var(--shadow-card);
 }

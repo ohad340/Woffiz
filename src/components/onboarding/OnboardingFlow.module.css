@@ -21,7 +21,7 @@
 }
 
 .progress {
-  block-size: 8px;
+  block-size: 12px;
   border-radius: var(--radius-full);
   background: var(--color-border-subtle);
   overflow: hidden;
@@ -31,7 +31,7 @@
   display: block;
   block-size: 100%;
   border-radius: inherit;
-  background: var(--color-primary);
+  background: linear-gradient(90deg, var(--color-cta), var(--node-current));
   transition: inline-size var(--duration-panel) ease;
 }
 
@@ -95,4 +95,25 @@
   inset-block-end: 0;
   padding-block: var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
   background: linear-gradient(to top, var(--color-bg) 75%, transparent);
+}
+
+.guide {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.guideMascot {
+  flex: none;
+  inline-size: 72px;
+}
+
+.guideBubble {
+  max-inline-size: none;
+  text-align: start;
+}
+
+/* Side-by-side layout: hide the downward tail. */
+.guideBubble::after {
+  display: none;
 }
