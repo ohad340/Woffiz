@@ -35,11 +35,11 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | # | Decision | Status | Notes |
 |---|---|---|---|
 | 19 | Prisma **7.10.1** (stable) with `@prisma/adapter-pg` 7.10.1 and `pg` 8.23.1 | Confirmed | Prisma 8 is only a release candidate (8.0.0-rc.29): not used. Engines: Node ^20.19 / ^22.12 / >=24; this repo pins Node 24. |
-| 20 | Better Auth **1.7.14** with the magic-link plugin; peer range includes Next 16 and Prisma 7 | Confirmed | Token stored hashed, single use (consumed atomically), 5-minute default lifetime. |
+| 20 | Better Auth **1.7.14** with email and password (scrypt hashes, 8–128 characters). Magic-link sign-in was built first and then **replaced** at the owner's request | Confirmed | Sessions are cookies; sign-in errors for a wrong password and an unknown email are identical; 5 attempts per IP per minute on sign-in/sign-up. |
 | 21 | zod 4.6.7 validates every API body (strict: unknown fields rejected) | Confirmed | |
 | 22 | Local DB: `prisma dev` (PGlite) with named servers `woffiz` and `woffiz-test`; state persists per name; migration shadow DB on its own port | Confirmed | PGlite serves one connection: `DATABASE_POOL_MAX=1` locally. Dev and test data are separate. |
 | 23 | Concurrency / row-locking acceptance tests run on standard PostgreSQL only (CI `postgres:17`, `TEST_DB_KIND=postgres`); locally they are skipped and reported as skipped | Confirmed | A PGlite pass is never counted as verifying them. |
-| 24 | Dev email stand-in needs **all** of: `DEV_EMAIL_INBOX=true`, `APP_ENV=local`, `BETTER_AUTH_URL` on localhost. Off otherwise (inbox route answers 404, nothing is logged) | Confirmed | Without a provider, deployed sign-in fails closed. Provider chosen in Phase 4. |
+| 24 | Registration is open only when **all** hold: `LOCAL_SIGNUP=true`, `APP_ENV=local`, `BETTER_AUTH_URL` on localhost. Otherwise sign-up is rejected by the server and hidden in the UI | Confirmed | Owner decision: block sign-up in a published environment until there is an email provider with mandatory address verification and password reset. Until then email addresses are **unverified**, so anyone local can register any address. |
 | 25 | Idempotency keys: unique per (user, operation, key), bound to a SHA-256 of the canonical payload; saved result commits in the same transaction as the mutation; reuse with another payload is rejected (422) | Confirmed | A retry returns the original result even after the plan advanced. |
 | 26 | Progression only in `src/server/progress.ts` under a plan row lock; DB constraints back it (one ACTIVE plan per puppy, one CURRENT level per plan, one MasteryEvent per level) | Confirmed | |
 | 27 | Mastery needs a CURRENT-mode, INDEPENDENT attempt by the owner's puppy on the current level, against the latest exercise and displayed criterion version, plus a fresh plan revision. Review attempts never qualify | Confirmed | |
@@ -47,13 +47,21 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 29 | "צריך להקל?" shows a predefined easier variant stored with the exercise; no AI | Confirmed | |
 | 30 | One Prisma client per process (`globalThis`) even in production | Confirmed | Next bundles routes separately; each bundle would otherwise open its own pool. |
 
+## Password sign-in — 2026-10-31
+
+| # | Decision | Status | Notes |
+|---|---|---|---|
+| 31 | Replace the email-link sign-in with email + password; remove the development inbox | Confirmed | Fewer moving parts; no mail needed locally. |
+| 32 | Email verification and password reset are **not implemented** | Open — required before registration is opened anywhere but a local machine | Both need an email provider (Phase 4). Locally a forgotten password means a new account. |
+| 33 | Known limits: in-memory rate limiting (per server instance), no account lockout, no "show password" toggle | Open | Move rate limits to the database before running several instances. |
+
 ## Provider decisions
 
 | Area | Recommendation to evaluate | Status |
 |---|---|---|
 | Hosting | Vercel (native Next.js, HTTPS, previews) | Open — no account/resources created |
 | Database | **Supabase** (managed PostgreSQL) or Neon, with Prisma | Open — **not needed for Phase 1**, which is verified on local PGlite plus CI PostgreSQL. See below |
-| Auth | Better Auth (chosen). Email delivery provider (e.g. Resend) | Open — Phase 4 |
+| Auth | Better Auth with email + password (chosen). Email delivery provider (e.g. Resend) for verification and reset | Open — Phase 4 |
 | Runtime AI | Anthropic via server-only adapter; model ID chosen and recorded in Phase 2 | Open — needs API key and spend ceiling |
 | Video | AI video vendor + qualified reviewer | Open — Phase 3 |
 
@@ -65,4 +73,4 @@ Not provisioned: creating a project is an account and billing decision for the o
 2. Use two connection strings: the **direct** connection for `prisma migrate deploy` (`DATABASE_URL` in the migration job) and the **pooled** (Supavisor, transaction mode) one for the running app. Leave `DATABASE_POOL_MAX` unset.
 3. Do not use Supabase Auth or its client libraries: authentication stays Better Auth; only the Postgres database is used. Keep Row Level Security **on** with no policies for the app tables, since the app connects server-side with its own role and enforces ownership in code.
 4. Never expose the service-role key or the database URL to the browser; set them only as server environment variables.
-5. Set `APP_ENV=production` (anything but `local`) so the development inbox stays off, and add the email provider before inviting anyone.
+5. Leave `APP_ENV` unset or not `local` and `LOCAL_SIGNUP` unset so registration stays closed; add the email provider with mandatory verification and password reset before inviting anyone.

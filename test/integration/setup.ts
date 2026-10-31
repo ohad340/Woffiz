@@ -10,6 +10,7 @@ process.env.DATABASE_URL = url
 process.env.BETTER_AUTH_SECRET = 'integration-test-secret-integration-test-secret'
 process.env.BETTER_AUTH_URL = 'http://localhost:3000'
 process.env.APP_ENV = 'local'
-process.env.DEV_EMAIL_INBOX = 'true'
+process.env.LOCAL_SIGNUP = 'true'
+process.env.AUTH_RATE_MAX = '10000'
 // PGlite (local) serves one connection; standard PostgreSQL (CI) keeps the default pool so concurrency is real.
 if (process.env.TEST_DB_KIND !== 'postgres') process.env.DATABASE_POOL_MAX = '1'

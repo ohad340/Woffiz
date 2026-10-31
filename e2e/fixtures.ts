@@ -14,17 +14,15 @@ export const ANSWERS = {
 
 export const freshEmail = () => `e2e-${randomUUID()}@example.test`
 
-/** Signs in through the real magic-link endpoints, reading the link from the local dev inbox. */
-export async function signIn(page: Page, email: string) {
-  const sent = await page.request.post('/api/auth/sign-in/magic-link', {
-    data: { email, name: 'בדיקה', callbackURL: '/home' },
+export const PASSWORD = 'e2e-password-123'
+
+/** Registers through the real sign-up endpoint; the response sets the session cookie in this context. */
+export async function register(page: Page, email: string) {
+  const response = await page.request.post('/api/auth/sign-up/email', {
+    data: { email, password: PASSWORD, name: 'בדיקה' },
     headers: { origin: ORIGIN },
   })
-  expect(sent.ok()).toBeTruthy()
-  const inbox = await page.request.get(`/api/dev/inbox?email=${encodeURIComponent(email)}`)
-  expect(inbox.ok()).toBeTruthy()
-  const { url } = (await inbox.json()) as { url: string }
-  await page.goto(url)
+  expect(response.ok()).toBeTruthy()
 }
 
 export async function onboardViaApi(page: Page) {
@@ -44,12 +42,12 @@ type Fixtures = {
 export const test = base.extend<Fixtures>({
   newOwner: async ({ page }, provide) => {
     const email = freshEmail()
-    await signIn(page, email)
+    await register(page, email)
     await provide({ email })
   },
   owner: async ({ page }, provide) => {
     const email = freshEmail()
-    await signIn(page, email)
+    await register(page, email)
     await onboardViaApi(page)
     await page.goto('/home')
     await provide({ email })

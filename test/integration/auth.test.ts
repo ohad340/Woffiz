@@ -1,90 +1,97 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { POST as attemptsPOST } from '@/app/api/attempts/route'
 import { POST as draftPOST } from '@/app/api/onboarding/draft/route'
-import { GET as inboxGET } from '@/app/api/dev/inbox/route'
 import { auth } from '@/server/auth'
 import { prisma } from '@/server/db'
-import { clearDevInbox, latestDevMessage } from '@/server/dev-inbox'
 import { createUser, onboard, planFor, resetDatabase } from './helpers'
 
-beforeEach(async () => {
-  await resetDatabase()
-  clearDevInbox()
+beforeEach(resetDatabase)
+afterEach(() => {
+  vi.unstubAllEnvs()
 })
 
 const BASE = 'http://localhost:3000'
+const PASSWORD = 'correct horse battery'
+const headers = () => new Headers({ origin: BASE })
 
-async function requestLink(email: string, extraBody: Record<string, unknown> = {}) {
-  await auth.api.signInMagicLink({
-    body: { email, name: 'בדיקה', callbackURL: '/home', ...extraBody } as never,
-    headers: new Headers({ origin: BASE }),
-  })
-  const message = latestDevMessage(email)
-  if (!message) throw new Error('no dev message')
-  return new URL(message.url).searchParams.get('token')!
-}
-
-async function verify(token: string) {
-  const response = await auth.api.magicLinkVerify({
-    query: { token, callbackURL: '/home' },
-    headers: new Headers({ origin: BASE }),
-    asResponse: true,
-  })
-  const cookie = response.headers
+const cookieFrom = (response: Response) =>
+  response.headers
     .getSetCookie()
     .map((c) => c.split(';')[0])
     .filter((c) => c && !c.endsWith('='))
     .join('; ')
-  return { response, cookie }
+
+async function signUp(email: string, extra: Record<string, unknown> = {}, instance = auth) {
+  const response = await instance.api.signUpEmail({
+    body: { email, password: PASSWORD, name: 'בדיקה', ...extra } as never,
+    headers: headers(),
+    asResponse: true,
+  })
+  return { response, cookie: cookieFrom(response) }
+}
+
+async function signIn(email: string, password: string, instance = auth) {
+  const response = await instance.api.signInEmail({ body: { email, password }, headers: headers(), asResponse: true })
+  return { response, cookie: cookieFrom(response) }
 }
 
 const sessionFor = (cookie: string) => auth.api.getSession({ headers: new Headers({ cookie }) })
 
-describe('magic link sign-in', () => {
-  it('signs a new owner in once and creates an OWNER account', async () => {
-    const token = await requestLink('new@example.test')
-    const { cookie } = await verify(token)
-    const session = await sessionFor(cookie)
-    expect(session?.user.email).toBe('new@example.test')
-    expect(await prisma.user.findUniqueOrThrow({ where: { email: 'new@example.test' } })).toMatchObject({ role: 'OWNER' })
-  })
+describe('email and password registration', () => {
+  it('creates an OWNER account, signs it in, and stores only a hash', async () => {
+    const { response, cookie } = await signUp('new@example.test')
+    expect(response.status).toBe(200)
+    expect((await sessionFor(cookie))?.user.email).toBe('new@example.test')
 
-  it('cannot be used twice', async () => {
-    const token = await requestLink('single@example.test')
-    const first = await verify(token)
-    expect(await sessionFor(first.cookie)).not.toBeNull()
-    expect(await prisma.session.count()).toBe(1)
-
-    const second = await verify(token)
-    expect(second.cookie).toBe('')
-    expect(await prisma.session.count()).toBe(1)
-  })
-
-  it('stops working after it expires', async () => {
-    const token = await requestLink('late@example.test')
-    await prisma.verification.updateMany({ data: { expiresAt: new Date(Date.now() - 60_000) } })
-    const { cookie } = await verify(token)
-    expect(cookie).toBe('')
-    expect(await prisma.session.count()).toBe(0)
-    expect(await prisma.user.count()).toBe(0)
-  })
-
-  it('does not accept a made-up token', async () => {
-    await requestLink('real@example.test')
-    const { cookie } = await verify('not-a-real-token')
-    expect(cookie).toBe('')
-    expect(await prisma.session.count()).toBe(0)
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: 'new@example.test' } })
+    expect(user.role).toBe('OWNER')
+    const account = await prisma.account.findFirstOrThrow({ where: { userId: user.id, providerId: 'credential' } })
+    expect(account.password).toBeTruthy()
+    expect(account.password).not.toContain(PASSWORD)
   })
 
   it('never lets a client choose ADMIN', async () => {
-    const token = await requestLink('sneaky@example.test', { role: 'ADMIN' })
-    await verify(token)
-    expect(await prisma.user.findUniqueOrThrow({ where: { email: 'sneaky@example.test' } })).toMatchObject({ role: 'OWNER' })
+    await signUp('sneaky@example.test', { role: 'ADMIN' })
+    const user = await prisma.user.findUnique({ where: { email: 'sneaky@example.test' } })
+    expect(user?.role ?? 'OWNER').toBe('OWNER')
+  })
+
+  it('rejects a duplicate email and a short password without creating anything', async () => {
+    await signUp('dup@example.test')
+    expect((await signUp('dup@example.test')).response.status).toBeGreaterThanOrEqual(400)
+    expect(await prisma.user.count({ where: { email: 'dup@example.test' } })).toBe(1)
+
+    const short = await auth.api.signUpEmail({
+      body: { email: 'short@example.test', password: '1234567', name: 'x' } as never,
+      headers: headers(),
+      asResponse: true,
+    })
+    expect(short.status).toBe(400)
+    expect(await prisma.user.count({ where: { email: 'short@example.test' } })).toBe(0)
+  })
+})
+
+describe('email and password sign-in', () => {
+  it('accepts the right password and gives a working session', async () => {
+    await signUp('me@example.test')
+    const { response, cookie } = await signIn('me@example.test', PASSWORD)
+    expect(response.status).toBe(200)
+    expect((await sessionFor(cookie))?.user.email).toBe('me@example.test')
+  })
+
+  it('gives the same answer for a wrong password and an unknown email', async () => {
+    await signUp('real@example.test')
+    const wrong = await signIn('real@example.test', 'not the password')
+    const unknown = await signIn('nobody@example.test', PASSWORD)
+    expect(wrong.response.status).toBe(401)
+    expect(unknown.response.status).toBe(401)
+    expect(await wrong.response.json()).toEqual(await unknown.response.json())
+    expect(wrong.cookie).toBe('')
+    expect(unknown.cookie).toBe('')
   })
 
   it('logout ends the session', async () => {
-    const token = await requestLink('bye@example.test')
-    const { cookie } = await verify(token)
+    const { cookie } = await signUp('bye@example.test')
     expect(await sessionFor(cookie)).not.toBeNull()
     await auth.api.signOut({ headers: new Headers({ cookie, origin: BASE }) })
     expect(await sessionFor(cookie)).toBeNull()
@@ -92,11 +99,28 @@ describe('magic link sign-in', () => {
   })
 })
 
+describe('sign-up is closed outside a local machine', () => {
+  it('rejects registration but still lets existing owners in', async () => {
+    await signUp('early@example.test')
+
+    vi.stubEnv('LOCAL_SIGNUP', 'false')
+    vi.resetModules()
+    const { auth: closed } = await import('@/server/auth')
+
+    const attempt = await signUp('late@example.test', {}, closed)
+    expect(attempt.response.status).toBeGreaterThanOrEqual(400)
+    expect(await prisma.user.count({ where: { email: 'late@example.test' } })).toBe(0)
+
+    const existing = await signIn('early@example.test', PASSWORD, closed)
+    expect(existing.response.status).toBe(200)
+  })
+})
+
 describe('protected server endpoints', () => {
-  const jsonRequest = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+  const jsonRequest = (path: string, body: unknown, extra: Record<string, string> = {}) =>
     new Request(`${BASE}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', origin: BASE, ...headers },
+      headers: { 'content-type': 'application/json', origin: BASE, ...extra },
       body: JSON.stringify(body),
     })
 
@@ -107,8 +131,7 @@ describe('protected server endpoints', () => {
   })
 
   it('rejects other origins and non-JSON bodies even with a valid session', async () => {
-    const token = await requestLink('csrf@example.test')
-    const { cookie } = await verify(token)
+    const { cookie } = await signUp('csrf@example.test')
     const wrongOrigin = await draftPOST(jsonRequest('/api/onboarding/draft', { step: 0, answers: {} }, { cookie, origin: 'https://evil.example' }))
     expect(wrongOrigin.status).toBe(403)
     const noOrigin = await draftPOST(
@@ -122,23 +145,19 @@ describe('protected server endpoints', () => {
   })
 
   it('accepts a signed-in owner and ignores any owner id in the body', async () => {
-    const token = await requestLink('me@example.test')
-    const { cookie } = await verify(token)
+    const { cookie } = await signUp('mine@example.test')
     const other = await createUser('victim@example.test')
-    const response = await draftPOST(
-      jsonRequest('/api/onboarding/draft', { step: 0, answers: { name: 'לוקה' }, ownerId: other.id }, { cookie }),
-    )
+    const response = await draftPOST(jsonRequest('/api/onboarding/draft', { step: 0, answers: { name: 'לוקה' }, ownerId: other.id }, { cookie }))
     expect(response.status).toBe(400) // strict schema: unknown field
     const ok = await draftPOST(jsonRequest('/api/onboarding/draft', { step: 0, answers: { name: 'לוקה' } }, { cookie }))
     expect(ok.status).toBe(200)
-    const me = await prisma.user.findUniqueOrThrow({ where: { email: 'me@example.test' } })
+    const me = await prisma.user.findUniqueOrThrow({ where: { email: 'mine@example.test' } })
     expect((await prisma.puppy.findUniqueOrThrow({ where: { ownerId: me.id } })).name).toBe('לוקה')
     expect(await prisma.puppy.count({ where: { ownerId: other.id } })).toBe(0)
   })
 
-  it('requires an idempotency key and hides other owners\' levels', async () => {
-    const token = await requestLink('mine@example.test')
-    const { cookie } = await verify(token)
+  it("requires an idempotency key and hides other owners' levels", async () => {
+    const { cookie } = await signUp('third@example.test')
     const victim = await createUser('victim2@example.test')
     await onboard(victim.id)
     const victimLevel = (await planFor(victim.id)).levels[0]!
@@ -152,25 +171,5 @@ describe('protected server endpoints', () => {
     )
     expect(foreign.status).toBe(404)
     expect(await prisma.attempt.count()).toBe(0)
-  })
-
-  it('the development inbox answers 404 unless explicitly enabled and local', async () => {
-    const saved = { ...process.env }
-    try {
-      await requestLink('inbox@example.test')
-      const url = `${BASE}/api/dev/inbox?email=inbox@example.test`
-      expect((await inboxGET(new Request(url))).status).toBe(200)
-
-      process.env.DEV_EMAIL_INBOX = 'false'
-      expect((await inboxGET(new Request(url))).status).toBe(404)
-      process.env.DEV_EMAIL_INBOX = 'true'
-      process.env.APP_ENV = 'production'
-      expect((await inboxGET(new Request(url))).status).toBe(404)
-      process.env.APP_ENV = 'local'
-      process.env.BETTER_AUTH_URL = 'https://woffiz.example'
-      expect((await inboxGET(new Request(url))).status).toBe(404)
-    } finally {
-      Object.assign(process.env, saved)
-    }
   })
 })

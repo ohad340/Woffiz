@@ -1,10 +1,11 @@
 import type { Page } from '@playwright/test'
-import { currentLevelId, expect, freshEmail, onboardViaApi, signIn, test } from './fixtures'
+import { currentLevelId, expect, freshEmail, onboardViaApi, register, test } from './fixtures'
 
 const currentNode = (page: Page) => page.locator('button[aria-current="step"]')
 
 test('practice reports never unlock; explicit mastery unlocks exactly one level; review does not advance', async ({ page, owner }) => {
   void owner
+  test.slow() // a long multi-screen journey; the local PGlite database is slower than PostgreSQL
   const level1 = await currentLevelId(page)
 
   // Exercise screen content, with an honest video placeholder.
@@ -103,7 +104,7 @@ test('another owner cannot open my exercise', async ({ browser, page, owner }) =
   const level1 = await currentLevelId(page)
   const other = await browser.newContext({ baseURL: 'http://localhost:3100' })
   const otherPage = await other.newPage()
-  await signIn(otherPage, freshEmail())
+  await register(otherPage, freshEmail())
   await onboardViaApi(otherPage)
   const response = await otherPage.goto(`/exercise/${level1}`)
   expect(response?.status()).toBe(404)
