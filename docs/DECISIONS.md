@@ -25,10 +25,10 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 |---|---|---|---|
 | 13 | Playful adventure look per owner reference mockup; DESIGN_SYSTEM.md v2 | Confirmed | Replaces the v1 cream/green palette. |
 | 14 | Home screen at `/home`; nav becomes בית / המפה / חזרה / הגור שלי | Confirmed | PRD §9 updated. Manifest start_url `/home`. |
-| 15 | Art comes from the owner's mockup and asset sheets (`public/art`); trail, medallions and plaques stay code-drawn | Confirmed | Sheets are low resolution and not transparent sprites; cut by background removal. Replace with real assets before launch. |
+| 15 | Map uses the owner's painted map image with real nodes over eight fixed path places and a sliding window | Confirmed | Painted art has a fixed path, so plans of any length are shown 8 levels at a time. Replace with real high-resolution art before launch. |
 | 16 | No looping animations | Confirmed | Owner feedback. Only press feedback and panel transitions. |
 | 17 | Coins, stars and prize chest from the mockup omitted | Confirmed | No reward system exists; no fake achievements. Progress chip shows real completed/total. |
-| 18 | Map trail climbs bottom-to-top via `column-reverse`; DOM order stays level order | Proposed | Keyboard and screen readers still go 1 → n. |
+| 18 | Map direction bottom-to-top follows the artwork; DOM order stays level order | Proposed | Keyboard and screen readers still go 1 → n. |
 
 ## Provider decisions (not needed for Phase 0)
 

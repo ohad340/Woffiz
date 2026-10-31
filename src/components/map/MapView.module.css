@@ -1,7 +1,7 @@
 .view {
-  position: relative;
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
   max-inline-size: var(--width-map);
   margin-inline: auto;
   margin-block-start: calc(var(--space-4) * -1);
@@ -13,233 +13,98 @@
   }
 }
 
-/* ----- Banner: artwork from the supplied map concept, with a real control over its back button ----- */
+/* ----- Painted map with real nodes laid over it ----- */
 
-.banner {
-  container: banner / inline-size;
+.map {
+  container: map / inline-size;
   position: relative;
-  z-index: 2;
   margin-inline: calc(var(--gutter) * -1);
-}
-
-@media (min-width: 600px) {
-  .banner {
-    margin-inline: 0;
-    border-start-start-radius: var(--radius-lg);
-    border-start-end-radius: var(--radius-lg);
-    overflow: hidden;
-  }
-}
-
-.bannerArt {
-  display: block;
-  inline-size: 100%;
-  block-size: auto;
-}
-
-/* Physical position on purpose: it tracks pixels in the artwork. */
-.back {
-  position: absolute;
-  left: 3.6%;
-  top: 3.5cqw;
-  inline-size: 10.4cqw;
-  aspect-ratio: 1;
-  border-radius: var(--radius-full);
-}
-
-/* ----- Landscape ----- */
-
-.landscape {
-  container: path / inline-size;
-  position: relative;
-  display: flex;
-  flex-direction: column-reverse;
-  margin-inline: calc(var(--gutter) * -1);
-  margin-block-start: -52px;
-  padding: 64px var(--space-2) var(--space-4);
+  aspect-ratio: 521 / 1415;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse 50% 5% at 22% 30%, rgba(255, 255, 255, 0.14), transparent),
-    radial-gradient(ellipse 45% 4% at 80% 60%, rgba(255, 255, 255, 0.12), transparent),
-    radial-gradient(ellipse 50% 5% at 35% 88%, rgba(40, 110, 30, 0.14), transparent),
-    linear-gradient(180deg, #9ec443 0%, #86c443 14%, #78c142 55%, #68b83d 100%);
 }
 
 @media (min-width: 600px) {
-  .landscape {
+  .map {
     margin-inline: 0;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
   }
 }
 
-.river {
+.mapArt {
   position: absolute;
-  inset-block: 0;
-  inset-inline-end: 0;
-  inline-size: 22%;
+  inset: 0;
+  inline-size: 100%;
   block-size: 100%;
-  pointer-events: none;
-  mask-image: linear-gradient(180deg, transparent 0, #000 90px);
 }
 
-.path {
-  position: relative;
-  display: flex;
-  flex-direction: column-reverse;
+/* Physical positions on purpose: they track pixels in the artwork. */
+.back {
+  position: absolute;
+  left: 3.5%;
+  top: 2.9cqw;
+  inline-size: 12.3cqw;
+  aspect-ratio: 1;
+  border-radius: var(--radius-full);
+}
+
+.slots {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.step {
-  --node-block: 156px;
-  position: relative;
-  padding-block-end: var(--space-8);
-}
-
-/* Decorations */
-
-.decor {
+.slot {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
+  inline-size: 0;
+  block-size: 0;
 }
 
-.deco {
+.emptySlot {
   position: absolute;
-  inline-size: 64px;
-  block-size: auto;
-  filter: drop-shadow(0 4px 4px rgba(20, 60, 20, 0.25));
+  inline-size: 16cqw;
+  aspect-ratio: 1.3;
+  translate: -50% -42%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 40%, #f0d59f, #e6c081 70%, transparent 71%);
 }
-
-.low {
-  inline-size: 60px;
-  inset-block-start: 44px;
-}
-
-.tall {
-  inline-size: 74px;
-  inset-block-start: -4px;
-}
-
-.tallSmall {
-  inline-size: 46px;
-  inset-block-start: 40px;
-}
-
-.decoStart {
-  inset-inline-start: 3%;
-}
-
-.decoStartFar {
-  inset-inline-start: 22%;
-}
-
-.decoEndNear {
-  inset-inline-end: 23%;
-}
-
-.signpost {
-  inline-size: 40px;
-  inset-block-start: 30px;
-  inset-inline-end: 6%;
-}
-
-/* Sandy trail between nodes */
-
-.connector {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-start: calc(var(--map-node-size) / 2);
-  inline-size: 100%;
-  block-size: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.connector path {
-  fill: none;
-  stroke-linecap: round;
-}
-
-.trackEdge {
-  stroke: #b4dc5e;
-  stroke-width: 58;
-}
-
-.track {
-  stroke: #efc77f;
-  stroke-width: 44;
-}
-
-.trackDots {
-  stroke: #fff2d2;
-  stroke-width: 13;
-  stroke-dasharray: 1 30;
-}
-
-/* Future stretch of the trail is a little paler. */
-.connector:not([data-done]) .track {
-  stroke: #f3dcaa;
-}
-
-/* Start: the puppy looks up the trail */
-
-.start {
-  position: relative;
-  block-size: 120px;
-  margin-block-start: -24px;
-}
-
-.startRock {
-  position: absolute;
-  inset-block-end: 0;
-  inset-inline-start: calc(50% - 70px);
-  inline-size: 140px;
-}
-
-/* Nodes */
 
 .node {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  inline-size: var(--node-block);
-  margin-inline-start: calc(var(--x) * 1% - var(--node-block) / 2);
+  position: absolute;
+  inset-block-start: 0;
+  left: 0;
+  translate: -50% -50%;
+  display: block;
+  inline-size: 14.5cqw;
+  min-inline-size: 44px;
+  aspect-ratio: 1;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   background: transparent;
   color: inherit;
-  text-align: center;
   cursor: pointer;
 }
 
 .circle {
-  --medal: #ffb21e;
-  --medal-light: #ffe08a;
-  --medal-edge: #c97a00;
-  position: relative;
+  --medal: #22a356;
+  --medal-light: #9ef0b4;
+  --medal-edge: #0f6a33;
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  flex: none;
-  inline-size: var(--map-node-size);
-  block-size: var(--map-node-size);
-  border: 5px solid #fff;
+  border: 0.8cqw solid #fff;
   border-radius: var(--radius-full);
   background: radial-gradient(circle at 50% 22%, var(--medal-light) 0%, var(--medal) 58%, var(--medal-edge) 130%);
   box-shadow:
-    0 0 0 3px rgba(190, 225, 245, 0.95),
-    0 7px 0 3px rgba(60, 90, 110, 0.35),
-    0 14px 16px rgba(29, 43, 58, 0.28);
+    0 0 0 0.5cqw rgba(190, 225, 245, 0.95),
+    0 1cqw 0 0.5cqw rgba(60, 90, 110, 0.35),
+    0 2cqw 3cqw rgba(29, 43, 58, 0.28);
   color: #fff;
-  font: var(--text-page-title);
-  font-size: 2rem;
+  font-size: max(1.125rem, 6cqw);
   font-weight: 800;
+  line-height: 1;
   text-shadow: 0 2px 0 var(--medal-edge), 0 0 4px var(--medal-edge);
   transition: transform var(--duration-button) ease;
 }
@@ -248,159 +113,92 @@
   transform: translateY(3px);
 }
 
-.step[data-tone='blue'] .circle {
+.slot[data-tone='blue'] .circle {
   --medal: #2f86f0;
   --medal-light: #8ec9ff;
   --medal-edge: #134fa8;
 }
 
-.step[data-tone='purple'] .circle {
+.slot[data-tone='purple'] .circle {
   --medal: #8a4fe0;
   --medal-light: #c9a6ff;
   --medal-edge: #4a22a0;
 }
 
-.step[data-tone='green'] .circle {
-  --medal: #22a356;
-  --medal-light: #9ef0b4;
-  --medal-edge: #0f6a33;
-}
-
-.step[data-state='current'] .circle {
+.slot[data-state='current'] .circle {
   --medal: #ff8a1c;
   --medal-light: #ffd27a;
   --medal-edge: #b85300;
-  inline-size: calc(var(--map-node-size) + 14px);
-  block-size: calc(var(--map-node-size) + 14px);
-  margin-block-start: -7px;
-  font-size: 2.25rem;
+  inset: -1.6cqw;
   box-shadow:
-    0 0 0 3px var(--medal-edge),
-    0 6px 0 3px var(--medal-edge),
-    0 0 0 12px rgba(255, 233, 140, 0.55),
-    0 12px 22px rgba(184, 83, 0, 0.45);
+    0 0 0 0.5cqw var(--medal-edge),
+    0 0 0 2.2cqw rgba(255, 233, 140, 0.6),
+    0 2cqw 3cqw rgba(184, 83, 0, 0.45);
+  animation: arrive var(--duration-unlock) var(--ease-bounce);
 }
 
-.step[data-state='locked'] .circle {
+.slot[data-state='locked'] .circle {
+  inset: -0.9cqw;
   border: 0;
   background: url('/art/node-locked.webp') center / contain no-repeat;
   box-shadow: none;
-  filter: drop-shadow(0 6px 5px rgba(29, 43, 58, 0.3));
+  filter: drop-shadow(0 1cqw 1cqw rgba(29, 43, 58, 0.3));
 }
 
 .stateIcon {
   position: absolute;
-  inset-block-end: -10px;
-  inset-inline-end: -10px;
+  inset-block-end: -1cqw;
+  inset-inline-end: -1cqw;
   display: grid;
   place-items: center;
-  inline-size: 30px;
-  block-size: 30px;
-  border: 3px solid #fff;
+  inline-size: 5.4cqw;
+  min-inline-size: 20px;
+  aspect-ratio: 1;
+  border: 0.6cqw solid #fff;
   border-radius: var(--radius-full);
   background: var(--color-success);
   color: #fff;
   text-shadow: none;
 }
 
-.label {
-  display: flex;
-  flex-direction: column;
-  min-inline-size: 112px;
-  padding: 4px var(--space-3) 6px;
-  border: 2px solid #d7b57a;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fffaf0, #fbe9c6);
-  box-shadow: 0 3px 0 #c99d58, 0 6px 10px rgba(29, 43, 58, 0.15);
-}
-
-.levelNo {
-  font-size: 0.9375rem;
-  font-weight: 800;
-  color: #3d2600;
-}
-
-.levelTitle {
-  font-size: 0.875rem;
-  font-weight: 700;
-  line-height: 1.3;
-  color: #4a3410;
-}
-
-.step[data-state='locked'] .label {
-  border-color: #b5c0ca;
-  background: linear-gradient(180deg, #f6f8fa, #dfe5ea);
-  box-shadow: 0 3px 0 #9aa6b2, 0 6px 10px rgba(29, 43, 58, 0.12);
-}
-
-.step[data-state='locked'] .levelNo,
-.step[data-state='locked'] .levelTitle {
-  color: #3c4a57;
-}
-
-/* Mascot guide next to the current level */
-
-.guide {
+/* Plaque under the node; it also covers the artwork's own star row. */
+.plaque {
   position: absolute;
-  z-index: 1;
-  inset-block-start: -40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  inline-size: clamp(100px, 32%, 136px);
-  pointer-events: none;
-}
-
-.guide[data-side='start'] {
-  inset-inline-start: 0;
-}
-
-.guide[data-side='end'] {
-  inset-inline-end: 0;
-}
-
-.guideBubble {
-  margin-block-end: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  font-size: 0.9375rem;
+  inset-block-start: calc(100% - 0.4cqw);
+  left: 50%;
+  translate: -50% 0;
+  min-inline-size: 15.5cqw;
+  padding: 0.5cqw 2cqw 1.9cqw;
+  border: 0.4cqw solid #d7b57a;
+  border-radius: 2cqw;
+  background: linear-gradient(180deg, #fffaf0, #fbe9c6);
+  box-shadow: 0 0.6cqw 0 #c99d58;
+  color: #3d2600;
+  font-size: max(0.75rem, 3.1cqw);
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: center;
   white-space: nowrap;
 }
 
-.guidePup {
-  inline-size: 84px;
-  block-size: auto;
-  filter: drop-shadow(0 6px 5px rgba(29, 43, 58, 0.3));
+.slot[data-state='locked'] .plaque {
+  border-color: #b5c0ca;
+  background: linear-gradient(180deg, #f6f8fa, #dfe5ea);
+  box-shadow: 0 0.6cqw 0 #9aa6b2;
+  color: #3c4a57;
 }
 
-.more {
-  position: relative;
-  z-index: 2;
+@keyframes arrive {
+  from {
+    transform: scale(0.8);
+  }
+}
+
+.pager {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  margin-block: var(--space-4);
-}
-
-/* Narrow layouts and high zoom: an ordered vertical list without offsets. */
-@container path (max-width: 300px) {
-  .connector,
-  .decor,
-  .guide,
-  .river,
-  .start {
-    display: none;
-  }
-
-  .step {
-    padding-block-end: var(--space-4);
-  }
-
-  .node {
-    flex-direction: row;
-    inline-size: 100%;
-    margin-inline-start: 0;
-    text-align: start;
-    gap: var(--space-4);
-  }
+  gap: var(--space-3);
 }
 
 /* ----- Level sheet ----- */

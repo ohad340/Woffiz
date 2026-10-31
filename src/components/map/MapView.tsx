@@ -3,57 +3,39 @@
 import { Check, Lock, Timer } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bush, Flowers, Pine, River, Rock, RoundTree, SignPost } from '@/components/art/Decor'
-import { SpeechBubble } from '@/components/art/Mascot'
+import { useEffect, useRef, useState } from 'react'
 import { VideoUnavailable } from '@/components/media/VideoUnavailable'
 import { Badge } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Sheet } from '@/components/ui/Sheet'
-import { expandWindow, findCurrentIndex, initialWindow, isPathComplete, type PathWindow } from '@/domain/path'
+import { findCurrentIndex, isPathComplete } from '@/domain/path'
 import { LEVEL_STATE_LABELS, TOPIC_LABELS, type Level, type Puppy } from '@/domain/types'
 import styles from './MapView.module.css'
 
-/** Inline-start offsets (percent of path width) giving the winding shape. */
-const OFFSETS = [50, 70, 50, 30] as const
-const offsetAt = (index: number) => OFFSETS[index % OFFSETS.length]!
+/**
+ * The painted map shows one stretch of the trail: eight places along the path, bottom to top.
+ * Slot centers are pixel positions in the 521x1415 artwork. Real level nodes sit on those places
+ * (covering the artwork's own markers), and the window slides along the plan.
+ */
+const MAP_W = 521
+const MAP_H = 1415
+const SLOTS = [
+  [305, 1218],
+  [403, 1095],
+  [355, 968],
+  [255, 860],
+  [278, 727],
+  [205, 575],
+  [251, 452],
+  [310, 333],
+] as const
+const WINDOW = SLOTS.length
+const STEP = WINDOW / 2
 
 /** Completed medallions rotate through game colors (decorative only). */
 const MEDAL_TONES = ['green', 'blue', 'purple'] as const
 
-/** Scenery rotates with the row so each stretch of the trail looks different. */
-function RowDecor({ index, hideStart, hideEnd }: { index: number; hideStart: boolean; hideEnd: boolean }) {
-  const pattern = index % 4
-  const d = styles.deco
-  return (
-    <div className={styles.decor} aria-hidden="true">
-      {pattern === 0 && (
-        <>
-          {!hideStart && <Flowers className={`${d} ${styles.decoStart} ${styles.low}`} />}
-          {!hideEnd && <Bush className={`${d} ${styles.decoEndNear} ${styles.low}`} />}
-        </>
-      )}
-      {pattern === 1 && !hideStart && (
-        <>
-          <RoundTree className={`${d} ${styles.decoStart} ${styles.tall}`} />
-          <Pine className={`${d} ${styles.decoStartFar} ${styles.tallSmall}`} />
-        </>
-      )}
-      {pattern === 2 && (
-        <>
-          {!hideStart && <Rock className={`${d} ${styles.decoStart} ${styles.low}`} />}
-          {!hideEnd && <Flowers className={`${d} ${styles.decoEndNear} ${styles.low}`} />}
-        </>
-      )}
-      {pattern === 3 && !hideEnd && (
-        <>
-          <Pine className={`${d} ${styles.decoEndNear} ${styles.tall}`} />
-          <SignPost className={`${d} ${styles.signpost}`} />
-        </>
-      )}
-    </div>
-  )
-}
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max)
 
 export function MapView({
   puppy,
@@ -66,15 +48,17 @@ export function MapView({
 }) {
   const currentIndex = findCurrentIndex(levels)
   const current = currentIndex === -1 ? undefined : levels[currentIndex]
+  const maxStart = Math.max(0, levels.length - WINDOW)
 
-  const [window, setWindow] = useState<PathWindow>(() => initialWindow(levels))
+  // Start so the current level lands in the middle of the artwork.
+  const [start, setStart] = useState(() => clamp((currentIndex === -1 ? levels.length - 1 : currentIndex) - 3, 0, maxStart))
   const [openId, setOpenId] = useState<string | null>(openCurrent && current ? current.id : null)
   const [announcement, setAnnouncement] = useState('')
   const currentRef = useRef<HTMLLIElement>(null)
 
   const complete = isPathComplete(levels)
   const completedCount = levels.filter((level) => level.state === 'completed').length
-  const visible = useMemo(() => levels.slice(window.start, window.end), [levels, window])
+  const visible = levels.slice(start, start + WINDOW)
   const openLevel = levels.find((level) => level.id === openId)
 
   // Bring the frontier into view on arrival without moving keyboard focus.
@@ -83,106 +67,58 @@ export function MapView({
     currentRef.current?.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
   }, [])
 
-  const expand = (direction: 'earlier' | 'later') => {
-    const next = expandWindow(window, levels.length, direction)
-    const added = direction === 'earlier' ? window.start - next.start : next.end - window.end
-    setWindow(next)
-    setAnnouncement(`נוספו ${added} שלבים ${direction === 'earlier' ? 'קודמים' : 'הבאים'}`)
+  const move = (direction: 'earlier' | 'later') => {
+    const next = clamp(start + (direction === 'earlier' ? -STEP : STEP), 0, maxStart)
+    setStart(next)
+    const last = Math.min(next + WINDOW, levels.length)
+    setAnnouncement(`מוצגים שלבים ${next + 1} עד ${last}`)
   }
 
   return (
     <div className={styles.view}>
-      <header className={styles.banner}>
+      <div className={styles.map}>
         <Image
-          className={styles.bannerArt}
-          src="/art/map-banner.webp"
+          className={styles.mapArt}
+          src="/art/map-painted.webp"
           alt=""
           aria-hidden="true"
-          width={887}
-          height={470}
+          width={1042}
+          height={2830}
           unoptimized
           priority
         />
         <h1 className="visually-hidden">מפת האילוף</h1>
-        {/* Real controls laid over the matching spots in the artwork. */}
-        <Link href="/home" className={styles.back} aria-label="חזרה לבית" />
         <p className="visually-hidden">
           {complete
             ? `כל השלבים של ${puppy.name} הושלמו`
             : `${completedCount} מתוך ${levels.length} שלבים הושלמו. השלב הנוכחי: ${current?.position}, ${current?.title}.`}
         </p>
-      </header>
+        {/* Real control laid over the matching spot in the artwork. */}
+        <Link href="/home" className={styles.back} aria-label="חזרה לבית" />
 
-      {/* The trail climbs: level 1 at the bottom, the goal at the top. DOM order stays 1 → n. */}
-      <section className={styles.landscape} aria-labelledby="path-title">
-        <h2 id="path-title" className="visually-hidden">
-          מסלול האימון
-        </h2>
-        <River className={styles.river} />
+        {/* Places beyond the end of a short plan: cover the artwork's own markers. */}
+        {SLOTS.slice(visible.length).map(([x, y]) => (
+          <span
+            key={`${x}-${y}`}
+            className={styles.emptySlot}
+            style={{ left: `${(x / MAP_W) * 100}%`, top: `${(y / MAP_H) * 100}%` }}
+            aria-hidden="true"
+          />
+        ))}
 
-        {window.start > 0 && (
-          <div className={styles.more}>
-            <Button variant="secondary" onClick={() => expand('earlier')}>
-              הצגת שלבים קודמים ({window.start})
-            </Button>
-          </div>
-        )}
-
-        {window.start === 0 && (
-          <div className={styles.start} aria-hidden="true">
-            <Rock className={styles.startRock} />
-          </div>
-        )}
-
-        <ol className={styles.path}>
+        <ol className={styles.slots}>
           {visible.map((level, i) => {
-            const index = window.start + i
-            const prev = i > 0 ? visible[i - 1] : undefined
-            const x = offsetAt(index)
+            const [x, y] = SLOTS[i]!
             const isCurrent = level.state === 'current'
-            const mascotSide = x >= 50 ? 'start' : 'end'
-            // The trail segment from this node down to the previous level.
-            const from = 100 - x
-            const to = 100 - offsetAt(index - 1)
             return (
               <li
                 key={level.id}
                 ref={isCurrent ? currentRef : undefined}
-                className={styles.step}
-                style={{ '--x': x } as React.CSSProperties}
+                className={styles.slot}
+                style={{ left: `${(x / MAP_W) * 100}%`, top: `${(y / MAP_H) * 100}%` }}
                 data-state={level.state}
-                data-tone={level.state === 'completed' ? MEDAL_TONES[index % MEDAL_TONES.length] : undefined}
+                data-tone={level.state === 'completed' ? MEDAL_TONES[(start + i) % MEDAL_TONES.length] : undefined}
               >
-                <RowDecor
-                  index={index}
-                  hideStart={isCurrent && mascotSide === 'start'}
-                  hideEnd={isCurrent && mascotSide === 'end'}
-                />
-                {prev && (
-                  <svg
-                    className={styles.connector}
-                    data-done={prev.state === 'completed' || undefined}
-                    viewBox="0 0 100 100"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    {['trackEdge', 'track', 'trackDots'].map((cls) => (
-                      <path
-                        key={cls}
-                        className={styles[cls]}
-                        d={`M ${from} 0 C ${from} 55, ${to} 45, ${to} 100`}
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    ))}
-                  </svg>
-                )}
-                {isCurrent && (
-                  <div className={styles.guide} data-side={mascotSide} aria-hidden="true">
-                    <SpeechBubble className={styles.guideBubble}>בואו נתרגל!</SpeechBubble>
-                    <Image className={styles.guidePup} src="/art/pup-sit.webp" alt="" width={324} height={390} unoptimized />
-                  </div>
-                )}
                 <button
                   type="button"
                   className={styles.node}
@@ -193,36 +129,37 @@ export function MapView({
                     {level.state !== 'locked' && <span aria-hidden="true">{level.position}</span>}
                     {level.state === 'completed' && (
                       <span className={styles.stateIcon} aria-hidden="true">
-                        <Check size={14} strokeWidth={3.5} />
+                        <Check size={12} strokeWidth={3.5} />
                       </span>
                     )}
                   </span>
-                  <span className={styles.label}>
-                    <span className={styles.levelNo}>שלב {level.position}</span>
-                    <span className={styles.levelTitle}>{level.title}</span>
-                    <span className="visually-hidden">
-                      {' '}
-                      {TOPIC_LABELS[level.topic]}, {LEVEL_STATE_LABELS[level.state]}
-                    </span>
+                  <span className={styles.plaque} aria-hidden="true">
+                    שלב {level.position}
+                  </span>
+                  <span className="visually-hidden">
+                    שלב {level.position}: {level.title}. {TOPIC_LABELS[level.topic]}, {LEVEL_STATE_LABELS[level.state]}
                   </span>
                 </button>
               </li>
             )
           })}
         </ol>
+      </div>
 
-        {window.end < levels.length && (
-          <div className={styles.more}>
-            <Button variant="secondary" onClick={() => expand('later')}>
-              הצגת שלבים נוספים ({levels.length - window.end})
-            </Button>
-          </div>
-        )}
+      {levels.length > WINDOW && (
+        <div className={styles.pager}>
+          <Button variant="secondary" disabled={start === 0} onClick={() => move('earlier')}>
+            הצגת שלבים קודמים
+          </Button>
+          <Button variant="secondary" disabled={start >= maxStart} onClick={() => move('later')}>
+            הצגת שלבים הבאים
+          </Button>
+        </div>
+      )}
 
-        <p className="visually-hidden" role="status" aria-live="polite">
-          {announcement}
-        </p>
-      </section>
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {announcement}
+      </p>
 
       <Sheet
         open={Boolean(openLevel)}

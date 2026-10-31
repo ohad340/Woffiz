@@ -97,19 +97,15 @@ waving mascot and a wooden sign. Yellow CTA “המשך לאימון” opens th
 White sheet below with 2x2 colored tiles: map progress, review, today's exercise, puppy.
 
 ### Map
-Top: hanging wooden sign title and a back button to home.
-Main area: one winding trail that climbs bottom-to-top (level 1 at the bottom, a decorative trophy
-at the end, the mascot seen from behind at the start); only vertical scrolling.
-The mascot sits beside the current level with a short speech bubble.
-Each node includes level number, short topic label and state symbol.
-Completed nodes are colored medallions (gold/blue/green) with a check badge; the current node is larger,
-orange, with a soft static halo; locked nodes are grey with a lock icon. Labels are cream plaques.
-Use a decorative SVG curve behind semantic buttons, not a canvas-only interface.
-DOM order is level order regardless of visual offsets or the bottom-up direction. Hide decorative path from assistive technology.
-Center the current region on return without stealing keyboard focus.
-For long plans, render a bounded segment and provide accessible load-earlier/load-later controls.
-Locked nodes can explain “השלימו את השלב הקודם כדי לפתוח”; they cannot start exercises.
-At 200% zoom or narrow layouts, switch to an ordered vertical list without losing content.
+The map is the owner's painted adventure artwork (`public/art/map-painted.webp`) with sign, trophy, puppy,
+river, bridge and doghouse. It shows a window of eight levels at a time, bottom to top, on eight fixed places
+along the painted path. Real level buttons are laid over those places (covering the artwork's own markers) and
+a pager ("הצגת שלבים קודמים / הבאים") slides the window along the plan; the window opens around the current level.
+Medallions: green/blue/purple for completed (with a check), larger orange with a halo for current, grey lock
+sprite for locked; a small "שלב N" plaque under each. Titles and state are in each button's accessible name and
+in the level sheet. The artwork is decorative (aria-hidden); DOM order is level order.
+Locked nodes explain “השלימו את השלב הקודם כדי לפתוח” and cannot start exercises.
+Stars from the artwork are covered: there is no star data.
 
 ### Exercise
 Order: back/title, goal, captioned video, preparation, numbered steps, mastery criterion.
@@ -163,15 +159,10 @@ Respect prefers-reduced-motion: immediate state changes with a static success me
 Announce new unlocks with a polite live region.
 
 ## 10a. Mascot and artwork
-Source: the owner's reference mockup and the supplied asset sheets (dog_training_map_assets.zip).
-- Home hero and the round puppy portrait are crops of the mockup (`hero-scene`, `mascot-head`).
-- Map banner is the top of the supplied full-map concept (sign, trophy, puppy, "מעולה! בואו נמשיך" bubble);
-  a real back link sits over its button and a visually hidden h1 names the page.
-- Trees, bushes, rocks, signpost, locked medallion and the sitting puppy are sprites cut from the sheets
-  (white background removed, upscaled 3x) in `public/art`. Source sheets are small, so they are soft; replace
-  with original high-resolution art before launch.
-- The trail, level medallions and plaques are drawn in code so the path scales to any plan length.
-All art is decorative (alt="" / aria-hidden) and never the only source of information.
+Source: the owner's reference mockup and supplied asset sheets (dog_training_map_assets.zip).
+Home hero and the round puppy portrait are crops of the mockup; the map is the supplied painted map;
+the locked medallion is cut from the markers sheet. Sources are low resolution (upscaled 2x); replace with
+original high-resolution art before launch. All art is decorative (alt="" / aria-hidden).
 
 ## 11. Responsive rules
 | Width | Behavior |

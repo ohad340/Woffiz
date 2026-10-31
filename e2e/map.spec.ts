@@ -14,11 +14,11 @@ test.describe('map', () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b))
   })
 
-  test('decorative path is hidden from assistive technology', async ({ page }) => {
+  test('painted map art is hidden from assistive technology', async ({ page }) => {
     await page.goto('/map')
-    const svgs = page.locator('ol svg')
-    expect(await svgs.count()).toBeGreaterThan(0)
-    for (const svg of await svgs.all()) await expect(svg).toHaveAttribute('aria-hidden', 'true')
+    const art = page.locator('main img[src*="map-painted"]')
+    await expect(art).toHaveCount(1)
+    await expect(art).toHaveAttribute('aria-hidden', 'true')
   })
 
   test('a locked level explains the prerequisite and offers no way to start', async ({ page }) => {
@@ -45,9 +45,9 @@ test.describe('map', () => {
     await expect(page.getByRole('button', { name: /מגיב לשם/ })).toHaveCount(0)
     await page.getByRole('button', { name: /הצגת שלבים קודמים/ }).click()
     await expect(page.getByRole('button', { name: /מגיב לשם/ })).toBeVisible()
-    await page.getByRole('button', { name: /הצגת שלבים נוספים/ }).click()
+    await page.getByRole('button', { name: /הצגת שלבים הבאים/ }).click()
     await expect(page.getByRole('button', { name: /הליכה ברצועה/ })).toBeVisible()
-    await expect(page.getByRole('status').filter({ hasText: 'נוספו' })).toHaveText(/נוספו \d+ שלבים הבאים/)
+    await expect(page.getByRole('status').filter({ hasText: 'מוצגים' })).toHaveText(/מוצגים שלבים \d+ עד \d+/)
   })
 
   test('keyboard focus is visible on interactive controls', async ({ page }) => {
