@@ -4,8 +4,8 @@ import { Check, Lock, Timer } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bridge, Bush, Flowers, Pine, River, Rock, RoundTree } from '@/components/art/Decor'
-import { Mascot, SpeechBubble } from '@/components/art/Mascot'
+import { Bush, Flowers, Pine, River, Rock, RoundTree, SignPost } from '@/components/art/Decor'
+import { SpeechBubble } from '@/components/art/Mascot'
 import { VideoUnavailable } from '@/components/media/VideoUnavailable'
 import { Badge } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -18,8 +18,8 @@ import styles from './MapView.module.css'
 const OFFSETS = [50, 70, 50, 30] as const
 const offsetAt = (index: number) => OFFSETS[index % OFFSETS.length]!
 
-/** Completed medallions rotate through warm game colors (decorative only). */
-const MEDAL_TONES = ['gold', 'blue', 'green'] as const
+/** Completed medallions rotate through game colors (decorative only). */
+const MEDAL_TONES = ['green', 'blue', 'purple'] as const
 
 /** Scenery rotates with the row so each stretch of the trail looks different. */
 function RowDecor({ index, hideStart, hideEnd }: { index: number; hideStart: boolean; hideEnd: boolean }) {
@@ -48,7 +48,7 @@ function RowDecor({ index, hideStart, hideEnd }: { index: number; hideStart: boo
       {pattern === 3 && !hideEnd && (
         <>
           <Pine className={`${d} ${styles.decoEndNear} ${styles.tall}`} />
-          <Bridge className={`${d} ${styles.bridge}`} />
+          <SignPost className={`${d} ${styles.signpost}`} />
         </>
       )}
     </div>
@@ -93,26 +93,19 @@ export function MapView({
   return (
     <div className={styles.view}>
       <header className={styles.banner}>
-        <span className={styles.rope} data-side="a" aria-hidden="true" />
-        <span className={styles.rope} data-side="b" aria-hidden="true" />
         <Image
           className={styles.bannerArt}
           src="/art/map-banner.webp"
           alt=""
           aria-hidden="true"
-          width={896}
-          height={538}
+          width={887}
+          height={470}
           unoptimized
           priority
         />
         <h1 className="visually-hidden">מפת האילוף</h1>
         {/* Real controls laid over the matching spots in the artwork. */}
         <Link href="/home" className={styles.back} aria-label="חזרה לבית" />
-        <p className={styles.bannerBubble}>
-          מעולה!
-          <br />
-          בואו נמשיך
-        </p>
         <p className="visually-hidden">
           {complete
             ? `כל השלבים של ${puppy.name} הושלמו`
@@ -187,7 +180,7 @@ export function MapView({
                 {isCurrent && (
                   <div className={styles.guide} data-side={mascotSide} aria-hidden="true">
                     <SpeechBubble className={styles.guideBubble}>בואו נתרגל!</SpeechBubble>
-                    <Mascot className={styles.guideMascot} />
+                    <Image className={styles.guidePup} src="/art/pup-sit.webp" alt="" width={324} height={390} unoptimized />
                   </div>
                 )}
                 <button
@@ -197,11 +190,7 @@ export function MapView({
                   aria-current={isCurrent ? 'step' : undefined}
                 >
                   <span className={styles.circle}>
-                    {level.state === 'locked' ? (
-                      <Lock size={30} strokeWidth={2.8} aria-hidden="true" />
-                    ) : (
-                      <span aria-hidden="true">{level.position}</span>
-                    )}
+                    {level.state !== 'locked' && <span aria-hidden="true">{level.position}</span>}
                     {level.state === 'completed' && (
                       <span className={styles.stateIcon} aria-hidden="true">
                         <Check size={14} strokeWidth={3.5} />

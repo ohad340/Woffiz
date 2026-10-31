@@ -13,16 +13,13 @@
   }
 }
 
-/* ----- Banner: artwork cut from the approved reference, with real controls over it ----- */
+/* ----- Banner: artwork from the supplied map concept, with a real control over its back button ----- */
 
 .banner {
   container: banner / inline-size;
   position: relative;
   z-index: 2;
   margin-inline: calc(var(--gutter) * -1);
-  padding-block-start: 28px;
-  /* Same blue as the artwork's top edge; the ropes hang from the page top. */
-  background: #3797ea;
 }
 
 @media (min-width: 600px) {
@@ -34,55 +31,20 @@
   }
 }
 
-.rope {
-  position: absolute;
-  inset-block-start: 0;
-  inline-size: 6px;
-  block-size: 40px;
-  border-radius: 3px;
-  background: repeating-linear-gradient(180deg, #c99a5b 0 4px, #a8773b 4px 8px);
-}
-
-.rope[data-side='a'] {
-  left: 25.9%;
-}
-
-.rope[data-side='b'] {
-  left: 72.5%;
-}
-
 .bannerArt {
   display: block;
   inline-size: 100%;
   block-size: auto;
 }
 
-/* Positions are physical on purpose: they track pixels in the artwork. */
+/* Physical position on purpose: it tracks pixels in the artwork. */
 .back {
   position: absolute;
-  left: 0;
-  top: calc(28px + 0.8cqw);
+  left: 3.6%;
+  top: 3.5cqw;
   inline-size: 10.4cqw;
   aspect-ratio: 1;
   border-radius: var(--radius-full);
-}
-
-.bannerBubble {
-  position: absolute;
-  left: 50.2%;
-  top: calc(28px + 27.2cqw);
-  inline-size: 32cqw;
-  block-size: 29.6cqw;
-  display: grid;
-  place-items: center;
-  padding: 1cqw;
-  border-radius: 50%;
-  background: #fff;
-  color: #13304d;
-  font-size: 4.6cqw;
-  font-weight: 800;
-  line-height: 1.3;
-  text-align: center;
 }
 
 /* ----- Landscape ----- */
@@ -93,14 +55,14 @@
   display: flex;
   flex-direction: column-reverse;
   margin-inline: calc(var(--gutter) * -1);
-  margin-block-start: -20px;
-  padding: 36px var(--space-2) var(--space-4);
+  margin-block-start: -52px;
+  padding: 64px var(--space-2) var(--space-4);
   overflow: hidden;
   background:
-    radial-gradient(ellipse 50% 5% at 22% 30%, rgba(255, 255, 255, 0.16), transparent),
-    radial-gradient(ellipse 45% 4% at 80% 60%, rgba(255, 255, 255, 0.14), transparent),
-    radial-gradient(ellipse 50% 5% at 35% 88%, rgba(40, 110, 30, 0.12), transparent),
-    linear-gradient(180deg, #8fdc6c 0%, var(--scene-grass) 40%, #69bd49 100%);
+    radial-gradient(ellipse 50% 5% at 22% 30%, rgba(255, 255, 255, 0.14), transparent),
+    radial-gradient(ellipse 45% 4% at 80% 60%, rgba(255, 255, 255, 0.12), transparent),
+    radial-gradient(ellipse 50% 5% at 35% 88%, rgba(40, 110, 30, 0.14), transparent),
+    linear-gradient(180deg, #9ec443 0%, #86c443 14%, #78c142 55%, #68b83d 100%);
 }
 
 @media (min-width: 600px) {
@@ -118,6 +80,7 @@
   inline-size: 22%;
   block-size: 100%;
   pointer-events: none;
+  mask-image: linear-gradient(180deg, transparent 0, #000 90px);
 }
 
 .path {
@@ -146,6 +109,8 @@
 .deco {
   position: absolute;
   inline-size: 64px;
+  block-size: auto;
+  filter: drop-shadow(0 4px 4px rgba(20, 60, 20, 0.25));
 }
 
 .low {
@@ -175,10 +140,10 @@
   inset-inline-end: 23%;
 }
 
-.bridge {
-  inline-size: 84px;
-  inset-block-start: 74px;
-  inset-inline-end: calc(11% - 42px);
+.signpost {
+  inline-size: 40px;
+  inset-block-start: 30px;
+  inset-inline-end: 6%;
 }
 
 /* Sandy trail between nodes */
@@ -199,27 +164,24 @@
 }
 
 .trackEdge {
-  stroke: var(--scene-path-edge);
-  stroke-width: 32;
+  stroke: #b4dc5e;
+  stroke-width: 58;
 }
 
 .track {
-  stroke: var(--scene-path);
-  stroke-width: 24;
+  stroke: #efc77f;
+  stroke-width: 44;
 }
 
 .trackDots {
-  stroke: #e8c98a;
-  stroke-width: 5;
-  stroke-dasharray: 1 16;
+  stroke: #fff2d2;
+  stroke-width: 13;
+  stroke-dasharray: 1 30;
 }
 
-.connector:not([data-done]) .trackEdge {
-  stroke: #cdb98c;
-}
-
+/* Future stretch of the trail is a little paler. */
 .connector:not([data-done]) .track {
-  stroke: #efe4c8;
+  stroke: #f3dcaa;
 }
 
 /* Start: the puppy looks up the trail */
@@ -269,11 +231,11 @@
   block-size: var(--map-node-size);
   border: 5px solid #fff;
   border-radius: var(--radius-full);
-  background: radial-gradient(circle at 35% 28%, var(--medal-light), var(--medal) 62%);
+  background: radial-gradient(circle at 50% 22%, var(--medal-light) 0%, var(--medal) 58%, var(--medal-edge) 130%);
   box-shadow:
-    0 0 0 3px var(--medal-edge),
-    0 6px 0 3px var(--medal-edge),
-    0 12px 16px rgba(29, 43, 58, 0.3);
+    0 0 0 3px rgba(190, 225, 245, 0.95),
+    0 7px 0 3px rgba(60, 90, 110, 0.35),
+    0 14px 16px rgba(29, 43, 58, 0.28);
   color: #fff;
   font: var(--text-page-title);
   font-size: 2rem;
@@ -288,8 +250,14 @@
 
 .step[data-tone='blue'] .circle {
   --medal: #2f86f0;
-  --medal-light: #9fd0ff;
+  --medal-light: #8ec9ff;
   --medal-edge: #134fa8;
+}
+
+.step[data-tone='purple'] .circle {
+  --medal: #8a4fe0;
+  --medal-light: #c9a6ff;
+  --medal-edge: #4a22a0;
 }
 
 .step[data-tone='green'] .circle {
@@ -314,10 +282,10 @@
 }
 
 .step[data-state='locked'] .circle {
-  --medal: #a9b4bf;
-  --medal-light: #e9eef2;
-  --medal-edge: #7b8794;
-  color: #fff;
+  border: 0;
+  background: url('/art/node-locked.webp') center / contain no-repeat;
+  box-shadow: none;
+  filter: drop-shadow(0 6px 5px rgba(29, 43, 58, 0.3));
 }
 
 .stateIcon {
@@ -375,7 +343,7 @@
 .guide {
   position: absolute;
   z-index: 1;
-  inset-block-start: -34px;
+  inset-block-start: -40px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -398,10 +366,10 @@
   white-space: nowrap;
 }
 
-.guideMascot {
+.guidePup {
   inline-size: 84px;
-  border: 4px solid #fff;
-  box-shadow: 0 6px 14px rgba(29, 43, 58, 0.25);
+  block-size: auto;
+  filter: drop-shadow(0 6px 5px rgba(29, 43, 58, 0.3));
 }
 
 .more {
