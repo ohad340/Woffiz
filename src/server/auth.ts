@@ -1,18 +1,26 @@
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { nextCookies } from 'better-auth/next-js'
-import { magicLink } from 'better-auth/plugins'
 import { prisma } from './db'
-import { deliverMagicLink } from './dev-inbox'
+import { signUpEnabled } from './local-mode'
 
-const ttl = Number(process.env.MAGIC_LINK_TTL_SECONDS ?? 300)
-// Per-IP limit on link requests per minute. Tests raise it; production keeps the default.
-const linkRateMax = Number(process.env.MAGIC_LINK_RATE_MAX ?? 5)
+// Per-IP attempts per minute on the password endpoints (brute-force defence).
+// Tests raise it; production keeps the default.
+const attemptsMax = Number(process.env.AUTH_RATE_MAX ?? 5)
+const rule = { window: 60, max: Number.isFinite(attemptsMax) && attemptsMax > 0 ? attemptsMax : 5 }
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: 'postgresql' }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL,
+  emailAndPassword: {
+    enabled: true,
+    // Closed everywhere except a local machine until addresses can be verified (see local-mode.ts).
+    disableSignUp: !signUpEnabled(),
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
+    autoSignIn: true,
+  },
   user: {
     additionalFields: {
       // Every new account is an OWNER. `input: false` means clients can never send this field.
@@ -20,16 +28,8 @@ export const auth = betterAuth({
     },
   },
   session: { expiresIn: 60 * 60 * 24 * 30 },
-  plugins: [
-    magicLink({
-      expiresIn: Number.isFinite(ttl) && ttl > 0 ? ttl : 300,
-      // Only a hash of the token is stored; the link in the email carries the real value.
-      storeToken: 'hashed',
-      rateLimit: { window: 60, max: Number.isFinite(linkRateMax) && linkRateMax > 0 ? linkRateMax : 5 },
-      sendMagicLink: ({ email, url }) => deliverMagicLink({ email, url }),
-    }),
-    nextCookies(),
-  ],
+  rateLimit: { customRules: { '/sign-in/email': rule, '/sign-up/email': rule } },
+  plugins: [nextCookies()],
 })
 
 export type Auth = typeof auth

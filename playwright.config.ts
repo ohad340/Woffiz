@@ -27,8 +27,8 @@ export default defineConfig({
       BETTER_AUTH_URL: `http://localhost:${PORT}`,
       BETTER_AUTH_SECRET: 'e2e-secret-e2e-secret-e2e-secret-e2e-secret',
       APP_ENV: 'local',
-      DEV_EMAIL_INBOX: 'true',
-      MAGIC_LINK_RATE_MAX: '10000',
+      LOCAL_SIGNUP: 'true',
+      AUTH_RATE_MAX: '10000',
     },
   },
 })

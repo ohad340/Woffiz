@@ -2,9 +2,9 @@ import { PawPrint } from 'lucide-react'
 import Image from 'next/image'
 import { HeroScene } from '@/components/art/HeroScene'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
-import { SignInForm } from '@/components/auth/SignInForm'
+import { AuthForm } from '@/components/auth/AuthForm'
 import { APP_NAME } from '@/lib/app'
-import { devInboxEnabled } from '@/server/dev-inbox'
+import { signUpEnabled } from '@/server/local-mode'
 import { getOverview } from '@/server/queries'
 import { getSessionUser } from '@/server/session'
 import { redirect } from 'next/navigation'
@@ -50,7 +50,7 @@ export default async function WelcomePage() {
         </div>
 
         <div className={styles.actions}>
-          <SignInForm devInbox={devInboxEnabled()} />
+          <AuthForm signUpOpen={signUpEnabled()} />
         </div>
         <p className={styles.legal}>מדיניות פרטיות ופרטי תמיכה יפורסמו לפני ההשקה.</p>
       </main>
