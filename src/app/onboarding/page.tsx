@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
+import { SignOutBar } from '@/components/shell/SignOutBar'
 import { parseDevState } from '@/lib/devState'
 import { getOnboardingState } from '@/server/onboarding'
 import { requireUserOrRedirect } from '@/server/session'
@@ -22,6 +23,7 @@ export default async function OnboardingPage({
   return (
     <>
       <FixtureBanner />
+      <SignOutBar />
       <OnboardingFlow
         previewState={preview === 'generating' || preview === 'generation-error' ? preview : null}
         initial={{ answers: state.answers, step: state.step }}

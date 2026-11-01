@@ -63,6 +63,7 @@ test('register, onboard, refresh, sign out and sign back in through the real scr
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('האימייל אומת')
   await page.getByRole('link', { name: 'מתחילים להכיר את הגור' }).click()
   await expect(page).toHaveURL(/\/onboarding/)
+  await expect(page.getByRole('button', { name: 'התנתקות' })).toHaveCount(1)
 
   await completeOnboarding(page)
   await expect(page.getByText('0 מתוך 12 שלבים הושלמו')).toBeAttached()
