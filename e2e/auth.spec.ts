@@ -73,8 +73,13 @@ test('register, onboard, refresh, sign out and sign back in through the real scr
   await page.goto('/puppy')
   await expect(page.getByText(email)).toBeVisible()
 
+  // Every main screen has a sign-out button in the top bar (the account card repeats it on /puppy).
+  await page.goto('/home')
+  await expect(page.getByRole('button', { name: 'התנתקות' })).toHaveCount(1)
+  await page.goto('/puppy')
+
   // Sign out removes access; the wrong password is refused; the right one returns to the plan.
-  await page.getByRole('button', { name: 'התנתקות' }).click()
+  await page.getByRole('button', { name: 'התנתקות' }).first().click()
   await expect(page).toHaveURL(/\/$/)
   await page.goto('/home')
   await expect(page).toHaveURL(/\/$/)

@@ -1,0 +1,12 @@
+.compact {
+  min-block-size: 44px;
+  padding-block: var(--space-1);
+  padding-inline: var(--space-3);
+  font-size: 0.9375rem;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-error);
+  font: var(--text-support);
+}

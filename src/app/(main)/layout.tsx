@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { SignOutButton } from '@/components/auth/SignOutButton'
 import { AppNav } from '@/components/shell/AppNav'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
 import styles from '@/components/shell/AppShell.module.css'
@@ -17,6 +18,9 @@ export default async function MainLayout({ children }: { children: React.ReactNo
       <FixtureBanner />
       <AppNav />
       <main id="main" className={styles.main} tabIndex={-1}>
+        <div className={styles.topbar}>
+          <SignOutButton compact />
+        </div>
         {children}
       </main>
     </div>
