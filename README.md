@@ -40,6 +40,17 @@ Links in emails always use `BETTER_AUTH_URL` (which is also the only trusted ori
 
 Preview states with `?state=loading|empty|error|offline` (map, review) or `?state=generating|generation-error` (onboarding). Development only.
 
+## Deployment (Vercel + Supabase, tester only)
+
+Hosting is Vercel (project `woffiz`, region `cdg1`, Node 24) and the database is Supabase PostgreSQL (eu-west-3). Authentication stays Better Auth with Prisma; Supabase Auth and the Supabase client libraries are not used.
+
+- **Runtime `DATABASE_URL`**: the Supabase *transaction* pooler (port 6543). The app uses `@prisma/adapter-pg`, so the old `?pgbouncer=true` flag is not needed. Leave `DATABASE_POOL_MAX` unset.
+- **Migrations `DIRECT_URL`**: the *session* pooler (port 5432), which `prisma.config.ts` prefers over `DATABASE_URL`. Apply migrations by hand with `prisma migrate deploy` (never `migrate reset` or `db push`), not during the Vercel build. Keep both strings, with the database password, in an ignored file such as `.env.cloud.local`.
+- **Production variables** (set in Vercel, never committed): `DATABASE_URL`, `BETTER_AUTH_SECRET` (fresh, never reused from local), `BETTER_AUTH_URL` (the stable HTTPS address; also the only trusted origin and the base of every emailed link), `RESEND_API_KEY`, `EMAIL_FROM`, `TESTER_EMAIL`. Do **not** set `APP_ENV`, `LOCAL_SIGNUP`, `EMAIL_TRANSPORT`, `EMAIL_OUTBOX_DIR`, `SHADOW_DATABASE_URL`, `TEST_DATABASE_URL` or `TEST_DB_KIND`.
+- **Data API lock**: the app tables are private. Migration `20261101120000_lock_public_data_api` enables Row Level Security without policies and revokes the `anon` and `authenticated` roles. A new table needs the same in its migration; `test/integration/data-api-lock.test.ts` fails otherwise.
+- **Never run the integration or e2e suites against Supabase**: they truncate tables. Keep `TEST_DATABASE_URL` on the local `woffiz-test` database or CI PostgreSQL.
+- Registration stays limited to `TESTER_EMAIL` while Resend is configured, and the sender is the shared `onboarding@resend.dev` (messages may land in spam). A verified sending domain is needed before anyone else can register.
+
 ## Checks
 
 ```bash

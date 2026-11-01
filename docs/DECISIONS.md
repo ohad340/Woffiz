@@ -69,6 +69,14 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 41 | Email rate limits in PostgreSQL (`EmailRateLimit`): one `INSERT … ON CONFLICT DO UPDATE … RETURNING` per counter, fixed windows on the database clock, SHA-256 keys (no address or IP stored), occasional pruning after 24 h | Confirmed | Atomic under concurrency and shared by all instances. Client IP is the first `x-forwarded-for` hop, as in Better Auth: trustworthy only behind a proxy that sets it (Vercel). The atomicity test runs on standard PostgreSQL only (CI). |
 | 42 | Provider failures: `sendAuthEmail` logs the failure (no address, link or key) and never throws, so sign-up, resend and reset return exactly the answer given for an unknown address. Copy is neutral ("הבקשה התקבלה… אמור להגיע…") and never claims delivery | Confirmed | Owner decision: identical public status and body for existing and unknown accounts outrank surfacing the outage. Operators see it in the server log. |
 
+## Cloud deployment — 2026-11-01
+
+| # | Decision | Status | Notes |
+|---|---|---|---|
+| 43 | Supabase PostgreSQL used as plain PostgreSQL. Runtime `DATABASE_URL` = transaction pooler (6543); migrations use `DIRECT_URL` = session pooler (5432) through `prisma.config.ts` and are applied manually with `prisma migrate deploy` | Confirmed | The direct host is IPv6-only. The app connects as the `postgres` role, which bypasses RLS; a dedicated least-privilege role is a later hardening step. |
+| 44 | Data API lock: RLS enabled without policies on every public table and `anon` / `authenticated` privileges revoked (migration `20261101120000`), guarded by an integration test | Confirmed | Better Auth sessions are not Supabase Auth sessions, so no client-side Data API access is wanted. |
+| 45 | Vercel project `woffiz` (region `cdg1`, next to Supabase; Node 24). Production variables only; pushes to `feature/*` do not auto-deploy. Registration stays tester-only | Confirmed | Personal testing deployment. |
+
 ## Provider decisions
 
 | Area | Recommendation to evaluate | Status |
