@@ -12,9 +12,7 @@ import { AUTH_LINK_TTL_SECONDS } from './email/templates'
 // Tests raise it; production keeps the default.
 const attemptsMax = Number(process.env.AUTH_RATE_MAX ?? 5)
 const rule = { window: 60, max: Number.isFinite(attemptsMax) && attemptsMax > 0 ? attemptsMax : 5 }
-// Per-IP requests per minute on the endpoints that send mail (a per-address limit is in email/delivery.ts).
-const emailMax = Number(process.env.AUTH_EMAIL_RATE_MAX ?? 3)
-const emailRule = { window: 60, max: Number.isFinite(emailMax) && emailMax > 0 ? emailMax : 3 }
+// The endpoints that send mail have their own per-IP and per-address limits in PostgreSQL (email/delivery.ts).
 
 const baseURL = process.env.BETTER_AUTH_URL
 const secret = process.env.BETTER_AUTH_SECRET
@@ -87,12 +85,13 @@ export const auth = betterAuth({
   },
   session: { expiresIn: 60 * 60 * 24 * 30 },
   rateLimit: {
+    // Better Auth's default for every other endpoint (100 per 10 s per IP). Only e2e raises it: all its
+    // browsers share one IP.
+    max: Number(process.env.AUTH_RATE_GLOBAL_MAX) > 0 ? Number(process.env.AUTH_RATE_GLOBAL_MAX) : 100,
     customRules: {
       '/sign-in/email': rule,
       '/sign-up/email': rule,
       '/reset-password': rule,
-      '/send-verification-email': emailRule,
-      '/request-password-reset': emailRule,
     },
   },
   plugins: [nextCookies()],

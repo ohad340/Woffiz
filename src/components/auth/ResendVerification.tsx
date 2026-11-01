@@ -46,8 +46,8 @@ export function ResendVerification({ sessionEmail }: { sessionEmail?: string }) 
         setResult({
           ok: true,
           text: sessionEmail
-            ? 'שלחנו קישור אימות חדש. הקישור תקף לשעה.'
-            : 'אם הכתובת רשומה וממתינה לאימות, שלחנו אליה קישור חדש. הקישור תקף לשעה.',
+            ? 'הבקשה התקבלה. קישור אימות חדש אמור להגיע בדקות הקרובות. הקישור תקף לשעה.'
+            : 'הבקשה התקבלה. אם הכתובת רשומה וממתינה לאימות, אמור להגיע אליה קישור חדש בדקות הקרובות. הקישור תקף לשעה.',
         })
       } else {
         const code = await readErrorCode(response)

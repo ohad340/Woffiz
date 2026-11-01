@@ -48,7 +48,7 @@ export async function registerUnverified(page: Page, email: string) {
 export async function register(page: Page, email: string) {
   await registerUnverified(page, email)
   const verified = await page.request.get(await emailLink('verify-email', email))
-  expect(verified.ok(), `verification link answered ${verified.status()} at ${verified.url()}`).toBeTruthy()
+  expect(verified.ok(), `verification link answered ${verified.status()} at ${new URL(verified.url()).pathname}`).toBeTruthy()
 }
 
 export async function onboardViaApi(page: Page) {

@@ -30,6 +30,7 @@ export default defineConfig({
       LOCAL_SIGNUP: 'true',
       AUTH_RATE_MAX: '10000',
       AUTH_EMAIL_RATE_MAX: '10000',
+      AUTH_RATE_GLOBAL_MAX: '10000',
       // Mail is written to e2e/.outbox instead of being sent (honored only on a local machine).
       EMAIL_TRANSPORT: 'outbox',
       EMAIL_OUTBOX_DIR: 'e2e/.outbox',

@@ -12,6 +12,8 @@ process.env.BETTER_AUTH_URL = 'http://localhost:3000'
 process.env.APP_ENV = 'local'
 process.env.LOCAL_SIGNUP = 'true'
 process.env.AUTH_RATE_MAX = '10000'
+// The per-IP email limit (all test requests share one IP); the per-address limit stays real.
+process.env.AUTH_EMAIL_RATE_MAX = '10000'
 // PGlite (local) serves one connection; standard PostgreSQL (CI) keeps the default pool so concurrency is real.
 if (process.env.TEST_DB_KIND !== 'postgres') process.env.DATABASE_POOL_MAX = '1'
 // Mail never leaves the machine in tests: the outbox transport (local only) is selected, and test files

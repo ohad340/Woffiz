@@ -117,7 +117,7 @@ test('an unverified owner cannot sign in and can ask for a new link', async ({ p
   await expect(page).toHaveURL(/\/verify-email$/)
   await expect(page.getByLabel('אימייל')).toHaveValue(email)
   await page.getByRole('button', { name: 'שליחת קישור חדש' }).click()
-  await expect(page.getByRole('status').filter({ hasText: 'שלחנו אליה קישור חדש' })).toBeVisible()
+  await expect(page.getByRole('status').filter({ hasText: 'אמור להגיע אליה קישור חדש' })).toBeVisible()
 })
 
 test('an expired or broken verification link explains what to do', async ({ page }) => {

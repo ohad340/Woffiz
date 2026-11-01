@@ -48,7 +48,8 @@ export function ForgotPasswordForm() {
     return (
       <>
         <p className={styles.success} role="status">
-          אם יש חשבון לכתובת הזו, שלחנו אליה קישור לבחירת סיסמה חדשה. הקישור תקף לשעה ולשימוש אחד.
+          הבקשה התקבלה. אם יש חשבון לכתובת הזו, אמור להגיע אליה קישור לבחירת סיסמה חדשה בדקות הקרובות. הקישור תקף לשעה
+          ולשימוש אחד.
         </p>
         <p className={styles.muted}>לא הגיע? בדקו בתיקיית הספאם, או נסו שוב בעוד כמה דקות.</p>
         <Button href="/" variant="secondary" fullWidth>

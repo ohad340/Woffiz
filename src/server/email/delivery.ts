@@ -1,16 +1,13 @@
-import { AsyncLocalStorage } from 'node:async_hooks'
 import { emailTransport, normalizeEmail } from './config'
+import { pruneRateLimits, takeRateLimit, type Limit } from './rate-limit'
 import { renderAuthEmail, type AuthEmailKind } from './templates'
 import { deliver, EmailDeliveryError } from './transport'
 
 /**
- * Better Auth swallows errors thrown by its email callbacks on sign-up and password reset and still
- * answers 200. To never report a send that failed, each email-sending request runs inside a scope;
- * the sender marks a failure there and guardEmailRequest replaces the response with a 503.
+ * Sends one authentication email. It never throws: a failure is logged (without the address, link or
+ * key) and the caller answers exactly as for an unknown address. A failed send therefore cannot reveal
+ * that an account exists, and the screens use wording that never claims delivery.
  */
-type Outcome = { failed: boolean }
-const scope = new AsyncLocalStorage<Outcome>()
-
 export async function sendAuthEmail(kind: AuthEmailKind, to: string, url: string): Promise<void> {
   const transport = emailTransport()
   const recipient = normalizeEmail(to)
@@ -25,10 +22,7 @@ export async function sendAuthEmail(kind: AuthEmailKind, to: string, url: string
   try {
     await deliver({ kind, to: recipient, url, ...renderAuthEmail(kind, url) }, transport)
   } catch (error) {
-    const outcome = scope.getStore()
-    if (outcome) outcome.failed = true
     console.error(`[email] ${kind} delivery failed: ${error instanceof EmailDeliveryError ? error.message : 'unexpected error'}`)
-    throw error instanceof EmailDeliveryError ? error : new EmailDeliveryError('Unexpected delivery error')
   }
 }
 
@@ -39,38 +33,28 @@ const EMAIL_PATHS = new Set(['/sign-up/email', '/send-verification-email', '/req
 /** Every answer takes at least this long, so a real send cannot be told apart from an unknown address by timing. */
 export const MIN_EMAIL_RESPONSE_MS = 1_000
 
-/** Per address and endpoint, whether or not the address has an account (so a 429 reveals nothing). In memory, per instance. */
-const RECIPIENT_WINDOW_MS = 15 * 60_000
-const RECIPIENT_MAX = 3
-const recent = new Map<string, number[]>()
+const ipMax = Number(process.env.AUTH_EMAIL_RATE_MAX ?? 3)
 
-function takeRecipientQuota(path: string, email: string, now = Date.now()) {
-  const key = `${path}:${normalizeEmail(email)}`
-  const hits = (recent.get(key) ?? []).filter((t) => now - t < RECIPIENT_WINDOW_MS)
-  if (hits.length >= RECIPIENT_MAX) {
-    recent.set(key, hits)
-    return false
-  }
-  hits.push(now)
-  recent.set(key, hits)
-  if (recent.size > 10_000) recent.delete(recent.keys().next().value!)
-  return true
+/**
+ * Stored in PostgreSQL and shared by every server instance (see rate-limit.ts). Both are counted for
+ * every request, whether or not the address has an account, so a 429 reveals nothing.
+ */
+export const EMAIL_LIMITS = {
+  perIp: { scope: 'email-ip', max: Number.isFinite(ipMax) && ipMax > 0 ? ipMax : 3, windowSeconds: 60 },
+  perAddress: { scope: 'email-address', max: 3, windowSeconds: 15 * 60 },
+} satisfies Record<string, Limit>
+
+/** First hop of x-forwarded-for (set by the hosting proxy), as Better Auth does. */
+function clientIp(request: Request) {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwarded || request.headers.get('x-real-ip')?.trim() || 'unknown'
 }
 
-/** Tests only. */
-export function resetRecipientQuotas() {
-  recent.clear()
-}
-
-const noStore = { 'content-type': 'application/json', 'cache-control': 'no-store' }
-
-const FAILURES = {
-  EMAIL_RATE_LIMITED: { status: 429, message: 'Too many email requests for this address' },
-  EMAIL_SEND_FAILED: { status: 503, message: 'The email could not be sent' },
-} as const
-
-function failure(code: keyof typeof FAILURES) {
-  return new Response(JSON.stringify({ code, message: FAILURES[code].message }), { status: FAILURES[code].status, headers: noStore })
+function rateLimited() {
+  return new Response(JSON.stringify({ code: 'EMAIL_RATE_LIMITED', message: 'Too many email requests' }), {
+    status: 429,
+    headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+  })
 }
 
 export async function guardEmailRequest(request: Request, handle: (request: Request) => Promise<Response>): Promise<Response> {
@@ -81,18 +65,17 @@ export async function guardEmailRequest(request: Request, handle: (request: Requ
   const email = await request
     .clone()
     .json()
-    .then((body: { email?: unknown }) => (typeof body?.email === 'string' ? body.email : null))
+    .then((body: { email?: unknown }) => (typeof body?.email === 'string' ? normalizeEmail(body.email) : null))
     .catch(() => null)
 
-  let response: Response
-  if (email && !takeRecipientQuota(path, email)) {
-    response = failure('EMAIL_RATE_LIMITED')
-  } else {
-    const outcome: Outcome = { failed: false }
-    const inner = await scope.run(outcome, () => handle(request))
-    response = outcome.failed ? failure('EMAIL_SEND_FAILED') : inner
-  }
+  // Both counters always advance, so an address cannot be probed by spreading requests over IPs or the reverse.
+  const [ipOk, addressOk] = await Promise.all([
+    takeRateLimit(EMAIL_LIMITS.perIp, `${path}\n${clientIp(request)}`),
+    email ? takeRateLimit(EMAIL_LIMITS.perAddress, `${path}\n${email}`) : true,
+  ])
+  const response = ipOk && addressOk ? await handle(request) : rateLimited()
 
+  if (Math.random() < 0.01) void pruneRateLimits().catch(() => {})
   const remaining = MIN_EMAIL_RESPONSE_MS - (Date.now() - started)
   if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
   return response

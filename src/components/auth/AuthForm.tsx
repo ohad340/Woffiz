@@ -65,10 +65,6 @@ export function AuthForm({ signUp }: { signUp: SignUpMode }) {
         return
       }
       const code = await readErrorCode(response)
-      if (signingUp && code === 'EMAIL_SEND_FAILED') {
-        router.push('/verify-email?send=failed')
-        return
-      }
       const fallback = signingUp ? 'לא הצלחנו ליצור חשבון. נסו שוב.' : 'לא הצלחנו להיכנס. בדקו את הפרטים ונסו שוב.'
       setError({ text: authErrorMessage(response.status, code, fallback), unverified: code === 'EMAIL_NOT_VERIFIED' })
       setLoading(false)
@@ -111,7 +107,7 @@ export function AuthForm({ signUp }: { signUp: SignUpMode }) {
         dir="ltr"
         value={password}
         error={errors.password}
-        helper={signingUp ? `לפחות ${MIN_PASSWORD} תווים. נשלח מייל לאימות הכתובת.` : undefined}
+        helper={signingUp ? `לפחות ${MIN_PASSWORD} תווים. את הכתובת מאמתים דרך קישור במייל.` : undefined}
         onChange={(e) => setPassword(e.target.value)}
       />
       {error && (

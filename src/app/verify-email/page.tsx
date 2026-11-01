@@ -72,25 +72,19 @@ export default async function VerifyEmailPage({ searchParams }: { searchParams: 
     )
   }
 
-  const sendFailed = first(params.send) === 'failed'
+  // Neutral on purpose: the server answers the same whether or not a message was actually sent.
   return (
     <AuthScreen title="בדקו את תיבת הדואר">
-      {sendFailed ? (
-        <p className={styles.error} role="alert">
-          לא הצלחנו לשלוח את מייל האימות כרגע. נסו לשלוח שוב בעוד כמה דקות.
-        </p>
-      ) : (
-        <p className={styles.lead}>
-          {user ? (
-            <>
-              שלחנו קישור אימות אל <bdi dir="ltr">{user.email}</bdi>. לחצו עליו כדי להמשיך לאימון.
-            </>
-          ) : (
-            'שלחנו קישור אימות לכתובת שנרשמתם איתה. לחצו עליו כדי להיכנס ולהתחיל.'
-          )}
-        </p>
-      )}
-      <p className={styles.muted}>הקישור תקף לשעה. לא הגיע? בדקו בתיקיית הספאם או שלחו קישור חדש.</p>
+      <p className={styles.lead}>
+        {user ? (
+          <>
+            קישור אימות אמור להגיע אל <bdi dir="ltr">{user.email}</bdi> בדקות הקרובות. לחצו עליו כדי להמשיך לאימון.
+          </>
+        ) : (
+          'אם הכתובת ממתינה לאימות, אמור להגיע אליה קישור בדקות הקרובות. לחצו עליו כדי להיכנס ולהתחיל.'
+        )}
+      </p>
+      <p className={styles.muted}>הקישור תקף לשעה. לא הגיע? בדקו בתיקיית הספאם או בקשו קישור חדש בעוד כמה דקות.</p>
       <ResendVerification sessionEmail={user?.email} />
       {user ? (
         <SignOutButton />

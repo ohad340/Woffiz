@@ -52,8 +52,8 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | # | Decision | Status | Notes |
 |---|---|---|---|
 | 31 | Replace the email-link sign-in with email + password; remove the development inbox | Confirmed | Fewer moving parts; no mail needed locally. |
-| 32 | Email verification and password reset are **not implemented** | Superseded by 34–40 | |
-| 33 | Known limits: in-memory rate limiting (per server instance), no account lockout, no "show password" toggle | Open | Move rate limits to the database before running several instances. Also applies to the per-address email limit (39). |
+| 32 | Email verification and password reset are **not implemented** | Superseded by 34–42 | |
+| 33 | Known limits: in-memory rate limiting for sign-in / sign-up / reset-password attempts (per server instance), no account lockout, no "show password" toggle | Open | The email-sending limits moved to PostgreSQL (41). Password-attempt limits are still per instance. |
 
 ## Resend email authentication — 2026-10-31
 
@@ -64,8 +64,10 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 36 | Unverified accounts are blocked from all owner data: pages redirect to `/verify-email`, APIs answer 403 `EMAIL_NOT_VERIFIED`. Existing accounts are **not** auto-verified | Confirmed | Checked on every request (not only at sign-in) because sessions created before this change still exist. |
 | 37 | Test phase: with Resend configured, registration is limited to `TESTER_EMAIL` in every environment (hook before `/sign-up/email` + database hook), and mail is delivered only to `TESTER_EMAIL` | Confirmed | Other recipients get the same neutral answer and no mail. Incomplete settings close registration; they never skip verification. |
 | 38 | Local outbox transport (`EMAIL_TRANSPORT=outbox`) writes JSON files instead of sending; honored only on a local machine. With `LOCAL_SIGNUP=true` it keeps open local registration. e2e uses it; integration tests mock delivery | Confirmed | The old local flags alone no longer open registration: without a way to verify, an account would be unusable. |
-| 39 | Enumeration and abuse: duplicate sign-up, resend and reset answers are identical for known and unknown addresses; email endpoints answer in ≥ 1 s; 3 requests per IP per minute and 3 per address per 15 min (counted for every address, so a 429 reveals nothing) | Confirmed | Re-registering an unverified address re-sends the link (recovers from a failed send). |
-| 40 | Provider failures are never reported as success: Better Auth swallows errors in its sign-up/reset email callbacks, so the auth route marks failures per request (`AsyncLocalStorage`) and answers 503 `EMAIL_SEND_FAILED` | Confirmed | Trade-off: during an outage a 503 only happens for an existing address, which weakly reveals it. Truthful failure was required. |
+| 39 | Enumeration and abuse: duplicate sign-up, resend and reset answers are identical for known and unknown addresses; email endpoints answer in ≥ 1 s; 3 requests per IP per minute and 3 per address per 15 min (counted for every address, so a 429 reveals nothing; storage: 41) | Confirmed | Re-registering an unverified address re-sends the link (recovers from a failed send). |
+| 40 | ~~Provider failures answer 503 `EMAIL_SEND_FAILED`~~ | Superseded by 42 | A 503 happened only for an existing address, so it revealed the account. |
+| 41 | Email rate limits in PostgreSQL (`EmailRateLimit`): one `INSERT … ON CONFLICT DO UPDATE … RETURNING` per counter, fixed windows on the database clock, SHA-256 keys (no address or IP stored), occasional pruning after 24 h | Confirmed | Atomic under concurrency and shared by all instances. Client IP is the first `x-forwarded-for` hop, as in Better Auth: trustworthy only behind a proxy that sets it (Vercel). The atomicity test runs on standard PostgreSQL only (CI). |
+| 42 | Provider failures: `sendAuthEmail` logs the failure (no address, link or key) and never throws, so sign-up, resend and reset return exactly the answer given for an unknown address. Copy is neutral ("הבקשה התקבלה… אמור להגיע…") and never claims delivery | Confirmed | Owner decision: identical public status and body for existing and unknown accounts outrank surfacing the outage. Operators see it in the server log. |
 
 ## Provider decisions
 

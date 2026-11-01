@@ -228,3 +228,16 @@ model IdempotencyKey {
 
   @@unique([userId, operation, key])
 }
+
+// ----- Email abuse limits -----
+
+// Fixed-window counters for the endpoints that send authentication email, shared by every server
+// instance. `key` is a SHA-256 hash of the scope and the address or IP: no address or IP is stored.
+// Updated only by one atomic INSERT … ON CONFLICT statement (src/server/email/rate-limit.ts).
+model EmailRateLimit {
+  key         String   @id
+  windowStart DateTime
+  count       Int
+
+  @@index([windowStart])
+}

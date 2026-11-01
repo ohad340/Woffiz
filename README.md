@@ -36,7 +36,7 @@ Resend setup for the test phase:
 2. In `.env`: `RESEND_API_KEY=re_…`, `EMAIL_FROM="Woffiz <onboarding@resend.dev>"`, `TESTER_EMAIL=<the address of your Resend account>` (the shared `onboarding@resend.dev` sender only delivers to that address), and remove `EMAIL_TRANSPORT` if set.
 3. Restart `npm run dev` (settings are read at startup).
 
-Links in emails always use `BETTER_AUTH_URL` (which is also the only trusted origin). Verification links last one hour and sign the owner in once; reset links last one hour, work once and sign out every device. Resend and reset requests are limited to 3 per IP per minute and 3 per address per 15 minutes, every answer to them takes at least one second, and a provider failure is reported as an error (503), never as "sent".
+Links in emails always use `BETTER_AUTH_URL` (which is also the only trusted origin). Verification links last one hour and sign the owner in once; reset links last one hour, work once and sign out every device. Sign-up, resend and reset requests are limited to 3 per IP per minute and 3 per address per 15 minutes. The counters live in PostgreSQL (`EmailRateLimit`, hashed keys only), so every server instance shares them. Every answer to these requests takes at least one second. A provider failure is logged on the server and the owner gets the same neutral answer as for an unknown address; the screens never claim that a message was sent ("אמור להגיע…").
 
 Preview states with `?state=loading|empty|error|offline` (map, review) or `?state=generating|generation-error` (onboarding). Development only.
 

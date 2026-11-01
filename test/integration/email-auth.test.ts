@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GET as authGET, POST as authPOST } from '@/app/api/auth/[...all]/route'
 import { POST as draftPOST } from '@/app/api/onboarding/draft/route'
 import { prisma } from '@/server/db'
-import { resetRecipientQuotas } from '@/server/email/delivery'
+import { takeRateLimit } from '@/server/email/rate-limit'
 import { deliver, EmailDeliveryError, type OutgoingEmail } from '@/server/email/transport'
-import { createUser, resetDatabase } from './helpers'
+import { createUser, REAL_POSTGRES, resetDatabase } from './helpers'
 import { BASE, cookieFrom, jsonPost, lastLink } from './mail'
 
 // Email delivery is MOCKED: messages are captured here, nothing is sent or written.
@@ -20,12 +20,12 @@ vi.mock('@/server/email/transport', async (importOriginal) => ({
 
 beforeEach(async () => {
   await resetDatabase()
-  resetRecipientQuotas()
   sent.length = 0
 })
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllEnvs()
+  vi.restoreAllMocks()
 })
 
 const PASSWORD = 'correct horse battery'
@@ -128,43 +128,104 @@ describe('email verification', () => {
     expect((await user('pending@example.test')).emailVerified).toBe(true)
   })
 
-  it('limits requests per address, whether or not the address has an account', async () => {
+})
+
+describe('email rate limits are stored in PostgreSQL', () => {
+  /** A fresh copy of the auth route, as a second server instance would load it (no shared memory). */
+  async function anotherInstance() {
+    vi.resetModules()
+    const route = await import('@/app/api/auth/[...all]/route')
+    return { POST: route.POST, GET: route.GET }
+  }
+
+  it('limits each address, whether or not it has an account, across server instances', async () => {
     await signUp('busy@example.test')
     for (const email of ['busy@example.test', 'ghost@example.test']) {
       const statuses = []
-      for (let i = 0; i < 4; i++) statuses.push((await post('/send-verification-email', { email })).status)
+      for (let i = 0; i < 3; i++) statuses.push((await post('/send-verification-email', { email })).status)
+      // The fourth request goes to a different instance: the count still applies.
+      const second = await anotherInstance()
+      statuses.push((await post('/send-verification-email', { email }, {}, second)).status)
       expect(statuses).toEqual([200, 200, 200, 429])
     }
+    // Only hashes are stored: no address appears in the table.
+    const rows = await prisma.emailRateLimit.findMany()
+    expect(rows.length).toBeGreaterThan(0)
+    expect(JSON.stringify(rows)).not.toMatch(/example\.test/)
+  })
+
+  it('limits each IP across addresses, and a new window allows requests again', async () => {
+    vi.stubEnv('AUTH_EMAIL_RATE_MAX', '3')
+    const instance = await anotherInstance()
+    const from = (ip: string, email: string) => post('/request-password-reset', { email }, { 'x-forwarded-for': `${ip}, 10.0.0.1` }, instance)
+
+    const statuses = []
+    for (const n of [1, 2, 3, 4]) statuses.push((await from('203.0.113.7', `reader${n}@example.test`)).status)
+    expect(statuses).toEqual([200, 200, 200, 429])
+    expect((await from('198.51.100.9', 'reader5@example.test')).status).toBe(200)
+
+    await prisma.emailRateLimit.updateMany({ data: { windowStart: new Date(Date.now() - 16 * 60 * 1000) } })
+    expect((await from('203.0.113.7', 'reader6@example.test')).status).toBe(200)
+  })
+
+  it.runIf(REAL_POSTGRES)('is atomic: of 20 simultaneous requests on separate connections exactly 3 pass', async () => {
+    const limit = { scope: 'test-race', max: 3, windowSeconds: 60 }
+    const results = await Promise.all(Array.from({ length: 20 }, () => takeRateLimit(limit, 'same-subject')))
+    expect(results.filter(Boolean)).toHaveLength(3)
+    expect((await prisma.emailRateLimit.findFirstOrThrow()).count).toBe(20)
   })
 })
 
-describe('provider failures are reported, never shown as success', () => {
-  it('sign-up answers 503 when the email fails; registering again re-sends the link', async () => {
-    failNextDelivery()
-    const failed = await signUp('unlucky@example.test')
-    expect(failed.status).toBe(503)
-    expect(await failed.json()).toMatchObject({ code: 'EMAIL_SEND_FAILED' })
-    expect(cookieFrom(failed)).toBe('')
-    expect((await user('unlucky@example.test')).emailVerified).toBe(false)
+describe('provider failures: the public answer is identical for existing and unknown addresses', () => {
+  const comparable = async (response: Response) => {
+    const body = (await response.json()) as Record<string, unknown>
+    const user = body.user as Record<string, unknown> | undefined
+    // Sign-up returns a user object for both (real or synthetic); only its keys and fixed fields are comparable.
+    return { status: response.status, token: body.token, status_: body.status, message: body.message, userKeys: user && Object.keys(user).sort(), verified: user?.emailVerified }
+  }
 
-    const retry = await signUp('unlucky@example.test')
-    expect(retry.status).toBe(200)
+  it('resend, reset and sign-up answer the same whether the send failed or there was nothing to send', async () => {
+    await signUp('pending@example.test')
+    await verifiedOwner('owner@example.test')
+    sent.length = 0
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    failNextDelivery()
+    const resendFailed = await post('/send-verification-email', { email: 'pending@example.test' })
+    const resendUnknown = await post('/send-verification-email', { email: 'nobody@example.test' })
+    expect(await comparable(resendFailed)).toEqual(await comparable(resendUnknown))
+    expect(resendFailed.status).toBe(200)
+
+    failNextDelivery()
+    const resetFailed = await post('/request-password-reset', { email: 'owner@example.test', redirectTo: '/reset-password' })
+    const resetUnknown = await post('/request-password-reset', { email: 'nobody@example.test', redirectTo: '/reset-password' })
+    expect(await comparable(resetFailed)).toEqual(await comparable(resetUnknown))
+    expect(resetFailed.status).toBe(200)
+
+    failNextDelivery()
+    const signUpFailed = await signUp('unlucky@example.test')
+    const signUpExisting = await signUp('owner@example.test')
+    expect(await comparable(signUpFailed)).toEqual(await comparable(signUpExisting))
+    expect(signUpFailed.status).toBe(200)
+    expect(cookieFrom(signUpFailed)).toBe('')
+
+    expect(sent).toHaveLength(0)
+    // Failures are logged for operators, without the address or the link.
+    const lines = logged.mock.calls.map((c) => c.join(' ')).filter((l) => l.includes('[email]'))
+    expect(lines).toHaveLength(3)
+    expect(lines.join('\n')).not.toMatch(/example\.test|token=|reset-password\//)
+  })
+
+  it('after a failed sign-up email, registering again re-sends the link', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    failNextDelivery()
+    expect((await signUp('unlucky@example.test')).status).toBe(200)
+    expect(sent).toHaveLength(0)
+
+    expect((await signUp('unlucky@example.test')).status).toBe(200)
     expect(sent.map((m) => m.to)).toEqual(['unlucky@example.test'])
     expect((await open(lastLink(sent, 'verify-email', 'unlucky@example.test'))).status).toBe(302)
     expect((await user('unlucky@example.test')).emailVerified).toBe(true)
-  })
-
-  it('resend and password reset answer 503 when the provider fails', async () => {
-    await signUp('pending@example.test')
-    failNextDelivery()
-    const resend = await post('/send-verification-email', { email: 'pending@example.test' })
-    expect(resend.status).toBe(503)
-
-    await verifiedOwner('owner@example.test')
-    failNextDelivery()
-    const reset = await post('/request-password-reset', { email: 'owner@example.test', redirectTo: '/reset-password' })
-    expect(reset.status).toBe(503)
-    expect(await reset.json()).toMatchObject({ code: 'EMAIL_SEND_FAILED' })
   })
 })
 
@@ -267,7 +328,6 @@ describe('test phase: Resend configured, registration and mail limited to TESTER
     vi.resetModules()
     const route = await import('@/app/api/auth/[...all]/route')
     const { auth } = await import('@/server/auth')
-    ;(await import('@/server/email/delivery')).resetRecipientQuotas()
     return { handlers: { POST: route.POST, GET: route.GET }, auth }
   }
   const RESEND = { RESEND_API_KEY: 're_test_not_real', EMAIL_FROM: 'Woffiz <onboarding@resend.dev>', TESTER_EMAIL: 'Tester@Example.test' }

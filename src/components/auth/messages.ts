@@ -11,7 +11,6 @@ const MESSAGES: Record<string, string> = {
   EMAIL_AND_PASSWORD_SIGN_UP_DISABLED: 'ההרשמה עדיין לא פתוחה בסביבה הזו.',
   SIGN_UP_RESTRICTED: 'בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות.',
   EMAIL_NOT_VERIFIED: 'צריך לאמת את כתובת האימייל לפני הכניסה. חפשו את הקישור בתיבת הדואר.',
-  EMAIL_SEND_FAILED: 'לא הצלחנו לשלוח את המייל כרגע. נסו שוב בעוד כמה דקות.',
   EMAIL_RATE_LIMITED: 'ביקשתם כמה מיילים ברצף. נסו שוב בעוד רבע שעה.',
   INVALID_TOKEN: 'הקישור לא תקף, פג תוקפו או שכבר השתמשו בו. בקשו קישור חדש.',
 }
