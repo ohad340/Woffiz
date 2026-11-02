@@ -107,8 +107,10 @@ test.describe('review, publication gate and withdrawal in the browser', () => {
     await page.getByLabel('הערה (חובה)', { exact: true }).fill('בדיקת הסרה בדפדפן')
     await page.getByRole('button', { name: 'הסרה', exact: true }).click()
     await page.getByRole('button', { name: 'כן, להסיר' }).click()
-    await expect(page.getByRole('status').filter({ hasText: 'הגרסה הוסרה.' })).toBeVisible()
+    // The page re-renders into the withdrawn state (its actions are replaced), so assert the resulting state, not a transient message.
     await expect(page.getByText('גרסה שהוסרה לא חוזרת')).toBeVisible()
+    await expect(page.getByText('הוסר', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('תקלה טכנית', { exact: true }).first()).toBeVisible()
     await expectHealthyPage(page)
   })
 
