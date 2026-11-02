@@ -90,6 +90,8 @@ export type ExerciseView = {
   planRevision: number
   mode: 'current' | 'review' | 'locked'
   nextPosition: number | null
+  /** Reports on this exact version of a CURRENT level that were not "independent"; 2 or more offer an AI adaptation. */
+  strugglesOnVersion: number
 }
 
 /** Returns null both when the level does not exist and when it belongs to someone else. */
@@ -105,6 +107,12 @@ export async function getExercise(userId: string, levelId: string): Promise<Exer
   if (!level || !exercise || level.plan.puppy.ownerId !== userId) return null
 
   const content = exerciseContentSchema.parse(exercise.contentJson)
+  const strugglesOnVersion =
+    level.state === 'CURRENT'
+      ? await prisma.attempt.count({
+          where: { levelId: level.id, exerciseVersionId: exercise.id, mode: 'CURRENT', outcome: { not: 'INDEPENDENT' } },
+        })
+      : 0
   return {
     level: {
       id: level.id,
@@ -122,6 +130,7 @@ export async function getExercise(userId: string, levelId: string): Promise<Exer
     planRevision: level.plan.revision,
     mode: level.state === 'CURRENT' ? 'current' : level.state === 'COMPLETED' ? 'review' : 'locked',
     nextPosition: level.position + 1,
+    strugglesOnVersion,
   }
 }
 

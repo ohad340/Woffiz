@@ -12,6 +12,12 @@ export type ErrorCode =
   | 'IDEMPOTENCY_REQUIRED'
   | 'ONBOARDING_INCOMPLETE'
   | 'ONBOARDING_DONE'
+  | 'GENERATION_PENDING'
+  | 'AI_UNAVAILABLE'
+  | 'AI_QUOTA_EXCEEDED'
+  | 'GENERATION_FAILED'
+  | 'ADAPT_NOT_NEEDED'
+  | 'REVISE_NOT_NEEDED'
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -27,6 +33,12 @@ const STATUS: Record<ErrorCode, number> = {
   IDEMPOTENCY_REQUIRED: 400,
   ONBOARDING_INCOMPLETE: 409,
   ONBOARDING_DONE: 409,
+  GENERATION_PENDING: 409,
+  AI_UNAVAILABLE: 503,
+  AI_QUOTA_EXCEEDED: 429,
+  GENERATION_FAILED: 502,
+  ADAPT_NOT_NEEDED: 409,
+  REVISE_NOT_NEEDED: 409,
 }
 
 /** Hebrew messages safe to show owners. Never include internals or other users' data. */
@@ -44,6 +56,12 @@ const MESSAGE: Record<ErrorCode, string> = {
   IDEMPOTENCY_REQUIRED: 'חסר מפתח לבקשה.',
   ONBOARDING_INCOMPLETE: 'חסרות תשובות בשאלון.',
   ONBOARDING_DONE: 'השאלון כבר הושלם.',
+  GENERATION_PENDING: 'אנחנו עדיין מכינים את התוכנית. המתינו רגע.',
+  AI_UNAVAILABLE: 'ההתאמה האישית לא זמינה כרגע. מה ששמרתם נשאר כפי שהוא. נסו שוב בעוד זמן מה.',
+  AI_QUOTA_EXCEEDED: 'הגעתם למגבלת ההתאמות להיום. נסו שוב מחר. מה שכבר נשמר לא ישתנה.',
+  GENERATION_FAILED: 'לא הצלחנו להכין את התוכנית הפעם. מה ששמרתם נשאר כפי שהוא. נסו שוב.',
+  ADAPT_NOT_NEEDED: 'אפשר להתאים את התרגיל אחרי כמה ניסיונות שלא יצאו בעצמאות.',
+  REVISE_NOT_NEEDED: 'אין שלבים עתידיים לעדכן.',
 }
 
 export class AppError extends Error {

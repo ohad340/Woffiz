@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Mascot } from '@/components/art/Mascot'
+import { AiAdjust } from '@/components/exercise/AiAdjust'
 import { SignOutButton } from '@/components/auth/SignOutButton'
 import { Card } from '@/components/ui/Card'
 import { getRecentAttempts, requireOverview } from '@/server/queries'
@@ -53,6 +54,23 @@ export default async function PuppyPage() {
           </ul>
         )}
       </Card>
+
+      {overview.current && overview.current.position < overview.levels.length && (
+        <Card aria-labelledby="path-title" className={styles.sectionStack}>
+          <h2 id="path-title" className={styles.cardTitle}>
+            המסלול
+          </h2>
+          <p className={styles.muted}>אפשר לבקש לבנות מחדש את השלבים שעוד נעולים לפי ההתקדמות שלכם. שלבים שהושלמו והשלב הנוכחי לא ישתנו, ושליטה נקבעת רק על ידכם.</p>
+          <AiAdjust
+            endpoint="/api/plan/revise"
+            planRevision={overview.planRevision}
+            label="לעדכן את המשך המסלול"
+            loadingLabel="מעדכנים…"
+            doneNote="המשך המסלול עודכן."
+            variant="secondary"
+          />
+        </Card>
+      )}
 
       <Card aria-labelledby="account-title" className={styles.sectionStack}>
         <h2 id="account-title" className={styles.cardTitle}>

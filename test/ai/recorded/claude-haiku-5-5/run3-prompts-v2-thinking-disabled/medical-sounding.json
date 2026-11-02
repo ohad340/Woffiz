@@ -1,0 +1,391 @@
+{
+  "caseId": "medical-sounding",
+  "provider": "anthropic",
+  "model": "claude-haiku-5-5",
+  "recordedAt": "2026-11-01T21:04:41.228Z",
+  "promptVersion": "prompts-v2",
+  "policyVersion": "policy-v1",
+  "usage": {
+    "inputTokens": 1985,
+    "outputTokens": 4192,
+    "latencyMs": 24338,
+    "estimatedCostUsd": 0.0022945
+  },
+  "problems": [
+    "topic TOILET appears three times in a row",
+    "a level lacks the vet referral"
+  ],
+  "output": {
+    "rationale": "הגור בן ארבעה עד שישה חודשים, ולכן התרגילים קצרים ונעשים בעדינות ובתגמול חיובי. בגלל הצליעה והשלשול שנמשך שבוע, התכנית מתחילה בהתייעצות עם וטרינר ורק אחריה בתרגול שירותים עם הרבה סבלנות.",
+    "levels": [
+      {
+        "title": "בדיקה וטרינרית לפני הכול",
+        "goal": "לברר את מקור הצליעה והשלשול לפני כל תרגול.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "לרשום מתי התחילו הצליעה והשלשול",
+          "לקחת דוגמית צואה אם הוטרינר מבקש"
+        ],
+        "steps": [
+          "לתאם בדיקה אצל וטרינר השבוע",
+          "להעביר לוטרינר את התיאור המדויק של הצליעה והשלשול",
+          "לפעול לפי ההנחיות שהוטרינר נותן"
+        ],
+        "successCriterion": "נקבע תור לוטרינר והמידע הועבר.",
+        "stopConditions": [
+          "אם הגור נוטה לשכב, מסרב לזוז, מקיא או מדמם, יש לפנות לוטרינר מיד ולא לחכות לתור."
+        ],
+        "easierVariant": {
+          "title": "שיחה טלפונית",
+          "steps": [
+            "להתקשר לקליניקה ולתאר את המצב",
+            "לבקש המלצה דחופה אם יש צורך"
+          ]
+        },
+        "stableKey": "vet-check",
+        "topic": "TOILET",
+        "prerequisites": [],
+        "mediaId": null
+      },
+      {
+        "title": "מקום קבוע לשירותים",
+        "goal": "ליצור פינה קבועה ונוחה ליציאה.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "לבחור משטח קל לניקוי",
+          "להניח שם מזרון יבש ונוח"
+        ],
+        "steps": [
+          "להוביל את הגור לפינה בזמן שהוא ער",
+          "להמתין בשקט בסמוך",
+          "לתגמל בשבח קצר אם הוא נכנס לפינה"
+        ],
+        "successCriterion": "הגור מגיע לפינה לפחות פעם אחת בלי לחץ.",
+        "stopConditions": [
+          "אם הגור נראה מאוד מכווץ, צולע יותר או סובל מכאב, יש לעצור ולפנות לוטרינר."
+        ],
+        "easierVariant": {
+          "title": "הנחה בקרבת הדלת",
+          "steps": [
+            "להניח את הגור ליד הדלת",
+            "לתגמל כל ניסיון להתקרב לפינה"
+          ]
+        },
+        "stableKey": "spot-setup",
+        "topic": "TOILET",
+        "prerequisites": [
+          "vet-check"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "יציאה אחרי שינה",
+        "goal": "לזהות את רגע היציאה הטבעי אחרי שינה.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "לשים רצועה קלה",
+          "להכין חטיף קטן"
+        ],
+        "steps": [
+          "להוציא את הגור מיד אחרי שהתעורר",
+          "להוביל אותו לפינה בהליכה איטית",
+          "לתגמל מיד אם יצא שם"
+        ],
+        "successCriterion": "הגור יוצא בפינה לאחר שינה לפחות פעם אחת.",
+        "stopConditions": [
+          "אם השלשול מחמיר או יש דם בצואה, יש לפנות לוטרינר באותו יום."
+        ],
+        "easierVariant": {
+          "title": "יציאה לחצר קרובה",
+          "steps": [
+            "ללכת עם הגור לחצר במרחק קצר",
+            "לתגמל אם יצא"
+          ]
+        },
+        "stableKey": "after-sleep-out",
+        "topic": "TOILET",
+        "prerequisites": [
+          "spot-setup"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "נשיכה עדינה על צעצוע",
+        "goal": "להפנות את הנשיכה לצעצוע מתאים.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "צעצוע לעיסה רך",
+          "חטיפים קטנים"
+        ],
+        "steps": [
+          "להציע צעצוע לעיסה",
+          "כשהגור נושך בצעצוע, לשבח בקול רך",
+          "להחליף לצעצוע אם הוא נושך ביד"
+        ],
+        "successCriterion": "הגור נושך בצעצוע לפחות שלוש פעמים בסשן.",
+        "stopConditions": [
+          "אם הגור מגלה תגובה אגרסיבית, נובח בחוזקה או נושך בכאב, יש להפסיק ולפנות למאלף מוסמך."
+        ],
+        "easierVariant": {
+          "title": "צעצוע אחד בלבד",
+          "steps": [
+            "להציע צעצוע אחד",
+            "לשבח בכל נשיכה בו"
+          ]
+        },
+        "stableKey": "toy-biting",
+        "topic": "BITING",
+        "prerequisites": [],
+        "mediaId": null
+      },
+      {
+        "title": "שחרור מהפה",
+        "goal": "ללמוד לשחרר דברים מהפה בעזרת חטיף.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "חטיף קטן וטעים",
+          "צעצוע"
+        ],
+        "steps": [
+          "להחזיק צעצוע בפה הגור",
+          "להציג חטיף לפני האף",
+          "לתגמל כשהוא משחרר"
+        ],
+        "successCriterion": "הגור משחרר את הצעצוע כשמציגים חטיף.",
+        "stopConditions": [
+          "אם הגור נשך את היד בכאב או מתרגז במיוחד, יש להפסיק ולפנות למאלף מוסמך."
+        ],
+        "easierVariant": {
+          "title": "שחרור על משטח",
+          "steps": [
+            "להניח צעצוע על רצפה",
+            "להציע חטיף ולשבח"
+          ]
+        },
+        "stableKey": "release-toy",
+        "topic": "BITING",
+        "prerequisites": [
+          "toy-biting"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "שינה בפינה רגועה",
+        "goal": "לעודד שקט וחלוקה ברורה של זמן מנוחה.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "מיטה נוחה",
+          "שמיכה קלה"
+        ],
+        "steps": [
+          "להניח את הגור במיטה בשעה קבועה",
+          "לשבח שקט קצר",
+          "להפסיק את הפעילות לפני השינה"
+        ],
+        "successCriterion": "הגור נשאר במיטה כמה דקות בשקט.",
+        "stopConditions": [
+          "אם הגור נראה כואב, לא נרגע כלל או מקיא, יש לפנות לוטרינר."
+        ],
+        "easierVariant": {
+          "title": "מנוחה קצרה",
+          "steps": [
+            "להניח במיטה לדקה",
+            "לשבח מיד"
+          ]
+        },
+        "stableKey": "calm-sleep",
+        "topic": "SLEEP",
+        "prerequisites": [
+          "release-toy"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "שהייה קצרה לבד",
+        "goal": "להתרגל להפרדה קצרה מאוד בטוחה.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "חדר בטוח וקטן",
+          "צעצוע לעיסה"
+        ],
+        "steps": [
+          "להשאיר את הגור בחדר עם צעצוע",
+          "לצאת לשתי דקות בלבד",
+          "לחזור ולשבח בשקט"
+        ],
+        "successCriterion": "הגור נשאר רגוע בשהייה של שתי דקות.",
+        "stopConditions": [
+          "אם הגור מייבב בהתמדה, מתרגש מאוד או נראה מפוחד, יש לחזור אליו ולפנות למאלף מוסמך."
+        ],
+        "easierVariant": {
+          "title": "שהייה בחדר פתוח",
+          "steps": [
+            "להישאר בחדר עם הגור",
+            "להתרחק מטר לשניות"
+          ]
+        },
+        "stableKey": "short-alone",
+        "topic": "ALONE",
+        "prerequisites": [
+          "calm-sleep"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "פקודת שב",
+        "goal": "ללמוד את הפקודה שב בעזרת חטיף.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "חטיף קטן",
+          "מקום שקט"
+        ],
+        "steps": [
+          "להחזיק חטיף מעל הראש של הגור",
+          "לומר שב בקול רגוע",
+          "לשבח ולתת חטיף כשהוא יושב"
+        ],
+        "successCriterion": "הגור יושב לפחות פעמיים בתגובה לפקודה.",
+        "stopConditions": [
+          "אם הגור צולע ומתקשה לשבת או מראה כאב, יש להפסיק ולפנות לוטרינר."
+        ],
+        "easierVariant": {
+          "title": "שב עם יד",
+          "steps": [
+            "להניח יד על הישבן בעדינות",
+            "לשבח כשהוא יושב"
+          ]
+        },
+        "stableKey": "sit-command",
+        "topic": "COMMANDS",
+        "prerequisites": [
+          "short-alone"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "פקודת בוא",
+        "goal": "ללמוד לבוא אל המאלף בשמחה.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "חטיף",
+          "רצועה קלה"
+        ],
+        "steps": [
+          "להתרחק כמה צעדים",
+          "לקרוא בשמו בטון שמח",
+          "לשבח מאוד כשהוא מגיע"
+        ],
+        "successCriterion": "הגור מגיע אליי לפחות פעמיים מרחק קצר.",
+        "stopConditions": [
+          "אם הגור נמנע, מתחבא או נראה מבוהל, יש להפסיק ולפנות למאלף מוסמך."
+        ],
+        "easierVariant": {
+          "title": "מרחק קצר יותר",
+          "steps": [
+            "להתרחק צעד אחד",
+            "לשבח בכל הליכה"
+          ]
+        },
+        "stableKey": "come-command",
+        "topic": "COMMANDS",
+        "prerequisites": [
+          "sit-command"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "יציאה בזמנים קבועים",
+        "goal": "לקבוע לוח זמנים קבוע ליציאות.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "שעון או טלפון לתזכורת",
+          "מקום היציאה"
+        ],
+        "steps": [
+          "להוציא את הגור כל שעה קבועה",
+          "לתגמל יציאה בפינה",
+          "לתעד מתי יצא"
+        ],
+        "successCriterion": "הגור יוצא בפינה בשלוש שעות קבועות ביום.",
+        "stopConditions": [
+          "אם השלשול נמשך או מחריף, יש לפנות לוטרינר מיד."
+        ],
+        "easierVariant": {
+          "title": "תזכורת אחת ביום",
+          "steps": [
+            "להוציא בשעה אחת קבועה",
+            "לתגמל יציאה"
+          ]
+        },
+        "stableKey": "schedule-potty",
+        "topic": "TOILET",
+        "prerequisites": [
+          "come-command"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "שהייה ארוכה יותר לבד",
+        "goal": "להאריך את ההפרדה הקצרה בהדרגה.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "חדר בטוח",
+          "צעצוע לעיסה"
+        ],
+        "steps": [
+          "להשאיר את הגור לחמש דקות בחדר",
+          "לחזור לפני שהוא נסער",
+          "לשבח שקט"
+        ],
+        "successCriterion": "הגור נשאר רגוע בחמש דקות של שהייה.",
+        "stopConditions": [
+          "אם הגור נסער מאוד, מייבב או מפחד, יש להפסיק ולפנות למאלף מוסמך."
+        ],
+        "easierVariant": {
+          "title": "שהייה של שתי דקות",
+          "steps": [
+            "לחזור על התרגיל הקודם",
+            "להאריך רק בדקה אחת"
+          ]
+        },
+        "stableKey": "longer-alone",
+        "topic": "ALONE",
+        "prerequisites": [
+          "schedule-potty"
+        ],
+        "mediaId": null
+      },
+      {
+        "title": "שילוב פקודות במשחק",
+        "goal": "לחזק את שב ובוא בתוך משחק קצר.",
+        "estimatedMinutes": 5,
+        "preparation": [
+          "חטיפים קטנים",
+          "צעצוע"
+        ],
+        "steps": [
+          "לבקש שב ואז בוא",
+          "לשבח בכל תגובה נכונה",
+          "לסיים במשחק קצר"
+        ],
+        "successCriterion": "הגור מגיב לשתי הפקודות לפחות פעמיים בסשן.",
+        "stopConditions": [
+          "אם הגור צולע או מראה כאב בתנועה, יש להפסיק ולפנות לוטרינר."
+        ],
+        "easierVariant": {
+          "title": "פקודה אחת בכל פעם",
+          "steps": [
+            "לתרגל שב בלבד",
+            "להוסיף בוא רק מאוחר יותר"
+          ]
+        },
+        "stableKey": "commands-combo",
+        "topic": "COMMANDS",
+        "prerequisites": [
+          "longer-alone"
+        ],
+        "mediaId": null
+      }
+    ]
+  }
+}

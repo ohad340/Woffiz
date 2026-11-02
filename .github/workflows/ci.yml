@@ -63,7 +63,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Integration tests (includes concurrency / row locking)
-        run: npm run test:integration
+        run: npm run test:integration -- --reporter=default --reporter=json --outputFile.json=test-results/integration.json
+      # TEST_DB_KIND alone cannot show that the PostgreSQL-only tests really ran: a skipped test is not a pass.
+      - name: Require the PostgreSQL-only tests to have executed and passed
+        run: node scripts/assert-required-tests.mjs test-results/integration.json
       - run: npx playwright install --with-deps chromium
       - name: End-to-end tests
         run: npm run test:e2e

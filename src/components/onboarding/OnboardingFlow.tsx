@@ -60,6 +60,12 @@ function labelsFor(options: Choice[], values: readonly string[]) {
 
 type PreviewState = 'generating' | 'generation-error' | null
 
+type Failure = { message: string; code?: string }
+type Generation = { status: 'idle' } | { status: 'generating' } | { status: 'error'; message: string; code?: string }
+
+const PENDING_POLL_MS = 4000
+const MAX_PENDING_POLLS = 60
+
 export function OnboardingFlow({
   previewState,
   initial,
@@ -73,6 +79,7 @@ export function OnboardingFlow({
   const [draft, setDraft] = useState<Draft>(initial.answers)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
+  const [generation, setGeneration] = useState<Generation>({ status: 'idle' })
   const [errors, setErrors] = useState<Partial<Record<keyof Draft, string>>>({})
   const headingRef = useRef<HTMLHeadingElement>(null)
   const firstRender = useRef(true)
@@ -85,6 +92,10 @@ export function OnboardingFlow({
     }
     headingRef.current?.focus()
   }, [step])
+
+  useEffect(() => {
+    if (generation.status === 'generating') headingRef.current?.focus()
+  }, [generation.status])
 
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     setDraft((d) => ({ ...d, [key]: value }))
@@ -102,8 +113,8 @@ export function OnboardingFlow({
     return Object.keys(next).length === 0
   }
 
-  /** POSTs JSON with the same-origin cookie. Returns an error message, or null on success. */
-  async function post(path: string, body: unknown): Promise<string | null> {
+  /** POSTs JSON with the same-origin cookie. Returns the server's error (Hebrew message and code), or null on success. */
+  async function post(path: string, body: unknown): Promise<Failure | null> {
     try {
       const response = await fetch(path, {
         method: 'POST',
@@ -111,10 +122,10 @@ export function OnboardingFlow({
         body: JSON.stringify(body),
       })
       if (response.ok) return null
-      const data = (await response.json().catch(() => null)) as { message?: string } | null
-      return data?.message ?? 'לא הצלחנו לשמור. נסו שוב.'
+      const data = (await response.json().catch(() => null)) as { message?: string; error?: string } | null
+      return { message: data?.message ?? 'לא הצלחנו לשמור. נסו שוב.', code: data?.error }
     } catch {
-      return 'אין חיבור. התשובות נשארו במסך, אפשר לנסות שוב.'
+      return { message: 'אין חיבור. התשובות נשארו במסך, אפשר לנסות שוב.' }
     }
   }
 
@@ -124,18 +135,73 @@ export function OnboardingFlow({
     setSaving(true)
     setSaveError(undefined)
     if (isSummary) {
-      const failure = await post('/api/onboarding/complete', {})
       setSaving(false)
-      if (failure) return setSaveError(failure)
-      router.push('/home')
-      router.refresh()
-      return
+      return generatePlan()
     }
     const nextStep = Math.min(step + 1, STEPS.length - 1)
     const failure = await post('/api/onboarding/draft', { step: nextStep, answers: draft })
     setSaving(false)
-    if (failure) return setSaveError(failure)
+    if (failure) return setSaveError(failure.message)
     setStep(nextStep)
+  }
+
+  // The plan is generated on the server while this request is open (up to about a minute). A second request
+  // for the same puppy answers GENERATION_PENDING, so the screen simply waits and asks again.
+  async function generatePlan() {
+    setGeneration({ status: 'generating' })
+    for (let attempt = 0; attempt < MAX_PENDING_POLLS; attempt++) {
+      const failure = await post('/api/onboarding/complete', {})
+      if (!failure) {
+        router.push('/home')
+        router.refresh()
+        return
+      }
+      if (failure.code !== 'GENERATION_PENDING') {
+        setGeneration({ status: 'error', message: failure.message, code: failure.code })
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, PENDING_POLL_MS))
+    }
+    setGeneration({ status: 'error', message: 'ההכנה לוקחת יותר מהרגיל. התשובות שלכם שמורות, נסו שוב.', code: 'GENERATION_PENDING' })
+  }
+
+  if (generation.status === 'generating') {
+    return (
+      <main id="main" className={styles.main} tabIndex={-1}>
+        <Card className={styles.stack}>
+          <h1 className={styles.heading} ref={headingRef} tabIndex={-1}>
+            מכינים את תוכנית האימון
+          </h1>
+          <p className={styles.muted}>זה יכול לקחת עד דקה. התשובות שלכם כבר שמורות.</p>
+          <Skeleton lines={4} label="מכינים את התוכנית…" />
+        </Card>
+      </main>
+    )
+  }
+
+  if (generation.status === 'error') {
+    return (
+      <main id="main" className={styles.main} tabIndex={-1}>
+        <StateMessage
+          kind="error"
+          headingLevel="h1"
+          title={generation.code === 'AI_QUOTA_EXCEEDED' ? 'הגעתם למגבלה להיום' : 'לא הצלחנו להכין את התוכנית'}
+          action={
+            generation.code === 'AI_QUOTA_EXCEEDED' ? (
+              <Button size="cta" variant="secondary" onClick={() => setGeneration({ status: 'idle' })}>
+                חזרה לתשובות
+              </Button>
+            ) : (
+              <Button size="cta" onClick={() => void generatePlan()}>
+                ניסיון חוזר
+              </Button>
+            )
+          }
+        >
+          {generation.message}
+        </StateMessage>
+      </main>
+    )
   }
 
   if (previewState === 'generating') {
@@ -306,7 +372,7 @@ export function OnboardingFlow({
                 </div>
               ))}
             </dl>
-            <p className={styles.devNote}>בשלב הפיתוח המסלול הוא מסלול הדגמה קבוע, לא תוכנית אישית.</p>
+            <p className={styles.devNote}>בשלב הפיתוח התוכנית נוצרת אוטומטית ועדיין לא נבדקה על ידי מאלף מוסמך.</p>
           </>
         )}
 

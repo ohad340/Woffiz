@@ -22,3 +22,14 @@ process.env.EMAIL_TRANSPORT = 'outbox'
 process.env.EMAIL_OUTBOX_DIR = 'test-results/integration-outbox'
 delete process.env.RESEND_API_KEY
 delete process.env.TESTER_EMAIL
+// Plans come from the labeled local generator, never from a real model; daily limits are raised (the
+// quota tests lower them). Real provider keys from .env are ignored.
+process.env.AI_PROVIDER = 'fake'
+process.env.AI_DAILY_ACCOUNT_MAX = '10000'
+process.env.AI_DAILY_CALLS_MAX = '100000'
+// Short retry delay: the real one (2 s) would only slow the failure-path tests down.
+process.env.AI_RETRY_DELAY_MS = '50'
+delete process.env.GEMINI_API_KEY
+delete process.env.ANTHROPIC_API_KEY
+delete process.env.AI_FAKE_MODE
+delete process.env.AI_TEST_MEDIA

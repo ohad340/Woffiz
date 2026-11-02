@@ -66,18 +66,31 @@ describe.runIf(REAL_POSTGRES)('concurrency on standard PostgreSQL', () => {
     expect(await prisma.attempt.count()).toBe(1)
   })
 
-  it('parallel onboarding completions create one puppy and one plan', async () => {
+  it('parallel onboarding completions create one puppy and one plan, and generate once', async () => {
     const user = await createUser()
     await saveOnboardingDraft(user.id, {
       step: 4,
       answers: { ...FULL_ANSWERS, skills: [...FULL_ANSWERS.skills], difficulties: [...FULL_ANSWERS.difficulties] },
     })
-    const results = await Promise.all(Array.from({ length: 8 }, () => completeOnboarding(user.id)))
-    expect(results.filter((r) => r.created)).toHaveLength(1)
-    expect(new Set(results.map((r) => r.planId)).size).toBe(1)
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => completeOnboarding(user.id)))
+
+    // One request generates the plan. The others either find it already created or are told a generation is
+    // running (the screen then waits and asks again); none of them starts a second generation.
+    const fulfilled = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof completeOnboarding>>> => r.status === 'fulfilled')
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    expect(fulfilled.filter((r) => r.value.created)).toHaveLength(1)
+    expect(new Set(fulfilled.map((r) => r.value.planId)).size).toBe(1)
+    for (const r of rejected) expect(r.reason).toMatchObject({ code: 'GENERATION_PENDING' })
+
     expect(await prisma.puppy.count()).toBe(1)
     expect(await prisma.plan.count()).toBe(1)
     expect(await prisma.level.count({ where: { state: 'CURRENT' } })).toBe(1)
+    expect(await prisma.generationJob.count({ where: { kind: 'INITIAL_PLAN', status: 'SUCCEEDED' } })).toBe(1)
+    expect(await prisma.generationJob.count({ where: { status: 'PENDING' } })).toBe(0)
+    // The one generation used one account request unit.
+    expect((await prisma.aiUsageDay.findMany()).map((u) => u.count).sort()).toEqual([1, 1])
+    // A request that arrives afterwards just gets the plan.
+    expect((await completeOnboarding(user.id)).created).toBe(false)
   })
 
   it('parallel first drafts from one owner create one puppy', async () => {
