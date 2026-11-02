@@ -12,3 +12,5 @@ next-env.d.ts
 .DS_Store
 npm-debug.log*
 src/generated/
+.email-outbox/
+e2e/.outbox/

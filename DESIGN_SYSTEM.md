@@ -84,6 +84,15 @@ unless real data and an approved feature exist; the reference art's coins and pr
 ### Welcome and sign-in
 Brief value statement, one sign-in action and plain privacy/support links.
 No unsupported success statistics or trainer endorsements.
+Sign-in offers a "שכחתי סיסמה" link. Registration leads to "בדקו את תיבת הדואר", never straight into the app.
+
+### Account screens (verify email, forgot / reset password)
+Same frame for all: logo linking home, one white card (`--radius-lg`, 20px padding), one h1, at most one CTA.
+Notices: success on `--color-secondary` with body text (`role=status`), errors on the error fill (`role=alert`).
+Every failure names the next action (send a new link, request a new reset link, back to sign-in).
+Answers about an address are neutral: never say whether an account exists. Emails are isolated with `dir=ltr`.
+Authentication emails are Hebrew RTL HTML with a plain-text part; they copy the token values by hand
+(CTA yellow with lip, sky background, white card) because email clients cannot read CSS variables.
 
 ### Onboarding
 One short group of related inputs per step: puppy basics, current skills, difficulties.

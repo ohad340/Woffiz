@@ -26,7 +26,7 @@ The AI generates the plan and exercise instructions from puppy age, experience, 
 These are implementation recommendations, not additional user decisions.
 - Working project identifier: puppy-training; the product name is Woffiz (owner-confirmed 2026-10-31).
 - One puppy per account in the MVP; owner-only account and a separate administrator role.
-- Email and password sign-in (owner decision, 2026-10-31); a single protected account owns the puppy and progress. Email verification and password reset follow with the email provider; until then registration stays closed outside a local machine.
+- Email and password sign-in (owner decision, 2026-10-31); a single protected account owns the puppy and progress. Email verification is mandatory before any access to owner data, and password reset is by emailed one-time link (Resend). During the test phase registration and all authentication mail are limited to one tester address.
 - Pre-generate videos into a reviewed media library rather than generate them during a session.
 - Short, age-appropriate sessions; durations are exercise-specific and configurable.
 - No forced one-level-per-day limit. Mastery is the gate; rest guidance remains visible.
