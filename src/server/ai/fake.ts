@@ -15,6 +15,7 @@ import type {
   PlanOutput,
   ReviseFutureInput,
   ReviseOutput,
+  TechniqueChoice,
   TopicName,
 } from './schema'
 
@@ -48,7 +49,33 @@ function fixtureLevel(index: number, input: InitialPlanInput): GeneratedLevel {
     topic: source.topic,
     prerequisites: [],
     mediaId: mediaFor(source.topic, input.mediaCatalog),
+    technique: null,
   }
+}
+
+/**
+ * An offered technique for this topic and age, with its STANDARD variant's default parameters and first tip. The text
+ * of the level stays the fixture's: the server replaces it with the catalog rendering (that is the point).
+ */
+function chooseTechnique(topic: TopicName, input: InitialPlanInput, used: Set<string>): TechniqueChoice | null {
+  const age = input.profile.age ?? 'unsure'
+  for (const t of input.techniques) {
+    const id = `${t.key}@${t.version}`
+    const standard = t.variants.find((v) => v.variant === 'STANDARD')
+    if (t.topic !== topic || !t.allowedAges.includes(age) || !standard || used.has(id)) continue
+    if (!input.mediaRequired) used.add(id)
+    return { key: t.key, version: t.version, variant: 'STANDARD', params: standard.params.map((p) => ({ id: p.id, value: p.default })), tipIds: standard.tips.slice(0, 1).map((tip) => tip.id) }
+  }
+  return null
+}
+
+/** First level of each topic gets an offered technique (every level when media is required). */
+function bindTechniques(levels: GeneratedLevel[], input: InitialPlanInput): GeneratedLevel[] {
+  const used = new Set<string>()
+  return levels.map((level) => {
+    const technique = chooseTechnique(level.topic, input, used)
+    return technique ? { ...level, technique, mediaId: null } : level
+  })
 }
 
 /** Listed difficulties first, never three of one topic in a row, no alone-time in the first four levels of a very young puppy. */
@@ -94,11 +121,20 @@ export async function fakeGenerate(request: GenerateRequest, timeoutMs = 45_000)
   if (input.task === 'initial_plan') {
     const output: PlanOutput = {
       rationale: 'תוכנית הדגמה מקומית שנבנתה מתוכן פיתוח, לא על ידי מודל.',
-      levels: mode === 'invalid' ? [] : orderedFixture(input),
+      levels: mode === 'invalid' ? [] : bindTechniques(orderedFixture(input), input),
     }
     json = output
   } else if (input.task === 'adapt_current') {
     const easier = input.currentExercise.easierVariant
+    // A technique-bound exercise moves to the EASIER variant of the same technique when its clip is published.
+    const current = input.currentTechnique
+    const easierVariant = current
+      ? input.techniques.find((t) => t.key === current.key && t.version === current.version)?.variants.find((v) => v.variant === 'EASIER')
+      : undefined
+    const technique: TechniqueChoice | null =
+      current && easierVariant
+        ? { key: current.key, version: current.version, variant: 'EASIER', params: easierVariant.params.map((p) => ({ id: p.id, value: p.default })), tipIds: [] }
+        : null
     const output: AdaptOutput = {
       explanation: 'הקלנו את התרגיל: פחות חזרות וצעדים קטנים יותר (הדגמה מקומית).',
       exercise: {
@@ -106,6 +142,7 @@ export async function fakeGenerate(request: GenerateRequest, timeoutMs = 45_000)
         title: `${input.currentExercise.title} (מותאם)`,
         steps: mode === 'invalid' ? [] : easier.steps,
         mediaId: null,
+        technique,
       },
     }
     json = output

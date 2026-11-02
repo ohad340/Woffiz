@@ -9,6 +9,16 @@ import { AppError } from './errors'
 import { hashPayload } from './idempotency'
 import { readAnswers } from './onboarding'
 import { lockPlan } from './progress'
+import { boundColumns, modelTechniques } from './ai/techniques'
+import { choiceFromColumns, loadOfferedTechniques, mediaRequired, recheckBoundTechniques, techniqueDeps, type TechniqueDeps } from './media/offer'
+
+export type GenerationOptions = { techniqueDeps?: Partial<TechniqueDeps> }
+
+/** Closes a job whose bound demonstration disappeared before commit: nothing stored, unit refunded. */
+async function rejectForMedia(job: Parameters<typeof settleWithoutResult>[0]): Promise<never> {
+  await settleWithoutResult(job, 'REJECTED', { errorCode: 'media-unavailable' })
+  throw new AppError('GENERATION_FAILED', 'a bound demonstration became unavailable before commit')
+}
 
 /**
  * AI-driven changes to the plan content (PRD section 5, items 8 and 9). The only things this module may change:
@@ -62,7 +72,9 @@ export async function adaptCurrentExercise(
   userId: string,
   input: { planRevision: number },
   idempotencyKey: string,
+  options: GenerationOptions = {},
 ): Promise<AdaptResult> {
+  const deps = techniqueDeps(options.techniqueDeps)
   const reused = await storedResult<AdaptResult>(userId, 'plan.adapt', idempotencyKey, input)
   if (reused) return reused
 
@@ -87,6 +99,8 @@ export async function adaptCurrentExercise(
   })
 
   const catalog = offeredCatalog()
+  const techniques = await loadOfferedTechniques(prisma, deps)
+  const required = mediaRequired(deps.env)
   const job = await startJob({
     kind: 'ADAPT_CURRENT',
     puppyId: snapshot.puppyId,
@@ -100,12 +114,15 @@ export async function adaptCurrentExercise(
       task: 'adapt_current',
       profile: snapshot.profile,
       mediaCatalog: catalog,
+      techniques: modelTechniques(techniques),
+      mediaRequired: required,
       policyVersion: POLICY_VERSION,
       currentLevel: { stableKey: snapshot.level.stableKey, topic: snapshot.level.topic, position: snapshot.level.position },
       currentExercise: contentOf(snapshot.exercise.contentJson),
+      currentTechnique: choiceFromColumns(snapshot.exercise),
       recentAttempts: snapshot.attempts,
     }),
-    parseAdapt({ answers: snapshot.profile, catalog }),
+    parseAdapt({ answers: snapshot.profile, catalog, techniques, mediaRequired: required }, snapshot.level.topic),
   )
 
   const committed = await prisma.$transaction(async (tx) => {
@@ -116,7 +133,8 @@ export async function adaptCurrentExercise(
     if (plan.revision !== snapshot.revision || plan.currentLevelId !== snapshot.level.id || latest.id !== snapshot.exercise.id) {
       return null
     }
-    const { mediaId, ...content } = output.exercise
+    if ((await recheckBoundTechniques(tx, [output.exercise.technique], deps)).length > 0) return 'media' as const
+    const { mediaId, technique, ...content } = output.exercise
     await ensureTestMediaRows(tx, [mediaId])
     const created = await tx.exerciseVersion.create({
       data: {
@@ -125,6 +143,7 @@ export async function adaptCurrentExercise(
         criterionVersion: latest.criterionVersion + 1,
         contentJson: content,
         mediaId,
+        ...boundColumns(technique, techniques),
       },
     })
     await tx.level.update({ where: { id: snapshot.level.id }, data: { contentVersion: { increment: 1 } } })
@@ -135,6 +154,7 @@ export async function adaptCurrentExercise(
     return result
   }, COMMIT_TX)
 
+  if (committed === 'media') return rejectForMedia(job)
   if (!committed) {
     await settleWithoutResult(job, 'STALE', { errorCode: 'stale' })
     throw new AppError('STALE_PLAN')
@@ -149,7 +169,9 @@ export async function reviseFuturePlan(
   userId: string,
   input: { planRevision: number },
   idempotencyKey: string,
+  options: GenerationOptions = {},
 ): Promise<ReviseResult> {
+  const deps = techniqueDeps(options.techniqueDeps)
   const reused = await storedResult<ReviseResult>(userId, 'plan.revise', idempotencyKey, input)
   if (reused) return reused
 
@@ -180,7 +202,8 @@ export async function reviseFuturePlan(
           stableKey: level.stableKey ?? `legacy-${level.position}`,
           topic: level.topic,
           prerequisites: Array.isArray(level.prerequisitesJson) ? (level.prerequisitesJson as string[]) : [],
-          mediaId: exercise?.mediaId ?? null,
+          mediaId: exercise?.techniqueKey ? null : (exercise?.mediaId ?? null),
+          technique: exercise ? choiceFromColumns(exercise) : null,
         }
       }),
       kept: {
@@ -200,6 +223,8 @@ export async function reviseFuturePlan(
   })
 
   const catalog = offeredCatalog()
+  const techniques = await loadOfferedTechniques(prisma, deps)
+  const required = mediaRequired(deps.env)
   const job = await startJob({
     kind: 'REVISE_FUTURE',
     puppyId: snapshot.puppyId,
@@ -213,6 +238,8 @@ export async function reviseFuturePlan(
       task: 'revise_future',
       profile: snapshot.profile,
       mediaCatalog: catalog,
+      techniques: modelTechniques(techniques),
+      mediaRequired: required,
       policyVersion: POLICY_VERSION,
       completedSummaries: snapshot.completed,
       currentLevel: {
@@ -224,7 +251,7 @@ export async function reviseFuturePlan(
       recentAttempts: snapshot.attempts,
       totalLevelBounds: PLAN_LEVELS,
     }),
-    parseRevise({ answers: snapshot.profile, catalog }, snapshot.kept, PLAN_LEVELS),
+    parseRevise({ answers: snapshot.profile, catalog, techniques, mediaRequired: required }, snapshot.kept, PLAN_LEVELS),
   )
 
   const committed = await prisma.$transaction(async (tx) => {
@@ -235,12 +262,13 @@ export async function reviseFuturePlan(
     const sameLocked =
       locked.length === snapshot.lockedIds.length && locked.every((level) => snapshot.lockedIds.includes(level.id))
     if (plan.revision !== snapshot.revision || plan.currentLevelId !== snapshot.current.id || !sameLocked) return null
+    if ((await recheckBoundTechniques(tx, output.levels.map((level) => level.technique), deps)).length > 0) return 'media' as const
 
     await ensureTestMediaRows(tx, output.levels.map((level) => level.mediaId))
     // Locked levels have no attempts or mastery, so deleting them cannot lose history. Positions are freed first.
     await tx.level.deleteMany({ where: { planId: plan.id, state: 'LOCKED' } })
     for (const [index, level] of output.levels.entries()) {
-      const { stableKey, topic, prerequisites, mediaId, ...content } = level
+      const { stableKey, topic, prerequisites, mediaId, technique, ...content } = level
       await tx.level.create({
         data: {
           planId: plan.id,
@@ -249,7 +277,7 @@ export async function reviseFuturePlan(
           state: 'LOCKED',
           stableKey,
           prerequisitesJson: prerequisites,
-          exerciseVersions: { create: { version: 1, criterionVersion: 1, contentJson: content, mediaId } },
+          exerciseVersions: { create: { version: 1, criterionVersion: 1, contentJson: content, mediaId, ...boundColumns(technique, techniques) } },
         },
       })
     }
@@ -260,6 +288,7 @@ export async function reviseFuturePlan(
     return result
   }, COMMIT_TX)
 
+  if (committed === 'media') return rejectForMedia(job)
   if (!committed) {
     await settleWithoutResult(job, 'STALE', { errorCode: 'stale' })
     throw new AppError('STALE_PLAN')

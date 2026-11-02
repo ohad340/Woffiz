@@ -1,5 +1,6 @@
 import { EMPTY_ANSWERS, type OnboardingAnswers } from '../content'
 import type { PlanOutput } from './schema'
+import type { OfferedTechnique } from './techniques'
 import { validatePlan } from './validate'
 
 /**
@@ -65,6 +66,6 @@ export const EVAL_CASES: readonly EvalCase[] = [
 ]
 
 /** Shared validation plus the case's own expectations. Empty means the plan passes. */
-export function evaluatePlan(plan: PlanOutput, evalCase: EvalCase): string[] {
-  return [...validatePlan(plan, { answers: evalCase.answers, catalog: [] }), ...evalCase.check(plan)]
+export function evaluatePlan(plan: PlanOutput, evalCase: EvalCase, techniques: readonly OfferedTechnique[] = []): string[] {
+  return [...validatePlan(plan, { answers: evalCase.answers, catalog: [], techniques }), ...evalCase.check(plan)]
 }

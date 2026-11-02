@@ -1,6 +1,6 @@
 # Phase 3 plan: reusable AI demonstration videos in exercises
 
-Status: slices **3A (foundations) and 3B (admin review, publication, withdrawal, suspension)** implemented on branch feature/phase-3a-media-foundations; 3C-3E not started. Decisions: docs/DECISIONS.md rows 58-73. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
+Status: slices **3A (foundations), 3B (admin review, publication, withdrawal, suspension) and 3C (technique-bound generation)** implemented on branch feature/phase-3a-media-foundations; 3D-3E not started. Decisions: docs/DECISIONS.md rows 58-78. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
 
 
 ## Context
@@ -259,3 +259,8 @@ Out of scope: per-user or playback-time TTS or AI, HLS, analytics, PWA caching, 
 - Not delivered on purpose: no owner-facing media, no resolver, no `GUIDANCE_PAUSED` guard on attempts or mastery, no generation changes. A suspension today only blocks new publication; pausing exercises is slice 3D.
 - The real techniques are still draft, so nothing real can be published. Fixtures exercise the workflow; an approved *copy* is injected in tests only.
 - Admin UI labels the sources as `fetched-summary` and never as a verified reading of the source.
+
+## Reconciliation after implementing 3C (2026-11-03)
+- Implemented as planned, with one simplification: no free-text "personal note" for bound levels. The model only chooses the technique, parameters within the clip's range and catalog tips; all instruction text of a bound level is the catalog's.
+- The output keeps one level shape (a nullable `technique` next to the existing fields) instead of a union, so the existing provider path and recordings keep working; for a bound level the model's text is discarded.
+- Generation-versus-withdrawal and generation-versus-suspension races are proven on PostgreSQL (required tests). A suspension does not yet pause existing exercises; that guard on attempts and mastery is 3D.

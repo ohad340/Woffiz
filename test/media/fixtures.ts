@@ -122,3 +122,36 @@ export function variantBundleInput(variant: number): BundleInput {
   manifest.timeline[2]!.startMs = 8000 + variant
   return { ...input, manifest }
 }
+
+/** Synthetic EASIER-variant bundle of mouthing-redirect-toy@1 (offer the toy early, praise chewing). */
+export function easierBundleInput(): BundleInput {
+  const def = getTechnique('mouthing-redirect-toy', 1)!
+  const voice = [
+    { speaker: 'narrator', startMs: 200, endMs: 2800, text: 'כשהגור מתחיל להתרגש' },
+    { speaker: 'narrator', startMs: 3200, endMs: 9500, text: 'מציעים לו צעצוע לפני שהוא נוגס.' },
+    { speaker: 'demo', startMs: 11000, endMs: 12200, text: 'יופי, איזה צעצוע!', stepId: 'praise-chewing' },
+    { speaker: 'narrator', startMs: 15200, endMs: 19800, text: 'משבחים כשהוא לועס צעצוע.' },
+  ]
+  const manifest = {
+    schema: 'woffiz-media-manifest-v1',
+    technique: { key: def.key, version: def.version, variant: 'EASIER', fingerprint: fingerprintTechnique(def) },
+    demonstratedParams: demonstratedParams(def.variants.EASIER!),
+    video: { durationMs: 20_000, width: 1280, height: 720, hasAudio: true },
+    timeline: [
+      { kind: 'setting', startMs: 0, endMs: 3000 },
+      { kind: 'step', stepId: 'offer-toy-early', startMs: 3000, endMs: 10000 },
+      { kind: 'step', stepId: 'praise-chewing', startMs: 10000, endMs: 15000 },
+      { kind: 'setting', startMs: 15000, endMs: 20000 },
+    ],
+    voice,
+    production: {
+      kind: 'ai-generated',
+      video: { vendor: 'test-fixture', model: 'none', date: '2026-11-02' },
+      voice: { vendor: 'test-fixture', voiceName: 'none', date: '2026-11-02' },
+      assembly: 'synthetic container, no media',
+    },
+  }
+  const captions = ['WEBVTT', '', ...voice.flatMap((v, i) => [cue(i + 1, v.startMs, v.endMs, v.speaker === 'demo' ? `(המדגים:) ${v.text}` : v.text), ''])].join('\n')
+  const transcript = voice.map((v) => ({ type: 'speech', speaker: v.speaker, startMs: v.startMs, text: v.text }))
+  return { manifest, video: buildMp4(), poster: buildWebp(), captions, transcript }
+}

@@ -1,12 +1,17 @@
 import type { OnboardingAnswers } from '../content'
 import { findCatalogEntry } from './media'
-import type { AdaptOutput, CatalogEntry, GeneratedLevel, PlanOutput, ReviseOutput, TopicName } from './schema'
+import type { AdaptOutput, CatalogEntry, GeneratedLevel, PlanOutput, ReviseOutput, TechniqueChoice, TopicName } from './schema'
+import { renderChoice, techniqueIssues, type OfferedTechnique } from './techniques'
 
 export type Issue = string
 
 export type Context = {
   answers: OnboardingAnswers
   catalog: readonly CatalogEntry[]
+  /** Offered techniques (slice 3C). Absent or empty: only free-form levels are possible. */
+  techniques?: readonly OfferedTechnique[]
+  /** Every level must be technique-bound (MEDIA_REQUIRED=true, only once the published catalog is verified). */
+  mediaRequired?: boolean
 }
 
 const DIFFICULTY_TOPIC: Record<OnboardingAnswers['difficulties'][number], TopicName> = {
@@ -77,7 +82,7 @@ function badWording(text: string) {
   return MARKUP.test(text) || bannedReasons(text).length > 0
 }
 
-function checkContent(label: string, level: ContentLike, ctx: Context, issues: Issue[]) {
+function checkContent(label: string, level: ContentLike, ctx: Context, issues: Issue[], bound = false) {
   for (const text of textsOf(level)) {
     for (const reason of bannedReasons(text)) issues.push(`${label}: banned wording (${reason})`)
     if (MARKUP.test(text)) issues.push(`${label}: contains a link or markup`)
@@ -87,11 +92,46 @@ function checkContent(label: string, level: ContentLike, ctx: Context, issues: I
   const budget = Number(ctx.answers.time ?? 15)
   if (level.estimatedMinutes > budget) issues.push(`${label}: ${level.estimatedMinutes} min exceeds the ${budget} min budget`)
   if (ctx.answers.age === 'under-10w' && level.estimatedMinutes > 5) issues.push(`${label}: too long for a puppy under 10 weeks`)
-  if (level.mediaId !== null) {
+  if (level.mediaId !== null && !bound) {
     const entry = findCatalogEntry(ctx.catalog, level.mediaId)
     if (!entry) issues.push(`${label}: unknown media id`)
     else if (entry.variant !== 'STANDARD') issues.push(`${label}: media variant is not compatible`)
   }
+}
+
+/**
+ * A technique-bound level is validated on what the owner will actually see: the catalog rendering. A free-form level is
+ * validated on the model's text, as before. Returns nothing more: issues are pushed.
+ */
+function checkExercise(
+  label: string,
+  level: ContentLike & { technique: TechniqueChoice | null },
+  topic: TopicName | undefined,
+  ctx: Context,
+  issues: Issue[],
+  allowEasier: boolean,
+) {
+  if (!level.technique) {
+    if (ctx.mediaRequired) issues.push(`${label}: a demonstrated technique is required`)
+    checkContent(label, level, ctx, issues)
+    return
+  }
+  if (level.mediaId !== null) issues.push(`${label}: a technique-bound exercise must leave mediaId null`)
+  if (!topic) {
+    issues.push(`${label}: technique without a known topic`)
+    return
+  }
+  const found = techniqueIssues(label, topic, level.technique, { answers: ctx.answers, techniques: ctx.techniques ?? [] }, { allowEasier })
+  if (found.length > 0) {
+    issues.push(...found)
+    return
+  }
+  checkContent(label, { ...renderChoice(level.technique, ctx.techniques ?? []), mediaId: null }, ctx, issues, true)
+}
+
+/** Replaces a valid technique-bound exercise's instruction fields with the catalog rendering (free-form: unchanged). */
+export function rendered<T extends ContentLike & { technique: TechniqueChoice | null }>(level: T, ctx: Context): T {
+  return level.technique ? { ...level, ...renderChoice(level.technique, ctx.techniques ?? []), mediaId: null } : level
 }
 
 /** Topic mix: no more than two levels in a row with the same topic, counting kept levels before the new ones. */
@@ -114,7 +154,7 @@ function checkLevels(levels: GeneratedLevel[], ctx: Context, issues: Issue[], ke
       if (prerequisite === level.stableKey || !seen.has(prerequisite)) issues.push(`${label}: prerequisite is not an earlier level`)
     }
     seen.add(level.stableKey)
-    checkContent(label, level, ctx, issues)
+    checkExercise(label, level, level.topic, ctx, issues, false)
     if (ctx.answers.age === 'under-10w' && level.topic === 'ALONE' && keptTopics.length + index < 4) {
       issues.push(`${label}: alone-time too early for a puppy under 10 weeks`)
     }
@@ -137,10 +177,10 @@ export function validatePlan(output: PlanOutput, ctx: Context): Issue[] {
   return issues
 }
 
-export function validateAdapt(output: AdaptOutput, ctx: Context): Issue[] {
+export function validateAdapt(output: AdaptOutput, ctx: Context, topic?: TopicName): Issue[] {
   const issues: Issue[] = []
   if (badWording(output.explanation)) issues.push('explanation: not allowed wording')
-  checkContent('exercise', output.exercise, ctx, issues)
+  checkExercise('exercise', output.exercise, topic, ctx, issues, true)
   return issues
 }
 

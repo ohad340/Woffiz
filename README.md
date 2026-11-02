@@ -102,3 +102,7 @@ Automated checks are **metadata validation**: they cannot tell whether the voice
 ### Media administration (Phase 3, slice 3B)
 
 Signed-in administrators open `/admin/media` (anyone else gets the normal 404 page). Make an account an administrator by hand with `scripts/grant-admin.ts`. An ingested bundle is a draft; the owner watches and listens to it, records a technical and a content review (each bound to the exact bundle), marks it reviewed and publishes it. Publication also needs the technique definition to be approved and frozen in `src/domain/techniques/techniques.lock.json`; **both definitions are draft, so nothing real can be published yet**. Withdrawing a version is permanent; a safety withdrawal also suspends the technique (both variants). Decisions 68-73.
+
+### Technique-bound generation (Phase 3, slice 3C)
+
+Generation may bind a level to a reviewed technique that has a published, compatible clip; the server then stores the catalog's instructions instead of model text and rechecks the clip under the technique lock at commit (decisions 74-78). Both real techniques are draft, so **production offers nothing and plans stay free-form**. `MEDIA_REQUIRED` stays off until the published catalog is verified.

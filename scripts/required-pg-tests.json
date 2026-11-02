@@ -20,7 +20,10 @@
     "media lifecycle on standard PostgreSQL parallel publishes of two reviewed versions serialise: both succeed in turn and exactly one stays published",
     "media lifecycle on standard PostgreSQL a SAFETY withdrawal racing the publication of the same version leaves it withdrawn and the technique suspended once",
     "media lifecycle on standard PostgreSQL an explicit suspension racing a publication never lets the publication land after the suspension",
-    "media lifecycle on standard PostgreSQL parallel suspensions of one technique create one suspension and one event"
+    "media lifecycle on standard PostgreSQL parallel suspensions of one technique create one suspension and one event",
+    "media generation on standard PostgreSQL a generation commit waits for an in-flight withdrawal and then refuses the withdrawn clip",
+    "media generation on standard PostgreSQL a generation commit waits for an in-flight suspension and then refuses the suspended technique",
+    "media generation on standard PostgreSQL a withdrawal waits for a generation commit that holds the technique row, so the committed binding predates it"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"

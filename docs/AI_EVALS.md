@@ -67,4 +67,11 @@ All 6 cases passed the automated checks after the prompt and validator were tigh
 - Run-to-run variance is high with six cases. Before relying on the pass rate, run the cases a few more times (about two cents each) or add cases.
 - The retry that hands the model the validator's findings is part of the product (`jobs.ts`); the live comparison above exercised it with the same feedback format.
 - Decide before deploying: keep `maxDuration` at 60 s (fits one call), raise it (a Vercel plan setting) so the retry also fits, or generate the outline first as described above.
-- Automated checks show that a plan follows our structural and wording rules. They do **not** establish professional training quality: a qualified trainer must review the content before any public launch.
+- Automated checks show that a plan follows our structural and wording rules. They do **not** establish training quality: the owner reviews the content and its sources before any public launch (decision 58; no certified-trainer review exists).
+
+## prompts-v3 / policy-v2 (Phase 3C, technique-bound levels) — 2026-11-03
+
+- The prompt now offers reviewed techniques (`input.techniques`) and lets a level bind one: technique key and version, variant, integer parameters inside the range the published clip still shows, and catalog tip ids. For a bound level the server **replaces** every instruction field with the catalog rendering, so the model's text there is discarded. `mediaRequired` makes binding mandatory (off).
+- **No live run was made for prompts-v3** (no paid calls in this slice). The live recordings in `test/ai/recorded/` are prompts-v2 outputs. They still parse (the binding defaults to null) and keep their recorded verdicts offline. A live re-run of the six cases with prompts-v3 needs the owner's approval; until then prompts-v3 is verified only with the labelled local generator.
+- Offline checks added (`src/server/ai/techniques.test.ts`): every evaluation case passes with two approved *copies* of the draft techniques offered; bound levels equal the catalog rendering; parameters outside the clip's range, unknown tips, wrong topic, EASIER in a plan, wrong age and model-supplied media ids are rejected; a free-form level is never bound by topic or keywords; the wire schema stays closed and has no `default` keyword.
+- Production today offers **nothing**: both real definitions are draft, so live generation stays free-form exactly as before.
