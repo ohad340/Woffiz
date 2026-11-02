@@ -112,3 +112,13 @@ export function validBundleInput(): BundleInput {
   ]
   return { manifest, video: buildMp4(), poster: buildWebp(), captions, transcript }
 }
+
+/** A valid bundle for the same slot that differs from the base one (the end of the first step moves by `variant` ms). */
+export function variantBundleInput(variant: number): BundleInput {
+  const input = validBundleInput()
+  if (variant === 0) return input
+  const manifest = structuredClone(input.manifest) as { timeline: { startMs: number; endMs: number }[] }
+  manifest.timeline[1]!.endMs = 8000 + variant
+  manifest.timeline[2]!.startMs = 8000 + variant
+  return { ...input, manifest }
+}

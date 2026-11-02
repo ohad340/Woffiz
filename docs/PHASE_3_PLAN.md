@@ -1,6 +1,6 @@
 # Phase 3 plan: reusable AI demonstration videos in exercises
 
-Status: slice **3A (foundations) implemented locally** on 2026-11-02; 3B-3E not started. Decisions: docs/DECISIONS.md rows 58-67. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
+Status: slices **3A (foundations) and 3B (admin review, publication, withdrawal, suspension)** implemented on branch feature/phase-3a-media-foundations; 3C-3E not started. Decisions: docs/DECISIONS.md rows 58-73. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
 
 
 ## Context
@@ -253,3 +253,9 @@ Out of scope: per-user or playback-time TTS or AI, HLS, analytics, PWA caching, 
 - Parameter compatibility (owner clarification): see DECISIONS row 60. In the catalog the media-bound parameters are `stillSeconds` (mouthing, clip shows 3, compatible 2-5) and `distanceMeters` (name-look, clip shows 1, compatible 1-2); repetitions and criterion wording are media-neutral.
 - The sample storyboard's single "setting" segments are `kind: setting` timeline entries; the demonstrator line sits inside the `praise-chewing` window (13.0-17.0 s) at 14.0-15.2 s.
 - Slice 3A has no admin pages, no publication, no player and no generation changes. The old `MediaAsset` test catalog and `AI_TEST_MEDIA` still serve Phase 2 unchanged.
+
+## Reconciliation after implementing 3B (2026-11-03)
+- Delivered: lifecycle service with technique-level locking, bundle-bound TECHNICAL and CONTENT reviews, publication gates, permanent withdrawal (TECHNICAL / SAFETY), explicit suspend and lift, admin pages and endpoints, local signed media route, tests (unit, PGlite integration, PostgreSQL concurrency, Playwright at 360/768/1280).
+- Not delivered on purpose: no owner-facing media, no resolver, no `GUIDANCE_PAUSED` guard on attempts or mastery, no generation changes. A suspension today only blocks new publication; pausing exercises is slice 3D.
+- The real techniques are still draft, so nothing real can be published. Fixtures exercise the workflow; an approved *copy* is injected in tests only.
+- Admin UI labels the sources as `fetched-summary` and never as a verified reading of the source.

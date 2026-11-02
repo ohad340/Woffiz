@@ -98,3 +98,7 @@ npx tsx scripts/media-ingest.ts <folder> --admin-email you@example.com   # DRAFT
 ```
 
 Automated checks are **metadata validation**: they cannot tell whether the voice is intelligible Hebrew or whether picture and sound line up. That is the owner's review of the actual clip. Real-device playback checks are pending (slice 3E).
+
+### Media administration (Phase 3, slice 3B)
+
+Signed-in administrators open `/admin/media` (anyone else gets the normal 404 page). Make an account an administrator by hand with `scripts/grant-admin.ts`. An ingested bundle is a draft; the owner watches and listens to it, records a technical and a content review (each bound to the exact bundle), marks it reviewed and publishes it. Publication also needs the technique definition to be approved and frozen in `src/domain/techniques/techniques.lock.json`; **both definitions are draft, so nothing real can be published yet**. Withdrawing a version is permanent; a safety withdrawal also suspends the technique (both variants). Decisions 68-73.

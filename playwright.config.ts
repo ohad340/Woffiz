@@ -41,6 +41,8 @@ export default defineConfig({
       AI_DAILY_CALLS_MAX: '100000',
       AI_RETRY_DELAY_MS: '50',
       EMAIL_OUTBOX_DIR: 'e2e/.outbox',
+      // Synthetic media fixtures of the admin specs (local store, git-ignored).
+      MEDIA_LOCAL_DIR: 'e2e/.media',
     },
   },
 })
