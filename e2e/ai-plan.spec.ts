@@ -15,6 +15,8 @@ async function atSummary(page: Page) {
 const submit = (page: Page) => page.getByRole('button', { name: 'מכינים את המסלול' }).click()
 
 async function expectHealthy(page: Page) {
+  // Right after a router refresh the document can be between two heads for a moment; axe must see the settled page.
+  await expect(page).toHaveTitle(/.+/)
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow).toBeLessThanOrEqual(0)
   const results = await new AxeBuilder({ page }).analyze()
