@@ -15,7 +15,12 @@
     "the account unit is refunded at most once is atomic: 12 simultaneous refund attempts of one job lower the counter by exactly one",
     "the account unit is refunded at most once is atomic when owners race: a reclaim closing a job and the job closing itself refund once",
     "media concurrency on standard PostgreSQL parallel ingests of different bundles get distinct version numbers",
-    "media concurrency on standard PostgreSQL parallel publishes of two versions leave exactly one PUBLISHED version"
+    "media concurrency on standard PostgreSQL parallel publishes of two versions leave exactly one PUBLISHED version",
+    "media lifecycle on standard PostgreSQL parallel publishes of the same reviewed version succeed exactly once",
+    "media lifecycle on standard PostgreSQL parallel publishes of two reviewed versions serialise: both succeed in turn and exactly one stays published",
+    "media lifecycle on standard PostgreSQL a SAFETY withdrawal racing the publication of the same version leaves it withdrawn and the technique suspended once",
+    "media lifecycle on standard PostgreSQL an explicit suspension racing a publication never lets the publication land after the suspension",
+    "media lifecycle on standard PostgreSQL parallel suspensions of one technique create one suspension and one event"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"
