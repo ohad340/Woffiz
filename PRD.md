@@ -121,18 +121,20 @@ Never accept arbitrary URLs or render model HTML. The model may generate wording
 On initial failure, retain onboarding and offer retry. On adaptation failure, retain the last valid exercise. Proposed limits: one pending generation per puppy, one automatic retry, configurable per-account and global quotas, and a visible retry-after state. Record latency and usage without logging unnecessary personal data.
 
 ### Training content boundary
-Use reward-based, age-appropriate guidance. Disallow physical punishment, deprivation, hazardous handling and promises of guaranteed outcomes. Signs of pain, severe distress or aggression should stop the relevant generated exercise and direct the owner to qualified help. The app must not diagnose or invent a treatment plan. Content boundaries require validation by a qualified reviewer before public launch.
+Use reward-based, age-appropriate guidance. Disallow physical punishment, deprivation, hazardous handling and promises of guaranteed outcomes. Signs of pain, severe distress or aggression should stop the relevant generated exercise and direct the owner to qualified help. The app must not diagnose or invent a treatment plan. Content boundaries are reviewed by the owner (acting as ADMIN) against recorded reputable sources before public launch (owner decision 2026-11-02). Sources and review records stay inside the admin workflow; the product never claims professional approval or endorsement.
 
 ## 7. Video production and publication
-AI-produced videos are a content production workflow separate from personalized text generation. Proposed clip format: a short, clearly framed demonstration, Hebrew captions and an optional Hebrew voice track. Exact model, vendor, voice and clip length remain production decisions.
+AI-produced videos are a content production workflow separate from personalized text generation. Clip format (owner decision 2026-11-02): a short, clearly framed demonstration with **Hebrew voice guidance**, synchronized Hebrew captions and a matching transcript. Audio is produced once per reusable clip during production; there are no per-user or playback-time AI/TTS calls. Playback starts only after the user taps and uses native volume and mute controls; the instructions must stay understandable when muted. Exact video and voice vendors and clip length remain production decisions, decided with estimated costs before any paid generation, starting with one pilot clip for owner review.
 
-Workflow: exercise brief → AI generation → check anatomy, movement, cue/action/reward timing and instruction match → add Hebrew captions and transcript → qualified content review → publish a versioned asset.
+Each clip demonstrates one **technique definition** (`key@version`, immutable once released): a reviewed core of mandatory steps in order, with critical parameters. Mandatory instructions are rendered from the catalog, not written by the AI. Parameters are integers with two ranges: the values the written instructions may use, and the narrower values for which the fixed clip still shows the same method. Media is bound to a combination of parameters only when it lies inside the second range. A change to the demonstrated behaviour is a new technique version.
 
-Store the exercise family, permitted variants, age/context constraints, caption and transcript assets, reviewer and publication status. Only published assets are selectable. Do not claim videos are professionally approved until review has actually occurred.
+Workflow: technique definition and sources → AI generation of picture and voice → assembly → check anatomy, movement, cue/action/reward timing, audio intelligibility and synchronization → Hebrew captions and transcript → ingest as a draft → technical review and content review by the owner (ADMIN) against the exercise instructions and recorded sources → publish a versioned asset. Approvals are bound to a fingerprint of the complete content bundle and the exact technique definition; any content change needs a new version and fresh approval.
+
+Store the technique key and version, variant, demonstrated parameter values, caption and transcript assets, audio presence, production record, review records and publication status. Only published assets are selectable. A technical withdrawal leaves the written instructions available; a safety suspension pauses the affected guidance without rewriting history. Never claim videos are professionally approved or endorsed: no certified-trainer review exists in this product.
 
 Provide accessible play/pause, captions, transcript and replay; do not autoplay sound. A playback outage may show the already reviewed transcript and a retry action, but every published level must have a valid video asset. Missing assets are a launch blocker, not a fabricated success.
 
-No videos are delivered by this requirements package. Generation cost, production capacity and reviewer availability must be settled before Phase 3 publication.
+No videos are delivered by this requirements package. Generation cost and production capacity must be settled, and the owner must have reviewed each clip, before Phase 3 publication. Until media coverage is verified, free-form exercises without a demonstration keep working and show an honest "no demonstration" state.
 
 ## 8. Data model and access
 All IDs are UUIDs unless an external authentication ID is required.
@@ -207,7 +209,7 @@ Initial hypotheses: at least 60% of completed onboardings lead to a first practi
 | Future regeneration changes history | High | Stable IDs, version checks and immutable completed content |
 | PWA installation differs by browser | Medium | Test target devices and provide contextual instructions |
 
-Open decisions: hosting/auth/data providers; runtime model and API budget; video provider and generation budget; qualified reviewer; launch media coverage; pilot audience and timing. Development can begin with clearly labeled fixtures before these are resolved. Public launch cannot proceed without valid content, provider configuration and budget limits.
+Open decisions: hosting/auth/data providers; runtime model and API budget; video and voice providers and generation budget; owner approval of each technique's boundaries; launch media coverage; pilot audience and timing. Development can begin with clearly labeled fixtures before these are resolved. Public launch cannot proceed without valid content, provider configuration and budget limits.
 
 ## 13. Delivery roadmap
 See ROADMAP.md for sequential phases, dependencies and acceptance criteria. Complete the deterministic practice loop with fixtures before connecting live AI. Integrate reviewed media before public launch. Each phase is independently reviewable; do not build the entire product in one prompt.

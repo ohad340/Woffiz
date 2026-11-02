@@ -87,3 +87,14 @@ Locally, if PGlite drops connections under parallel load (`ConnectionClosed`, `P
 - `src/fixtures/devPlan.ts` — the labeled development plan used to create every plan
 - `src/styles/tokens.css` — design tokens (keep in sync with DESIGN_SYSTEM.md)
 - `test/integration/` and `e2e/` — database and browser tests
+
+## Reviewed demonstration media (Phase 3, slice 3A: foundations only)
+
+Plan: [docs/PHASE_3_PLAN.md](docs/PHASE_3_PLAN.md); decisions 58-67. Slice 3A adds the technique catalog (`src/domain/techniques`, both techniques are **draft**), the media schema with database integrity rules, bundle validation (MP4 metadata, Hebrew WebVTT, voice/caption/transcript agreement, fingerprints), a private storage adapter, administrator checks and a draft-only ingest command. There are **no videos, no admin pages, no player and no publication yet**; exercises still show the "no demonstration" placeholder.
+
+```bash
+npx tsx scripts/grant-admin.ts --email you@example.com      # owner only, by hand; prints the database host
+npx tsx scripts/media-ingest.ts <folder> --admin-email you@example.com   # DRAFT only; add --fixture for synthetic test bundles (local machine only)
+```
+
+Automated checks are **metadata validation**: they cannot tell whether the voice is intelligible Hebrew or whether picture and sound line up. That is the owner's review of the actual clip. Real-device playback checks are pending (slice 3E).

@@ -1,0 +1,192 @@
+import { fingerprintTechnique } from './fingerprint'
+import type { TechniqueDefinition, TechniqueParam } from './types'
+
+/**
+ * Technique catalog. Both definitions are DRAFT: their product-default boundaries (marked
+ * basis: 'product-default') and the verification of their sources need the owner's explicit approval before
+ * any clip can be published against them. Released (approved) definitions are frozen in techniques.lock.json.
+ */
+
+const STOP = 'אם הגור נראה כואב, מבוהל מאוד או אגרסיבי, עוצרים את התרגיל ופונים לווטרינר או למאלף מוסמך.'
+
+/** Media-neutral parameter: the clip shows `demonstrated`, every value in min..max is the same method. */
+function neutral(id: string, label: string, unit: string, min: number, max: number, def: number, demonstrated: number, note: string): TechniqueParam {
+  return { id, label, unit, min, max, default: def, demonstrated, compatibleMin: min, compatibleMax: max, basis: 'product-default', basisNote: note }
+}
+
+const ROUNDS_NOTE = 'The clip shows one round; repeating the same method more times does not change it (media-neutral).'
+const SESSIONS_NOTE = 'Mastery-criterion wording only; not shown in the clip (media-neutral).'
+
+export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
+  key: 'mouthing-redirect-toy',
+  version: 1,
+  topic: 'BITING',
+  description: 'Puppy mouths hands or clothes: stay still, offer a suitable toy, praise chewing the toy.',
+  audience: {
+    allowedAges: ['under-10w', '10-16w', '4-6m', 'over-6m', 'unsure'],
+    basis: 'product-default',
+    basisNote: 'The source speaks about puppies in general and gives no age limit; all bands allowed pending owner approval.',
+  },
+  variants: {
+    STANDARD: {
+      title: 'מפנים נשיכות לצעצוע',
+      goal: 'כשהגור נוגס ביד, הוא עובר ללעוס צעצוע.',
+      estimatedMinutes: 5,
+      preparation: ['צעצוע רך או חפץ לעיסה מתאים לגור', 'עוד צעצוע בהישג יד'],
+      steps: [
+        { id: 'stay-still', text: 'כשהגור נוגס ביד או בבגדים, לא מושכים את היד במהירות. נשארים במקום בלי תנועה כ-{stillSeconds} שניות.' },
+        { id: 'offer-toy', text: 'מקרבים לפה של הגור צעצוע מתאים.' },
+        { id: 'praise-chewing', text: 'כשהגור לועס את הצעצוע, משבחים אותו בקול רך.', speechCue: 'praise' },
+      ],
+      params: [
+        {
+          id: 'stillSeconds',
+          label: 'Seconds to stay still before offering the toy',
+          unit: 'seconds',
+          min: 1,
+          max: 10,
+          default: 3,
+          demonstrated: 3,
+          compatibleMin: 2,
+          compatibleMax: 5,
+          basis: 'product-default',
+          basisNote: 'Source says to stay still and redirect during a brief pause; the number of seconds is a product default. Outside 2-5 the clip no longer shows the same timing.',
+        },
+        neutral('rounds', 'Repetitions per practice session', 'rounds', 1, 6, 3, 1, ROUNDS_NOTE),
+        neutral('sessionsInRow', 'Consecutive sessions for the mastery criterion', 'sessions', 2, 5, 3, 3, SESSIONS_NOTE),
+      ],
+      successCriterion: 'ב-{sessionsInRow} מפגשי תרגול רצופים, כשהגור נוגס והצעצוע מוצע לו, הוא עובר ללעוס אותו.',
+      tips: [
+        { id: 'rotate-toys', text: 'מחזיקים כמה צעצועים בבית ומחליפים אותם כל כמה ימים, כדי שיישארו מעניינים.' },
+        { id: 'enough-sleep', text: 'גור עייף נוגס יותר, לכן דואגים שיישן מספיק.' },
+      ],
+    },
+    EASIER: {
+      title: 'מציעים צעצוע מוקדם',
+      goal: 'הגור מקבל צעצוע לפני שהוא מתחיל לנגוס.',
+      estimatedMinutes: 3,
+      preparation: ['צעצוע רך או חפץ לעיסה מתאים לגור'],
+      steps: [
+        { id: 'offer-toy-early', text: 'כשהגור מתחיל להתרגש לקראת משחק, מציעים לו צעצוע לפני שהוא נוגס.' },
+        { id: 'praise-chewing', text: 'כשהגור לועס את הצעצוע, משבחים אותו בקול רך.', speechCue: 'praise' },
+      ],
+      params: [
+        neutral('rounds', 'Repetitions per practice session', 'rounds', 1, 6, 3, 1, ROUNDS_NOTE),
+        neutral('sessionsInRow', 'Consecutive sessions for the mastery criterion', 'sessions', 2, 5, 3, 3, SESSIONS_NOTE),
+      ],
+      successCriterion: 'ב-{sessionsInRow} מפגשי תרגול רצופים, הגור לועס את הצעצוע שהוצע לו לפני שהתחיל לנגוס.',
+      tips: [{ id: 'rotate-toys', text: 'מחזיקים כמה צעצועים בבית ומחליפים אותם כל כמה ימים, כדי שיישארו מעניינים.' }],
+    },
+  },
+  fallbackEasier: {
+    title: 'עוד יותר פשוט',
+    steps: ['מחזיקים צעצוע ביד אחת כל זמן המשחק.', 'משבחים כל רגע שבו הגור לועס אותו.'],
+  },
+  forbiddenBehaviour: [
+    'pulling the hand away quickly',
+    'punishment, raised voice, pushing the puppy down',
+    'rough play or using hands or feet as toys',
+    'ignoring a toy the puppy brings',
+  ],
+  stopConditions: [STOP],
+  review: { status: 'draft' },
+  sources: [
+    {
+      url: 'https://www.dogstrust.org.uk/dog-advice/unwanted-behaviours/stop-your-dog-chewing-mouthing',
+      publisher: 'Dogs Trust',
+      title: 'Mouthing, nipping and puppy biting',
+      verifiedOn: '2026-11-02',
+      verification: 'fetched-summary',
+      supports: ['stay-still', 'offer-toy', 'offer-toy-early', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden'],
+      summary:
+        'Offer a suitable toy when the puppy gets ready to play, before mouthing; keep several toys and rotate them; do not pull hands away quickly, stay still and redirect to a toy; praise chewing an appropriate item; overtired puppies mouth more; avoid punishment, raised voices and rough play.',
+    },
+  ],
+}
+
+export const NAME_LOOK: TechniqueDefinition = {
+  key: 'name-look',
+  version: 1,
+  topic: 'COMMANDS',
+  description: 'Teach the puppy its name: say it once, reward the look.',
+  audience: {
+    allowedAges: ['under-10w', '10-16w', '4-6m', 'over-6m', 'unsure'],
+    basis: 'product-default',
+    basisNote: 'The source page covers dogs in general with no age limit; all bands allowed pending owner approval.',
+  },
+  variants: {
+    STANDARD: {
+      title: 'מגיב לשם',
+      goal: 'הגור מסתכל אליכם כשאומרים את שמו.',
+      estimatedMinutes: 3,
+      preparation: ['חדר שקט בלי הסחות', 'חטיפים קטנים שהגור אוהב'],
+      steps: [
+        { id: 'say-name-once', text: 'עומדים במרחק של כ-{distanceMeters} מטר מהגור ואומרים את שמו פעם אחת, בקול נעים.', speechCue: 'name' },
+        { id: 'treat-on-look', text: 'ברגע שהגור מסתכל אליכם, אומרים "יופי" ונותנים חטיף.', speechCue: 'praise' },
+      ],
+      params: [
+        {
+          id: 'distanceMeters',
+          label: 'Distance from the puppy',
+          unit: 'meters',
+          min: 1,
+          max: 3,
+          default: 1,
+          demonstrated: 1,
+          compatibleMin: 1,
+          compatibleMax: 2,
+          basis: 'product-default',
+          basisNote: 'The source gives no distance; the clip shows about one meter. Outside 1-2 the clip no longer shows the same setup.',
+        },
+        neutral('rounds', 'Repetitions per practice session', 'rounds', 3, 8, 5, 3, ROUNDS_NOTE),
+        neutral('sessionsInRow', 'Consecutive sessions for the mastery criterion', 'sessions', 2, 5, 3, 3, SESSIONS_NOTE),
+      ],
+      successCriterion: 'ב-{sessionsInRow} מפגשי תרגול רצופים, הגור מסתכל אליכם אחרי שאמרתם את שמו פעם אחת, בחדר שקט.',
+      tips: [{ id: 'repeat-less', text: 'אם הגור לא מגיב, לא חוזרים על השם שוב ושוב. מתרגלים ממרחק קרוב יותר ומתגמלים כל מבט.' }],
+    },
+    EASIER: {
+      title: 'מתגמלים כל מבט',
+      goal: 'הגור לומד שמבט אליכם מביא חטיף.',
+      estimatedMinutes: 3,
+      preparation: ['חדר שקט בלי הסחות', 'חטיפים קטנים שהגור אוהב'],
+      steps: [
+        { id: 'reward-glance', text: 'כל פעם שהגור מציץ אליכם, גם לרגע, נותנים לו חטיף מיד.', speechCue: 'praise' },
+        { id: 'treat-on-look', text: 'כשהמבטים מתרגלים, אומרים את שמו פעם אחת וכשהוא מסתכל, נותנים חטיף.', speechCue: 'name' },
+      ],
+      params: [
+        neutral('rounds', 'Repetitions per practice session', 'rounds', 3, 8, 5, 3, ROUNDS_NOTE),
+        neutral('sessionsInRow', 'Consecutive sessions for the mastery criterion', 'sessions', 2, 5, 3, 3, SESSIONS_NOTE),
+      ],
+      successCriterion: 'ב-{sessionsInRow} מפגשי תרגול רצופים, הגור מסתכל אליכם בכל פעם שאתם אומרים את שמו.',
+      tips: [],
+    },
+  },
+  fallbackEasier: {
+    title: 'עוד יותר פשוט',
+    steps: ['מחזיקים חטיף ליד העיניים שלכם.', 'מתגמלים כל מבט, גם קצר.'],
+  },
+  forbiddenBehaviour: ['repeating the name over and over when ignored', 'using the name for scolding or only when the puppy misbehaves'],
+  stopConditions: [STOP],
+  review: { status: 'draft' },
+  sources: [
+    {
+      url: 'https://www.dogstrust.org.uk/dog-advice/training/basics/name-training',
+      publisher: 'Dogs Trust',
+      title: 'How to teach your dog their name',
+      verifiedOn: '2026-11-02',
+      verification: 'fetched-summary',
+      supports: ['reward-glance', 'say-name-once', 'treat-on-look', 'repeat-less', 'forbidden'],
+      summary:
+        'Start in a quiet room; reward each glance at you; add the name, and when the puppy looks reward with a treat; do not repeat the name over and over when ignored; do not use attention only when the puppy misbehaves.',
+    },
+  ],
+}
+
+export const TECHNIQUES: readonly TechniqueDefinition[] = [MOUTHING_REDIRECT_TOY, NAME_LOOK]
+
+export function getTechnique(key: string, version: number): TechniqueDefinition | undefined {
+  return TECHNIQUES.find((t) => t.key === key && t.version === version)
+}
+
+export const techniqueId = (def: Pick<TechniqueDefinition, 'key' | 'version'>) => `${def.key}@${def.version}`
+export const techniqueFingerprintOf = fingerprintTechnique

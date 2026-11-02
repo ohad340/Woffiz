@@ -17,3 +17,6 @@ e2e/.outbox/
 
 .vercel
 .env*
+
+# Local media store (slice 3A): large files of a media bundle, git-ignored.
+.media-local/

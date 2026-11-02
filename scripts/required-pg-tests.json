@@ -13,7 +13,9 @@
     "reclaiming race: of 10 simultaneous retries of an expired job exactly one takes it over",
     "reclaiming race: of 10 simultaneous new requests over an expired job, one job is started and the old unit is refunded once",
     "the account unit is refunded at most once is atomic: 12 simultaneous refund attempts of one job lower the counter by exactly one",
-    "the account unit is refunded at most once is atomic when owners race: a reclaim closing a job and the job closing itself refund once"
+    "the account unit is refunded at most once is atomic when owners race: a reclaim closing a job and the job closing itself refund once",
+    "media concurrency on standard PostgreSQL parallel ingests of different bundles get distinct version numbers",
+    "media concurrency on standard PostgreSQL parallel publishes of two versions leave exactly one PUBLISHED version"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"
