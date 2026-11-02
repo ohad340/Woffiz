@@ -33,6 +33,13 @@ export default defineConfig({
       AUTH_RATE_GLOBAL_MAX: '10000',
       // Mail is written to e2e/.outbox instead of being sent (honored only on a local machine).
       EMAIL_TRANSPORT: 'outbox',
+      // Labeled local generator, never a real model (and never the owner's real key).
+      AI_PROVIDER: 'fake',
+      GEMINI_API_KEY: '',
+      ANTHROPIC_API_KEY: '',
+      AI_DAILY_ACCOUNT_MAX: '10000',
+      AI_DAILY_CALLS_MAX: '100000',
+      AI_RETRY_DELAY_MS: '50',
       EMAIL_OUTBOX_DIR: 'e2e/.outbox',
     },
   },

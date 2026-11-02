@@ -10,7 +10,7 @@ import { withIdempotency } from './idempotency'
  * - Mastery completes the current level and opens exactly the next one.
  */
 
-async function lockPlan(tx: Tx, planId: string) {
+export async function lockPlan(tx: Tx, planId: string) {
   await tx.$queryRaw`SELECT id FROM "Plan" WHERE id = ${planId}::uuid FOR UPDATE`
 }
 

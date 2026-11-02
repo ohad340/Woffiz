@@ -40,6 +40,29 @@ Links in emails always use `BETTER_AUTH_URL` (which is also the only trusted ori
 
 Preview states with `?state=loading|empty|error|offline` (map, review) or `?state=generating|generation-error` (onboarding). Development only.
 
+## AI plans (Phase 2)
+
+Plans are generated on the server by `src/server/ai` and validated before anything is stored (decisions 46-52). Mastery stays with the owner: AI code can only add a new version of the current exercise or replace locked future levels, and a test forbids it from touching mastery.
+
+- **Provider**: Claude Haiku 5.5 (`claude-haiku-5-5`) through the official Anthropic SDK is the default (decision 53). Set `ANTHROPIC_API_KEY` in the ignored `.env` (see `.env.example`); the key is server-only. There is no automatic fallback to another provider or model: without the key the service reports itself unavailable. Gemini remains available for explicit configuration only (`AI_PROVIDER="gemini"`, `GEMINI_API_KEY`).
+- **Local development and tests** can use the labeled local generator (`AI_PROVIDER=fake`, explicit; honored only on a local machine or in tests, and used by the e2e and integration suites). It is not a model. `AI_FAKE_MODE=fail|invalid|slow` exercises the failure screens.
+- **Limits** (UTC days, persistent and atomic in PostgreSQL, so shared by every server instance): **3** generation/adaptation requests per account (`AI_DAILY_ACCOUNT_MAX`) and **100** calls to the model for the whole system (`AI_DAILY_CALLS_MAX`). Initial plans, adaptations and revisions share the 3. Only one generation can be active per puppy.
+- **Timing and recovery** (decision 57): the plan routes run up to 300 s (`maxDuration`). One operation is at most two provider attempts (the SDK never retries) plus a short delay, bounded by a deadline (`2 x AI_TIMEOUT_MS + retry delay + 30 s`, so 122 s by default; `AI_TIMEOUT_MS` is capped at 100 s). A running job holds a lease that it renews; if its worker dies the lease expires (about 75 s) and the same request, asked again with the same `Idempotency-Key`, takes the job over. A worker that lost ownership can never commit.
+- **Refunds and reuse:** a job that ends without a committed result gives the account's unit back once; provider calls are never refunded. A repeated request returns the stored result (or "pending" while the job runs) without another model call or charge. Saved plans are never touched by a refused or failed request.
+- **Evaluation**: `docs/AI_EVALS.md`. `npm run ai:ping` makes one minimal access check; `npm run ai:eval` calls the live model once per case (a few cents) and records the outputs in `test/ai/recorded/<model>/`; the normal test run re-validates the recordings offline.
+- **Deploying**: apply the new migration to Supabase with `prisma migrate deploy`, then set `ANTHROPIC_API_KEY` (and optionally `AI_MODEL_ID`) in Vercel production before redeploying; leave `AI_PROVIDER` unset or `anthropic`.
+
+## Deployment (Vercel + Supabase, tester only)
+
+Hosting is Vercel (project `woffiz`, region `cdg1`, Node 24) and the database is Supabase PostgreSQL (eu-west-3). Authentication stays Better Auth with Prisma; Supabase Auth and the Supabase client libraries are not used.
+
+- **Runtime `DATABASE_URL`**: the Supabase *transaction* pooler (port 6543). The app uses `@prisma/adapter-pg`, so the old `?pgbouncer=true` flag is not needed. Leave `DATABASE_POOL_MAX` unset.
+- **Migrations `DIRECT_URL`**: the *session* pooler (port 5432), which `prisma.config.ts` prefers over `DATABASE_URL`. Apply migrations by hand with `prisma migrate deploy` (never `migrate reset` or `db push`), not during the Vercel build. Keep both strings, with the database password, in an ignored file such as `.env.cloud.local`.
+- **Production variables** (set in Vercel, never committed): `DATABASE_URL`, `BETTER_AUTH_SECRET` (fresh, never reused from local), `BETTER_AUTH_URL` (the stable HTTPS address; also the only trusted origin and the base of every emailed link), `RESEND_API_KEY`, `EMAIL_FROM`, `TESTER_EMAIL`. Do **not** set `APP_ENV`, `LOCAL_SIGNUP`, `EMAIL_TRANSPORT`, `EMAIL_OUTBOX_DIR`, `SHADOW_DATABASE_URL`, `TEST_DATABASE_URL` or `TEST_DB_KIND`.
+- **Data API lock**: the app tables are private. Migration `20261101120000_lock_public_data_api` enables Row Level Security without policies and revokes the `anon` and `authenticated` roles. A new table needs the same in its migration; `test/integration/data-api-lock.test.ts` fails otherwise.
+- **Never run the integration or e2e suites against Supabase**: they truncate tables. Keep `TEST_DATABASE_URL` on the local `woffiz-test` database or CI PostgreSQL.
+- Registration stays limited to `TESTER_EMAIL` while Resend is configured, and the sender is the shared `onboarding@resend.dev` (messages may land in spam). A verified sending domain is needed before anyone else can register.
+
 ## Checks
 
 ```bash

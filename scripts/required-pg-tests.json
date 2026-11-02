@@ -1,0 +1,21 @@
+{
+  "_comment": "Tests that only mean something on a real PostgreSQL server with independent connections. CI fails unless every one of them EXECUTED AND PASSED (scripts/assert-required-tests.mjs). Renaming or removing one means updating this list on purpose.",
+  "required": [
+    "concurrency on standard PostgreSQL uses independent database connections",
+    "concurrency on standard PostgreSQL parallel mastery confirmations unlock exactly one level",
+    "concurrency on standard PostgreSQL parallel confirmations with the SAME key all return one stored result",
+    "concurrency on standard PostgreSQL parallel attempt reports with the same key write one row",
+    "concurrency on standard PostgreSQL parallel onboarding completions create one puppy and one plan, and generate once",
+    "concurrency on standard PostgreSQL parallel first drafts from one owner create one puppy",
+    "email rate limits are stored in PostgreSQL is atomic: of 20 simultaneous requests on separate connections exactly 3 pass",
+    "daily request limit per account is atomic under concurrency: 25 simultaneous requests are granted exactly 3 units",
+    "daily request limit per account the provider call budget is atomic too",
+    "reclaiming race: of 10 simultaneous retries of an expired job exactly one takes it over",
+    "reclaiming race: of 10 simultaneous new requests over an expired job, one job is started and the old unit is refunded once",
+    "the account unit is refunded at most once is atomic: 12 simultaneous refund attempts of one job lower the counter by exactly one",
+    "the account unit is refunded at most once is atomic when owners race: a reclaim closing a job and the job closing itself refund once"
+  ],
+  "allowedToSkip": [
+    "live model creates, adapts and revises a plan through the real provider"
+  ]
+}

@@ -4,8 +4,9 @@ import { LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import styles from './SignOutButton.module.css'
 
-export function SignOutButton() {
+export function SignOutButton({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(false)
@@ -30,10 +31,21 @@ export function SignOutButton() {
 
   return (
     <>
-      <Button variant="secondary" icon={<LogOut size={20} aria-hidden="true" />} loading={loading} loadingLabel="מתנתקים…" onClick={signOut}>
+      <Button
+        variant={compact ? 'ghost' : 'secondary'}
+        className={compact ? styles.compact : undefined}
+        icon={<LogOut size={compact ? 18 : 20} aria-hidden="true" />}
+        loading={loading}
+        loadingLabel="מתנתקים…"
+        onClick={signOut}
+      >
         התנתקות
       </Button>
-      {error && <p role="alert">לא הצלחנו להתנתק. נסו שוב.</p>}
+      {error && (
+        <p role="alert" className={compact ? styles.error : undefined}>
+          לא הצלחנו להתנתק. נסו שוב.
+        </p>
+      )}
     </>
   )
 }

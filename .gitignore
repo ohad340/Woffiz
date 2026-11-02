@@ -14,3 +14,6 @@ npm-debug.log*
 src/generated/
 .email-outbox/
 e2e/.outbox/
+
+.vercel
+.env*

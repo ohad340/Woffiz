@@ -130,6 +130,7 @@ model Puppy {
 
   plans    Plan[]
   attempts Attempt[]
+  jobs     GenerationJob[]
 }
 
 model Plan {
@@ -138,7 +139,7 @@ model Plan {
   puppy          Puppy      @relation(fields: [puppyId], references: [id], onDelete: Cascade)
   version        Int        @default(1)
   status         PlanStatus @default(ACTIVE)
-  // Where the content came from. Phase 1 plans are always the labeled development fixture.
+  // Where the content came from: "dev-fixture", "fake" (labeled local generator) or "ai:<model id>".
   source         String     @default("dev-fixture")
   // Optimistic counter, bumped by every frontier change. Clients send the value they saw.
   revision       Int        @default(0)
@@ -152,33 +153,38 @@ model Plan {
 }
 
 model Level {
-  id             String     @id @default(uuid()) @db.Uuid
-  planId         String     @db.Uuid
-  plan           Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
-  position       Int
-  topic          Topic
-  state          LevelState @default(LOCKED)
-  contentVersion Int        @default(1)
+  id                String     @id @default(uuid()) @db.Uuid
+  planId            String     @db.Uuid
+  plan              Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  position          Int
+  topic             Topic
+  state             LevelState @default(LOCKED)
+  contentVersion    Int        @default(1)
+  // Stable identity of a generated level and the stableKeys of earlier levels it builds on (validated, Phase 2).
+  stableKey         String?
+  prerequisitesJson Json       @default("[]")
 
   exerciseVersions ExerciseVersion[]
   attempts         Attempt[]
   masteryEvent     MasteryEvent?
 
   @@unique([planId, position])
+  @@unique([planId, stableKey])
   @@index([planId, state])
 }
 
 model ExerciseVersion {
-  id               String   @id @default(uuid()) @db.Uuid
-  levelId          String   @db.Uuid
-  level            Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
-  version          Int      @default(1)
+  id               String      @id @default(uuid()) @db.Uuid
+  levelId          String      @db.Uuid
+  level            Level       @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  version          Int         @default(1)
   // Hebrew content: title, goal, preparation, steps, successCriterion, stopConditions, easierVariant.
   contentJson      Json
-  criterionVersion Int      @default(1)
-  // Reviewed media arrives in Phase 3; always null here.
+  criterionVersion Int         @default(1)
+  // Phase 2: only ids of the isolated test catalog (MediaAsset). Reviewed media arrives in Phase 3.
   mediaId          String?
-  createdAt        DateTime @default(now())
+  media            MediaAsset? @relation(fields: [mediaId], references: [id])
+  createdAt        DateTime    @default(now())
 
   attempts Attempt[]
 
@@ -240,4 +246,76 @@ model EmailRateLimit {
   count       Int
 
   @@index([windowStart])
+}
+
+// ----- Phase 2: AI generation -----
+
+enum GenerationKind {
+  INITIAL_PLAN
+  ADAPT_CURRENT
+  REVISE_FUTURE
+}
+
+enum GenerationStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REJECTED
+  STALE
+}
+
+// Private operational record of one generation. The payload (candidate output) is purged after 30 days.
+model GenerationJob {
+  id               String           @id @default(uuid()) @db.Uuid
+  puppyId          String           @db.Uuid
+  puppy            Puppy            @relation(fields: [puppyId], references: [id], onDelete: Cascade)
+  kind             GenerationKind
+  status           GenerationStatus @default(PENDING)
+  // Puppy.revision (initial plan) or Plan.revision (adapt / revise) seen when the job started.
+  expectedRevision Int
+  promptVersion    String
+  policyVersion    String
+  model            String
+  attempts         Int              @default(0)
+  inputTokens      Int?
+  outputTokens     Int?
+  latencyMs        Int?
+  errorCode        String?
+  payloadJson      Json?
+  createdAt        DateTime         @default(now())
+  finishedAt       DateTime?
+  // Owner of the request (copied from the puppy, so a refund needs no join) and the client's Idempotency-Key.
+  ownerId          String
+  idempotencyKey   String
+  // Fencing token and lease. A worker owns the job only while it holds the current generation and the lease has
+  // not expired; reclaiming an expired job increments the generation, so a late worker can never commit.
+  generation       Int              @default(1)
+  leaseExpiresAt   DateTime
+  // UTC day whose request counter this job was charged to, and when that unit was given back (at most once).
+  quotaChargedDay  DateTime?        @db.Date
+  quotaRefundedAt  DateTime?
+
+  @@index([puppyId, createdAt])
+  @@index([ownerId, idempotencyKey])
+}
+
+// Daily generation counters per account and for the whole system (SHA-256 key, no personal data).
+model AiUsageDay {
+  key   String   @id
+  day   DateTime @db.Date
+  count Int
+
+  @@index([day])
+}
+
+// Isolated development media catalog. Real, reviewed media is Phase 3.
+model MediaAsset {
+  id            String   @id
+  family        String
+  variant       String
+  status        String   @default("TEST")
+  isTestFixture Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  exerciseVersions ExerciseVersion[]
 }

@@ -121,6 +121,7 @@ Order: back/title, goal, captioned video, preparation, numbered steps, mastery c
 Expose a secondary “צריך להקל?” action when a compatible easier variant exists.
 Bottom primary action: “תרגלנו”. It opens feedback and does not complete the level.
 Display suggested duration without countdown pressure.
+After two or more reports on the current version that were not independent, add a secondary “להתאים את התרגיל” action. It asks the server for an easier version of this exercise only; a status note explains the change, and mastery is still confirmed by the owner on the new version.
 Video ratio follows the asset; do not crop dog, handler or reward to fit a decorative frame.
 
 ### Feedback
@@ -138,6 +139,7 @@ Completion page summarizes completed practice and offers “חוזרים לתר�
 Do not label a puppy “fully trained” or objectively certified.
 
 ### Puppy and settings
+The path card offers “לעדכן את המשך המסלול”: the server rebuilds only the locked future levels; completed levels and the current level do not change.
 Edit profile, view recent practice and manage account.
 Profile changes do not erase history; explain when locked future levels will be refreshed.
 Account deletion uses a confirmation dialog with an honest scope statement.
@@ -209,7 +211,7 @@ Verify keyboard flow, screen reader announcements, contrast and reduced motion.
 | Surface | Empty | Loading | Success | Failure |
 |---|---|---|---|---|
 | Onboarding | Start profile | Save indicator | Summary | Retain input and mark field |
-| Plan creation | No plan yet | Preparing plan | First level | Retry with saved profile |
+| Plan creation | No plan yet | Preparing plan (focused heading, skeleton, up to about a minute) | First level | Retry with saved profile; daily limit explained with no retry; unavailable service explained |
 | Map | Onboarding action | Stable shell | Current frontier | Reload without resetting |
 | Video | Unavailable notice | Poster and spinner | Playback | Transcript and retry |
 | Feedback | No option selected | Saving, no duplicate submit | Recorded/unlocked | Retain selection, retry |

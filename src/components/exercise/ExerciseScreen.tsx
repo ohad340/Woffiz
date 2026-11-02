@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Card'
 import { Sheet } from '@/components/ui/Sheet'
 import { TOPIC_LABELS } from '@/domain/types'
 import type { ExerciseView } from '@/server/queries'
+import { AiAdjust } from './AiAdjust'
 import { PracticeReport } from './PracticeReport'
 import styles from './ExerciseScreen.module.css'
 
@@ -16,6 +17,7 @@ export function ExerciseScreen({ view }: { view: ExerciseView }) {
   const { level, content, mode } = view
   const [easierOpen, setEasierOpen] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
+  const [adaptNote, setAdaptNote] = useState<string | null>(null)
 
   if (mode === 'locked') {
     return (
@@ -109,7 +111,23 @@ export function ExerciseScreen({ view }: { view: ExerciseView }) {
         <Button variant="secondary" icon={<Lightbulb size={20} aria-hidden="true" />} onClick={() => setEasierOpen(true)}>
           צריך להקל?
         </Button>
+        {mode === 'current' && view.strugglesOnVersion >= 2 && (
+          <AiAdjust
+            endpoint="/api/plan/adapt"
+            planRevision={view.planRevision}
+            label="להתאים את התרגיל"
+            loadingLabel="מתאימים…"
+            doneNote="התרגיל הותאם. תרגלו את הגרסה החדשה; אישור שליטה נעשה רק עליה."
+            onDone={setAdaptNote}
+          />
+        )}
       </div>
+
+      {adaptNote && (
+        <p role="status" className={styles.muted}>
+          {adaptNote}
+        </p>
+      )}
 
       <div className={styles.practiceBar}>
         <Button size="cta" fullWidth onClick={() => setReportOpen(true)}>

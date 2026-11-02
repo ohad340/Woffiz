@@ -99,7 +99,7 @@ Server states: locked, current, completed. Session states: draft, submitted. UI 
 ### Responsibilities
 Separate a planning service from the progression service. Planning produces structured content; deterministic server logic owns authorization and unlocking. Claude Code is the development tool, not the runtime AI subscription or credential.
 
-Proposed runtime provider: Anthropic through a provider interface. Select and record an available model ID during Phase 0; do not hard-code an unverified model or assume Claude Code usage pays for runtime calls. Alternative providers remain possible without changing the domain model.
+Runtime provider behind a provider interface (decision 53 in docs/DECISIONS.md: Claude Haiku 5.5 through the Anthropic API; Gemini by explicit configuration only; the model ID is configured by AI_MODEL_ID and recorded with every generation job; no automatic provider or model fallback). Do not assume Claude Code usage pays for runtime calls. Other providers remain possible without changing the domain model.
 
 ### Generation inputs and output
 Inputs: sanitized puppy profile, known skills, limitations, recent attempt summaries, immutable completed-level summaries, current plan version, published media metadata and policy version. Treat owner-entered text as untrusted data.
