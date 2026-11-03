@@ -32,30 +32,18 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
       title: 'מפנים נשיכות לצעצוע',
       goal: 'כשהגור נוגס ביד, הוא עובר ללעוס צעצוע.',
       estimatedMinutes: 5,
-      preparation: ['צעצוע רך או חפץ לעיסה מתאים לגור', 'עוד צעצוע בהישג יד'],
+      preparation: ['צעצוע רך או חפץ לעיסה מתאים לגור', 'עוד צעצוע בהישג יד', 'בגד עם שרוול ארוך ועבה עוזר להישאר רגועים'],
+      // No waiting time in seconds: the sources tie the toy to the puppy's pause or release, not to a clock.
       steps: [
-        { id: 'stay-still', text: 'כשהגור נוגס ביד או בבגדים, לא מושכים את היד במהירות. נשארים במקום בלי תנועה כ-{stillSeconds} שניות.' },
-        { id: 'offer-toy', text: 'מקרבים לפה של הגור צעצוע מתאים.' },
-        { id: 'praise-chewing', text: 'כשהגור לועס את הצעצוע, משבחים אותו בקול רך.', speechCue: 'praise' },
+        { id: 'stay-still', text: 'כשהגור נוגס ביד או בשרוול, לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה.' },
+        { id: 'offer-toy', text: 'ברגע שהגור עוצר לרגע או משחרר, מקרבים לפה שלו צעצוע מתאים.' },
+        { id: 'praise-chewing', text: 'כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע.', speechCue: 'praise' },
       ],
       params: [
-        {
-          id: 'stillSeconds',
-          label: 'Seconds to stay still before offering the toy',
-          unit: 'seconds',
-          min: 1,
-          max: 10,
-          default: 3,
-          demonstrated: 3,
-          compatibleMin: 2,
-          compatibleMax: 5,
-          basis: 'product-default',
-          basisNote: 'Source says to stay still and redirect during a brief pause; the number of seconds is a product default. Outside 2-5 the clip no longer shows the same timing.',
-        },
         neutral('rounds', 'Repetitions per practice session', 'rounds', 1, 6, 3, 1, ROUNDS_NOTE),
         neutral('sessionsInRow', 'Consecutive sessions for the mastery criterion', 'sessions', 2, 5, 3, 3, SESSIONS_NOTE),
       ],
-      successCriterion: 'ב-{sessionsInRow} מפגשי תרגול רצופים, כשהגור נוגס והצעצוע מוצע לו, הוא עובר ללעוס אותו.',
+      successCriterion: 'ב-{sessionsInRow} מפגשי תרגול רצופים, כשהגור נוגס והיד נשארת שקטה, הוא לוקח את הצעצוע שמוצע לו ולועס אותו.',
       tips: [
         { id: 'rotate-toys', text: 'מחזיקים כמה צעצועים בבית ומחליפים אותם כל כמה ימים, כדי שיישארו מעניינים.' },
         { id: 'enough-sleep', text: 'גור עייף נוגס יותר, לכן דואגים שיישן מספיק.' },
@@ -83,12 +71,13 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
     steps: ['מחזיקים צעצוע ביד אחת כל זמן המשחק.', 'משבחים כל רגע שבו הגור לועס אותו.'],
   },
   forbiddenBehaviour: [
-    'pulling the hand away quickly',
+    'pulling the hand or clothing away quickly',
     'punishment, raised voice, pushing the puppy down',
     'rough play or using hands or feet as toys',
+    'smiling or laughing at the mouthing',
     'ignoring a toy the puppy brings',
   ],
-  stopConditions: [STOP],
+  stopConditions: [STOP, 'אם הנשיכות חזקות או שהגור לא נרגע, קמים ומתרחקים לרגע, וחוזרים אליו בשקט עם צעצוע.'],
   review: { status: 'draft' },
   sources: [
     {
@@ -97,7 +86,7 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
       title: 'Mouthing, nipping and puppy biting',
       verifiedOn: '2026-11-03',
       verification: 'extracted-text',
-      supports: ['stay-still', 'offer-toy', 'offer-toy-early', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden'],
+      supports: ['stay-still', 'offer-toy', 'offer-toy-early', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden', 'stop'],
       summary:
         'Quick wins: avoid pulling hands, arms or legs away quickly (it turns into a game); "stay still and redirect your dog when there is a brief pause in the behaviour"; redirect the mouth onto an age-appropriate toy or dog-safe chew kept in several places. Redirecting: spot early play signs and give a toy before mouthing starts; use three or four toys and swap them every couple of days; praise chewing an appropriate item or bringing a toy; ignoring a brought toy can teach that mouthing gets more attention. Avoid raised voices or pushing the dog down. Puppies need 18-20 hours of sleep. NOTE: the page numbered ladder differs: stay still, drop or hide a toy you hold, then turn away with crossed arms, then step away, then reward calm. No seconds, repetitions or mastery criterion are given.',
     },
@@ -107,9 +96,9 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
       title: 'Understanding mouthing and play-biting behaviour (guidance for new dog owners, last updated November 2015)',
       verifiedOn: '2026-11-03',
       verification: 'extracted-text',
-      supports: ['stay-still', 'offer-toy', 'praise-chewing', 'forbidden'],
+      supports: ['stay-still', 'offer-toy', 'forbidden'],
       summary:
-        'Mouthing should always be redirected onto a suitable toy; have a toy in hand when playing; if the puppy touches a hand, body or clothing, keep that part still and distract them at once by offering a toy instead; keep the toy interesting by moving it; do not smile or laugh at the mouthing; no rough games without toys; be consistent. No seconds or repetitions given. It is an adopter leaflet dated 2015.',
+        'Mouthing should always be redirected onto a suitable toy; have a toy in hand when playing; if the puppy touches a hand, body or clothing, keep that part still and distract them at once by offering a toy instead; keep the toy interesting by moving it; do not smile or laugh at the mouthing; no rough games without toys; be consistent. Does not mention praise. No seconds or repetitions given. It is an adopter leaflet dated 2015. TIMING DIFFERS from our sequence: it offers the toy at once, during the contact; we offer it at the pause or release (Dogs Trust, Dogs for Good).',
     },
     {
       url: 'https://www.dogsforgood.org/media/biwlp0nd/family-dog-programme-puppy-biting.pdf',
@@ -117,9 +106,9 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
       title: 'Puppy biting, nipping, and mouthing (family dog programme handout, 2015)',
       verifiedOn: '2026-11-03',
       verification: 'extracted-text',
-      supports: ['stay-still', 'offer-toy', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden'],
+      supports: ['stay-still', 'offer-toy', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden', 'stop'],
       summary:
-        'Redirect the puppy onto something suitable to bite and chew; when a puppy holds clothing, quietly stand very still and when they let go redirect them onto something suitable; always use a toy, never hands or arms, for play; praise verbally when the puppy chooses to chew a toy; do not use anything aversive, shout or drag by the scruff; puppies need 18-20 hours of sleep. No seconds or repetitions given. A 2015 handout.',
+        'Redirect the puppy onto something suitable to bite and chew; when a puppy holds clothing, quietly stand very still and, WHEN THEY LET GO, redirect them onto something suitable (redirection after release, not during the mouthing); always use a toy, never hands or arms, for play; praise verbally when the puppy chooses to chew a toy; do not use anything aversive, shout or drag by the scruff; puppies need 18-20 hours of sleep. No seconds or repetitions given. A 2015 handout.',
     },
   ],
 }

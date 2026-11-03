@@ -32,6 +32,15 @@ const clock = (ms: number) => {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0')}`
 }
 
+/** At most two caption lines of 42 characters: a longer line is broken at the space nearest its middle. */
+export function captionLines(text: string): string {
+  if (text.length <= 42) return text
+  const spaces = [...text.matchAll(/ /g)].map((m) => m.index!)
+  const cut = spaces.sort((a, b) => Math.abs(a - text.length / 2) - Math.abs(b - text.length / 2))[0]
+  return cut === undefined ? text : `${text.slice(0, cut)}
+${text.slice(cut + 1)}`
+}
+
 /** manifest + captions + transcript of the bundle, derived from the script and the CURRENT catalog definition. */
 export function buildPilotFiles(script: PilotScript): Pick<BundleInput, 'manifest' | 'captions' | 'transcript'> & { placeholders: string[] } {
   const def = getTechnique(script.technique.key, script.technique.version)
@@ -49,7 +58,7 @@ export function buildPilotFiles(script: PilotScript): Pick<BundleInput, 'manifes
   const captions = [
     'WEBVTT',
     '',
-    ...script.voice.flatMap((v, i) => [`${i + 1}`, `${clock(v.startMs)} --> ${clock(v.endMs)}`, v.speaker === 'demo' ? `(המדגים:) ${v.text}` : v.text, '']),
+    ...script.voice.flatMap((v, i) => [`${i + 1}`, `${clock(v.startMs)} --> ${clock(v.endMs)}`, captionLines(v.speaker === 'demo' ? `(המדגים:) ${v.text}` : v.text), '']),
   ].join('\n')
   const transcript = [
     ...script.voice.map((v) => ({ type: 'speech' as const, speaker: v.speaker, startMs: v.startMs, text: v.text })),

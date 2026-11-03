@@ -124,8 +124,8 @@ describe('demo resolver', () => {
     expect((await resolveDemo(prisma, exercise)).state).toBe('ready')
     expect((await resolveDemo(prisma, { ...exercise, techniqueVersion: 2 })).state).toBe('unavailable') // no clip for @2
     expect((await resolveDemo(prisma, exercise, 'EASIER')).state).toBe('unavailable') // no EASIER clip
-    const outside = { ...exercise, techniqueParamsJson: { params: { stillSeconds: 8, rounds: 3, sessionsInRow: 3 }, tipIds: [] } }
-    expect((await resolveDemo(prisma, outside)).state).toBe('unavailable') // the clip shows 2-5 s only
+    const outside = { ...exercise, techniqueParamsJson: { params: { rounds: 9, sessionsInRow: 3 }, tipIds: [] } }
+    expect((await resolveDemo(prisma, outside)).state).toBe('unavailable') // a value outside what the clip covers
     expect((await resolveDemo(prisma, { ...exercise, techniqueKey: 'name-look' })).state).toBe('unavailable')
   })
 

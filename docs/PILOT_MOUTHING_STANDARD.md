@@ -1,217 +1,220 @@
 # Pilot production package: `mouthing-redirect-toy@1` STANDARD
 
-Prepared 2026-11-03. **Nothing here was generated, approved, published or paid for.** The technique is still `draft` (`techniques.lock.json` is `{}`), `MEDIA_REQUIRED` is off, and one successful pilot does not change that: it stays off until the required catalog coverage exists.
+Updated 2026-11-03. **Nothing here was generated, approved, published or paid for.** The technique is `draft` (`techniques.lock.json` is `{}`), `MEDIA_REQUIRED` is off, and one pilot does not change that: it stays off until the required catalog coverage exists. Clips are produced once and reused; nothing is generated per user.
 
-Everything under "Verified" below was read from the named official page on 2026-11-03. Anything I could not read is marked **unverified**.
+## 0. Production workflow (confirmed by the owner, supersedes the Google API proposal of decision 85)
 
-## 1. Sources: what was actually read
+1. Claude prepares the storyboard, prompts and reference requirements (this document).
+2. The owner generates the footage in ChatGPT through the connected Higgsfield tool. Model, length limits, credits and prices are decided there; nothing here assumes them.
+3. The owner returns the selected video file.
+4. Claude inspects what the footage actually shows (and reports any mismatch instead of covering it with captions), assembles it, adds the Hebrew voice, builds captions and transcript from the measured timeline, validates the bundle and ingests it as DRAFT.
+5. The owner watches and listens, completes the reviews, publishes, and the clip is connected to an exercise through the existing versioning/binding workflow.
 
-| Source | How it was read | Date/status of the source |
-|---|---|---|
-| Dogs Trust, "Mouthing, nipping and puppy biting" (https://www.dogstrust.org.uk/dog-advice/unwanted-behaviours/stop-your-dog-chewing-mouthing) | Raw HTML downloaded and its full text extracted; the relevant sections read line by line | Live page; no publication date was read |
-| RSPCA (UK), "Understanding mouthing and play-biting behaviour" (rspca.org.uk PDF) | Whole PDF extracted with `pdftotext` and read | "Last updated: November 2015", adopter leaflet |
-| Dogs for Good, "Puppy biting, nipping, and mouthing" (family dog programme PDF) | Whole PDF extracted with `pdftotext` and read | 2015 handout |
+No video-provider API, credentials, prepaid credit or automated video-generation call is part of this workflow. The app's plan generation (Anthropic) is unchanged.
 
-Not read: the owner has not read them yet. They are recorded in the catalog as `extracted-text` ("full text extracted and read by the assistant, not by the owner"), a new label that is distinct from `fetched-summary` and from `owner-read`. The admin screen shows it in Hebrew.
+## 1. Content approval proposal (still DRAFT until the owner approves)
 
-A correction to earlier work: the first tool summary of the Dogs Trust page contained a claim ("activities around ten minutes") that is **not on the page**. The earlier `fetched-summary` label was therefore right to be cautious. The summary in the catalog was rewritten from the raw text.
+### What each source actually supports (full texts read 2026-11-03, recorded as `extracted-text`, not yet read by the owner)
 
-### What the sources actually say
-
-| Topic | Dogs Trust | RSPCA UK | Dogs for Good |
+| Instruction | Dogs Trust (live page) | RSPCA UK (leaflet, 2015) | Dogs for Good (handout, 2015) |
 |---|---|---|---|
-| Don't pull the hand away fast | Yes: it turns into a game | Implied: "keep that part of your body still" | Yes: stand very still when the puppy holds clothing |
-| Redirect to a toy | "Stay still and redirect when there's a brief pause"; "Redirect your dog's mouth onto an age-appropriate toy or dog-safe chew" | "Distract them **at once** by offering a toy instead"; keep a toy in your hand; keep it interesting by moving it | "When they let go redirect them onto something suitable" |
-| Praise chewing the toy | "Praise them well" | Implied (toys more fun than hands) | "Praise them verbally" |
-| Don't | Raised voices, pushing down, pulling clothing away | Don't smile or laugh at the mouthing; no rough games without toys | Nothing aversive, no shouting, no scruff, no hands/arms as toys |
-| Seconds, repetitions, mastery criterion | **None** | **None** | **None** |
+| Do not pull the hand or clothing away | Yes ("This can be exciting for dogs and turn it into a game") | Yes ("keep that part of your body still") | Yes, for clothing ("quietly stand very still") |
+| When to offer the toy | **At a pause**: "stay still and redirect your dog when there's a brief pause in the behaviour" | **At once, during the contact**: "distract them at once by offering a toy instead" | **After release**: "when they let go redirect them onto something suitable" |
+| Praise chewing an appropriate item | Yes ("praise them well") | Not stated | Yes ("praise them verbally") |
+| Step away if it gets too much | Yes ("step away or separate yourself briefly… return with a safe activity") | Not stated | Yes, for accidental bites ("stop the game and move away… once they are calm, direct them onto… a toy") |
+| No punishment, raised voice, pushing; no hands as toys | Yes | Yes (also: don't smile or laugh) | Yes |
+| Seconds, repetitions, mastery criterion | None | None | None |
 
-**Divergence the owner should know about.** Dogs Trust's own numbered ladder is different from our sequence: stay still; *drop or hide a toy you are holding*; turn away with crossed arms; step away; reward calm. RSPCA UK and Dogs for Good (and Dogs Trust's "redirect" section) support offering a toy during the mouthing. Our STANDARD sequence follows the redirect guidance. It is a synthesis, not a copy of any single page.
+**Correction to the previous version:** Dogs for Good supports redirecting **after the puppy lets go**, not during the mouthing. It is no longer described as supporting redirection during mouthing (catalog summary corrected).
 
-## 2. Exact proposed content (from `src/domain/techniques/catalog.ts`, unchanged)
+**Remaining contradiction (brief):** RSPCA UK (2015) offers the toy at once, during the contact; Dogs Trust (pause) and Dogs for Good (release) wait. The proposal follows Dogs Trust and Dogs for Good, the current and the more specific guidance.
 
-Hebrew text is what users will see. "Supported" means at least one source above says it; "Product default" means no source gives it and the owner must decide.
+### Recommended final sequence (the draft catalog now says exactly this)
 
-### Steps (demonstrated in this order)
-
-| # | Id | Hebrew instruction | Status |
+| # | Step id | Hebrew instruction | Basis |
 |---|---|---|---|
-| 1 | `stay-still` | כשהגור נוגס ביד או בבגדים, לא מושכים את היד במהירות. נשארים במקום בלי תנועה כ-{stillSeconds} שניות. | Staying still and not pulling away: **supported** (3 sources). The number of seconds: **product default** (RSPCA says "at once", Dogs Trust "a brief pause", Dogs for Good "when they let go") |
-| 2 | `offer-toy` | מקרבים לפה של הגור צעצוע מתאים. | **Supported** (RSPCA, Dogs Trust, Dogs for Good) |
-| 3 | `praise-chewing` (demonstrator says a praise line) | כשהגור לועס את הצעצוע, משבחים אותו בקול רך. | Praising chewing the toy: **supported**. "In a soft voice": **product default** consistent with the sources' warnings against raised voices |
+| 1 | `stay-still` | כשהגור נוגס ביד או בשרוול, לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה. | Supported by all three |
+| 2 | `offer-toy` | ברגע שהגור עוצר לרגע או משחרר, מקרבים לפה שלו צעצוע מתאים. | Supported: Dogs Trust (pause) and Dogs for Good (release). RSPCA differs on timing |
+| 3 | `praise-chewing` (demonstrator says the praise) | כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע. | Praise supported by Dogs Trust and Dogs for Good; "calm voice" is a product default consistent with all three warning against raised voices |
 
-Preparation (supported): צעצוע רך או חפץ לעיסה מתאים לגור; עוד צעצוע בהישג יד. (Dogs Trust: right size, dog-safe, no small parts or batteries; keep toys in several places.)
+**No waiting time in seconds.** The previous draft had "about {stillSeconds} seconds" (default 3); no source gives a number, and the toy is tied to the puppy's pause or release, not to a clock. The parameter was removed, so the clip has no media-bound parameter: any length of stillness in the footage matches the instructions as long as the toy comes at the pause or release.
 
-### Success criterion (**product default**, no source has one)
+Preparation: צעצוע רך או חפץ לעיסה מתאים לגור; עוד צעצוע בהישג יד; בגד עם שרוול ארוך ועבה עוזר להישאר רגועים (Dogs Trust: thicker clothing reduces the instinct to pull away).
 
-ב-{sessionsInRow} מפגשי תרגול רצופים, כשהגור נוגס והצעצוע מוצע לו, הוא עובר ללעוס אותו.
+### Parameter proposal (all product defaults; all media-neutral)
 
-### Parameters
-
-| Parameter | Full range | Default | Clip shows | Compatible with the clip | Basis |
-|---|---|---|---|---|---|
-| `stillSeconds` (media-bound) | 1-10 | 3 | 3 | 2-5 | Product default |
-| `rounds` (media-neutral) | 1-6 | 3 | 1 | 1-6 | Product default |
-| `sessionsInRow` (media-neutral) | 2-5 | 3 | 3 | 2-5 | Product default |
-
-Tips (supported by Dogs Trust and Dogs for Good): rotate toys every few days; a tired puppy mouths more (18-20 hours of sleep).
-Audience: all age bands, **product default** (no source gives an age limit). Stop condition (existing): if the puppy seems in pain, very frightened or aggressive, stop and see a vet or a certified trainer.
-
-### Decisions on content (needed before anything is generated)
-
-| # | Decision | My recommendation |
-|---|---|---|
-| C1 | Is the synthesis (stay still, then offer a toy, then praise) acceptable given the Dogs Trust ladder differs? | Yes: two of three sources and Dogs Trust's redirect section support it. Keep the clip's handler calm and never smiling or laughing at the mouthing (RSPCA) |
-| C2 | `stillSeconds`: the sources do not give a number and RSPCA says "at once" | Keep 3 shown, compatible 2-5 (a visible, calm pause is easiest for a new owner to copy). Alternative: shown 2, compatible 1-3, closer to "at once". Tell me which; either needs no new video work if decided now |
-| C3 | `rounds` 1-6 (default 3) and `sessionsInRow` 2-5 (default 3) | Approve as product defaults |
-| C4 | Criterion wording | Approve as written |
-| C5 | Age bands: all | Approve (the source gives no limit; teething is the explanation) |
-| C6 | Stop-condition wording | Approve as written |
-| C7 | The five Hebrew voice lines in section 3 | Review and approve or edit |
-
-Why this must be decided **first**: approval freezes the definition. Any later change (even a range) changes the fingerprint, so the clip's manifest must be rebuilt and both reviews redone; a change to the demonstrated behaviour needs a new version and a new clip.
-
-## 3. Final storyboard, Hebrew lines, captions, transcript
-
-Single continuous take, 20 s, 1280x720, 16:9, locked-off camera at puppy eye level. The video is generated **silent**; all Hebrew is added in post, once. The handler's face is never in frame, so the voice needs no lip sync.
-
-| Time | Timeline | What is seen | Voice (Hebrew) |
+| Parameter | Range | Default | Clip shows |
 |---|---|---|---|
-| 0.0-3.0 | setting | Adult sits cross-legged on a rug, hands relaxed in the lap; puppy bounces up to them | Narrator 0.4-2.5: כשהגור נוגס לנו ביד — |
-| 3.0-8.0 | `stay-still` | Puppy gently mouths the sweater cuff/hand; the hand stays completely still and relaxed for about 3 s; no pulling away | Narrator 3.2-6.7: לא מושכים את היד. נשארים במקום, בלי תנועה. |
-| 8.0-13.0 | `offer-toy` | The other hand brings a soft toy to the puppy's mouth; the puppy lets go of the sleeve and takes the toy | Narrator 8.4-11.0: ומקרבים לפה שלו צעצוע מתאים. |
-| 13.0-17.0 | `praise-chewing` | The puppy chews the toy, relaxed | Demonstrator 14.0-15.2: יופי, איזה צעצוע! |
-| 17.0-20.0 | setting | Calm play with the toy | Narrator 17.2-19.6: משבחים כשהוא לועס צעצוע — לא ידיים. |
+| `rounds`: repetitions per practice session | 1-6 | 3 | 1 |
+| `sessionsInRow`: consecutive sessions for the mastery criterion | 2-5 | 3 | (not shown) |
 
-- **Source of truth:** `pilot/mouthing-redirect-toy-1-standard/script.json`. `npx tsx scripts/build-pilot-files.ts pilot/mouthing-redirect-toy-1-standard` generates `manifest.json` (with the definition's fingerprint and the demonstrated parameters), `captions.vtt` (the demonstrator line is prefixed "(המדגים:)") and `transcript.json` (5 speech entries plus 2 visual notes).
-- **Verified:** a unit test builds the files from the script and validates the whole bundle with the app's own validator, using the synthetic stand-in clip for the video. It passes: caption sync, voice gaps of at least 300 ms, demonstrator line inside the praise step, transcript agreement.
-- **Timing is an estimate.** The voice durations are guesses until the real audio exists. After synthesis, measure each file (`ffprobe`), set `endMs = startMs + duration` in `script.json` (keep at least 300 ms between the demonstrator and the narrator), and rebuild.
-- The builder refuses to write final files while the production dates are `0000-00-00`.
+### Mastery criterion (product default)
 
-## 4. Generation prompts (Gemini Omni Flash; English prompts, silent output)
+ב-{sessionsInRow} מפגשי תרגול רצופים, כשהגור נוגס והיד נשארת שקטה, הוא לוקח את הצעצוע שמוצע לו ולועס אותו.
 
-The model documentation says English is fully supported and other languages are unevaluated, and audio cannot be switched off (it is controlled through the prompt). So: English prompts, "no dialogue, no sound" in every prompt, and the audio track is discarded at assembly (`-an`).
+(Ordinary practice reports never unlock; only the owner's explicit mastery confirmation does. Unchanged product rule.)
 
-**Character and scene bible (paste identically at the start of every prompt):**
+### Stop conditions
 
-> Bright, tidy living room, pale oak floor, large cream wool rug, soft daylight from a window on the left, plain wall, no signs or text. An 8-week-old golden retriever puppy: pale golden fur, dark round eyes, floppy ears, a small white patch on the chest, relaxed friendly body language, tail loosely wagging. An adult sits cross-legged on the rug facing the puppy. Only the adult's hands, forearms and torso up to the chest are ever visible; the face stays out of frame. The adult wears a plain grey long-sleeved knit sweater with soft cuffs, no jewellery. The toy is a soft blue-and-cream fabric rope chew toy about 20 cm long, no buttons, no squeaker, no small parts. Camera: locked-off, puppy eye level, medium-wide shot from about 1.5 m, 16:9, one continuous unbroken shot, no cuts, no zoom, no camera movement. Natural, realistic, documentary style. No dialogue, no speech, no music, no sound effects.
+1. אם הגור נראה כואב, מבוהל מאוד או אגרסיבי, עוצרים את התרגיל ופונים לווטרינר או למאלף מוסמך. (existing, product wording)
+2. אם הנשיכות חזקות או שהגור לא נרגע, קמים ומתרחקים לרגע, וחוזרים אליו בשקט עם צעצוע. (new; Dogs Trust and Dogs for Good)
 
-**Probe prompts (3 short probes first, about 6 s each, to approve the look before any full attempt):** bible + "The puppy bounces up to the seated adult and gently mouths the cuff of the grey sweater while the adult's hand stays completely still." Check realism and consistency of puppy, hands and toy.
+Unchanged: EASIER variant (offer the toy early, at the first play signs; Dogs Trust), tips (rotate toys; enough sleep), all age bands (no source gives a limit). Must never appear in the clip: pulling the hand or clothing away, punishment, raised voice, pushing down, rough play or hands as toys, smiling or laughing at the mouthing, ignoring a brought toy.
 
-**Prompt A (first 10 s):** bible + "0-3 s: the adult sits relaxed, hands in the lap; the puppy trots up and sniffs the adult's hand. 3-8 s: the puppy gently mouths the cuff of the grey sweater on the adult's right forearm; the adult's right hand and forearm stay completely still and relaxed, not pulling away, not pushing, not moving at all. 8-10 s: the adult's left hand slowly brings the soft toy toward the puppy's mouth. Calm, gentle play-mouthing only, no growling, no tension."
+**Fingerprint:** the corrected draft is `7503f788…` (`npx tsx scripts/technique-fingerprint.ts mouthing-redirect-toy 1`). v1 was never released, so it was edited in place under the existing rules; approval will freeze it in `techniques.lock.json`, and any later change becomes v2.
 
-**Prompt B (extension of A by 10 s, using the previous interaction):** "Continue the same shot. The puppy lets go of the sleeve, takes the soft toy in its mouth and chews it calmly. The adult's hands stay relaxed and still near the toy. The puppy keeps chewing the toy for the rest of the shot, relaxed, then settles with the toy. Same room, same puppy, same adult, same toy, same camera. No dialogue, no speech, no music, no sound effects."
+**To approve:** reply with "approve as proposed" or the exact changes. I then set `review.status: approved` and add the lock entry in one commit.
 
-**Accept a take only if (check frame by frame):**
-1. The adult's hand really stays still during the mouthing (about 3 s) and does not jerk away. 2. The toy is offered **while** the puppy is mouthing, not after it stopped. 3. The puppy switches to the toy and chews it. 4. The puppy looks relaxed: no fear, no growling, soft body, no teeth baring. 5. No pushing, scolding, rough play or hands used as toys. 6. Puppy, toy and adult look the same across the whole take; anatomy is correct (legs, paws, hands with five fingers); no text, logos or extra animals. 7. Face of the adult never visible. 8. Roughly 20 s long and framed so nothing important is cropped.
+## 2. Storyboard (target about 20 s; timing follows the real action and narration)
 
-**Retry ladder:** reword the action (one change at a time); use the best frame as an image reference or first frame; split into 5-6 s sub-clips with first/last-frame control; last resort, a different model (for example Kling 3.0 Standard, through Runway) which would be a new vendor decision.
+Single continuous take preferred; same puppy, handler clothing, toy, room and light throughout; handler's face never in frame (no lip sync); generated audio is replaced.
 
-## 5. Providers and prices (official pages, read 2026-11-03)
-
-### Video
-
-| Option | Verified facts | Notes |
-|---|---|---|
-| **Gemini API, `gemini-omni-1.1-flash`** | Pricing page: output video $17.50 per 1M tokens, 5,792 tokens per second of 720p, "approximately $0.10 per second" (about $0.101). Paid tier only (no free tier for this model). Docs: 360p/720p/1080p/4K, 16:9 or 9:16, image and video references, first/last frame, extension of a generated video up to 40 s total, SynthID invisible watermark, audio on by default (controlled by prompt), English fully supported, no animal restrictions stated | A new model; puppy realism and action fidelity are **unverified until the probes**. Max length of one text-to-video generation is **not stated** (examples go to 10 s), hence 10 s plus one 10 s extension |
-| Veo 3.1 on the Gemini API | **Shut down on 22 October 2026** (the API docs say so). My earlier plan to use Veo 3.1 is obsolete | Do not use |
-| Runway API (reseller) | $0.01 per credit; lists Gemini Omni Flash 1.1 at 10 credits/s at 720p (3.4 at 360p) = same $0.10/s, Kling 3.0 Standard 9 credits/s without audio ($0.09/s), many others. Minimum purchase **not stated** | No price advantage for Omni; useful only as a fallback vendor |
-
-**Billing rules (Gemini API billing page):** upgrading means adding at least **$5** of prepaid credits; prepay is the default for new accounts; maximum prepay $5,000; at zero balance usage stops (and all keys on that billing account stop); credits expire after 12 months; a project monthly spend cap exists but is labelled experimental with about 10 minutes of latency. Refundability of unused credit: **unverified**.
-
-### Hebrew voice
-
-| Option | Verified | Unverified or limits | Pilot cost |
+| ~Time | Timeline | Picture | Voice |
 |---|---|---|---|
-| **Azure AI Speech**, `he-IL-HilaNeural` (female), `he-IL-AvriNeural` (male) | Both exist (Standard neural, 24 kHz/48 kHz). Free tier F0: 0.5 million characters per month | The page's dollar amounts did not render for me, so the paid rate is **unverified**; irrelevant for the pilot (free tier). No speaking styles listed | $0 |
-| Google Cloud Text-to-Speech, **Chirp 3 HD** | Hebrew (`he-IL`) is listed; 30 voices; free tier 1M characters per month, then $30 per 1M characters (pricing page via search result); SSML, speaking rate 0.25-2.0 | Which voices are enabled for Hebrew: **unverified**. Pause control and custom pronunciations are **not available for he-IL** (docs), so a mispronounced word cannot be fixed with a phoneme tag. Needs Cloud billing enabled | $0 inside the free tier |
-| ElevenLabs Eleven v3 / v4 | Hebrew is in the v3 and v4 language lists. API price $0.08 per 1K characters (v3). Multilingual v2 and Flash v2.5 do **not** include Hebrew | Plans start at $6/month (Starter); whether Starter licenses commercial TTS use is **unverified**; Hebrew quality unknown | about $0.25 of API use, or the $6 plan |
+| 0-2.5 s | setting | Puppy trots to the seated adult, mouth goes to the sweater cuff | Narrator: כשהגור נוגס ביד או בשרוול — |
+| 2.5-8.5 s | `stay-still` | Puppy gently mouths the cuff; the hand stays relaxed and motionless | Narrator: לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה. |
+| 8.5-13 s | `offer-toy` | Puppy pauses or lets go; the other hand slowly brings the rope toy to its mouth; puppy takes it | Narrator: כשהוא עוצר לרגע, מקרבים לפה שלו צעצוע. |
+| 13-17 s | `praise-chewing` | Puppy chews the toy, relaxed; hands still | Demonstrator: יופי, איזה צעצוע! (narrator silent around it) |
+| 17-20 s | setting | Calm chewing, puppy settles | Narrator: משבחים בקול רגוע כשהוא לועס צעצוע, לא ידיים. |
 
-The pilot needs about 160 characters per voice take, so any free tier covers dozens of retakes.
+Transcript visual notes: [הגור נוגס בשרוול. היד של המבוגר נשארת רפויה ולא זזה] · [הגור משחרר לרגע. היד השנייה מקרבת צעצוע רך, והגור לוקח אותו] · [הגור לועס את הצעצוע, רגוע].
 
-### Recommended approach (one)
+Muted: the captions carry every instruction; the demonstrator's praise is captioned "(המדגים:) …".
 
-- **Video:** Gemini API directly with `gemini-omni-1.1-flash`, 720p: official docs and pricing, no middleman, same price as the reseller.
-- **Voice:** an audition first, at no cost: synthesize the five lines with Azure `he-IL-HilaNeural` (narrator) and `he-IL-AvriNeural` (demonstrator), and with Chirp 3 HD; you choose by ear. Default if you have no strong preference: **Azure**, because both a female and a male Hebrew voice are confirmed to exist and its free tier covers the pilot many times over. ElevenLabs only if both sound unnatural.
-- **Assembly:** local ffmpeg (free).
+Source of truth: `pilot/mouthing-redirect-toy-1-standard/script.json` (times are **provisional**). `npx tsx scripts/build-pilot-files.ts <folder>` generates `manifest.json`, `captions.vtt` (lines over 42 characters wrap to two) and `transcript.json`.
 
-### Budget and cap
+## 3. Higgsfield prompt package (copy-ready)
 
-| Item | Calculation | Cost |
-|---|---|---|
-| Probes | 3 x 6 s x $0.101 | about $1.80 |
-| One full attempt (A 10 s + extension 10 s) | 20 s = $2.03 if the extension bills only the new 10 s; **30 s = $3.04 if it bills the whole chain** (billing of extensions is **not stated**; I use the conservative one) | $2.03-$3.04 |
-| Expected attempts to get one accepted take | my estimate 6-8 for such a precise action on a new model (**unverified guess**) | $12-$24 |
-| Pessimistic: 12 attempts | 12 x $3.04 | $36.50 |
-| Voice | free tiers | $0 |
-| Assembly | local | $0 |
+Use the same **CHARACTER AND SCENE REFERENCE** text at the start of every prompt. Paste the English as is; the Hebrew lines are explanations only.
 
-**Minimum purchase:** $5 prepaid credit. **Proposed cap for the whole pilot: $40**, enforced by buying exactly **$40** of prepaid credit once (a hard stop at zero) and also setting the experimental monthly spend cap to $40. Probes plus 12 conservative attempts come to about $38.50. If the balance runs out, I stop and report; no top-up without your approval. A 360p draft mode may cost about a third (Runway lists 3.4 credits/s); the Gemini page did not list 360p, so confirm in the console before relying on it.
+### 3.1 CHARACTER AND SCENE REFERENCE
 
-### What I need from you to generate
+> הסבר: תיאור קבוע של הגור, המטפל, הצעצוע והחדר. מדביקים אותו בתחילת כל פרומפט כדי שהכול יישאר זהה.
 
-1. Content decisions C1-C7 (section 2).
-2. Approval of the Gemini API with a **$40** prepaid cap (you create the billing and put the key in your local `.env`, never in chat or in git; the existing `GEMINI_API_KEY` is for plans and may not be on a paid tier).
-3. Permission to run the 3 probes (about $1.80) first; you approve the puppy/handler look before any full attempt.
-4. A voice choice after the free audition (or "default to Azure").
-5. Installing ffmpeg on this computer (your action; for example `winget install Gyan.FFmpeg`; I did not install anything).
-6. Whether the app should label clips as AI-generated (today nothing is shown; the file carries an invisible SynthID watermark and the manifest records "ai-generated").
-
-## 6. Assembly (ffmpeg; **untested here, there is no ffmpeg on this machine**)
-
-Inputs: `take.mp4` (the accepted video), one mono WAV per voice line `n1.wav n2.wav n3.wav d1.wav n4.wav`.
-
-```bash
-# 1. silent, exact 20 s, 1280x720, 30 fps, H.264 High
-ffmpeg -i take.mp4 -an -t 20 -vf "scale=1280:720:flags=lanczos,fps=30,format=yuv420p" -c:v libx264 -profile:v high -level 4.0 -crf 22 -preset slow video_silent.mp4
-
-# 2. place each line at its start time (ms, from script.json), loudness about -16 LUFS, stereo AAC, faststart
-ffmpeg -i video_silent.mp4 -i n1.wav -i n2.wav -i n3.wav -i d1.wav -i n4.wav -filter_complex "[1:a]adelay=400|400[a1];[2:a]adelay=3200|3200[a2];[3:a]adelay=8400|8400[a3];[4:a]adelay=14000|14000[a4];[5:a]adelay=17200|17200[a5];[a1][a2][a3][a4][a5]amix=inputs=5:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11,apad=whole_dur=20[a]" -map 0:v -map "[a]" -c:v copy -c:a aac -b:a 128k -ar 48000 -ac 2 -t 20 -movflags +faststart video.mp4
-
-# 3. poster (WebP, at most 300 KB)
-ffmpeg -ss 4.5 -i video.mp4 -frames:v 1 -c:v libwebp -quality 80 poster.webp
-
-# 4. check
-ffprobe -v error -show_entries stream=codec_name,profile,width,height,duration -of default=nw=1 video.mp4
-
-# measuring a voice file to re-time script.json
-ffprobe -v error -show_entries format=duration -of csv=p=0 n1.wav
+```
+CHARACTER AND SCENE REFERENCE (keep identical in every shot):
+- Puppy: one 9-week-old golden retriever puppy, pale golden fur, dark round eyes, black nose, soft floppy ears, a small white patch on the chest, no collar. Realistic puppy proportions: four legs, one tail, natural paws. Relaxed, playful, friendly body language.
+- Handler: one adult sitting cross-legged on the rug, facing the puppy. Only hands, forearms and torso up to the chest are ever visible; the face and head stay out of frame at all times. Plain medium-grey long-sleeved knit sweater with soft thick cuffs, dark-blue jeans, no jewellery, no watch, no nail polish. Natural adult hands with five fingers each.
+- Toy: one soft rope chew toy, about 20 cm long, braided blue and cream cotton, knotted at both ends. No buttons, no squeaker, no small parts. It lies on the rug beside the handler's left knee until it is used.
+- Room: bright, tidy living room. Pale oak floor, large plain cream wool rug, plain off-white wall, one low grey sofa edge visible in the background. Soft natural daylight from a window on the left, no harsh shadows. No posters, screens, text, logos or brand names anywhere.
+- Camera: static tripod, lens at the puppy's eye level (about 35 cm above the floor), medium-wide framing from about 1.5 m, 16:9 landscape. The puppy, the handler's hands and the toy stay fully inside the frame.
+- Style: natural, realistic, documentary home video, real-time speed, no slow motion, no filters, no stylisation.
 ```
 
-`amix normalize=0` needs ffmpeg 4.4 or newer. If a command fails, send me the message; I will adjust it against the actual build. The app's validator then checks codecs, size, duration, faststart and the voice/caption/transcript agreement.
+### 3.2 Reference image prompt (only if the selected model uses an image reference or a first frame)
 
-## 7. Ingest, review and test: exact steps
+> הסבר: תמונת פתיחה אחת שמקבעת את המראה. אם המודל תומך בתמונת ייחוס או בפריים ראשון, מייצרים אותה קודם ובוחרים את הטובה ביותר.
 
-### On this computer (no cloud, no cost)
+```
+[CHARACTER AND SCENE REFERENCE]
+A single photorealistic still frame: the puppy sits on the cream rug about 40 cm in front of the seated handler, looking toward the handler's right hand, which rests relaxed on the right knee. The rope toy lies on the rug beside the handler's left knee. The handler's face is out of frame (frame cut at mid-chest). Soft daylight from the left. Sharp focus on the puppy and the hands. No text, no watermark.
+```
 
-1. Database and admin: `npm run db:dev`, then `npx tsx scripts/grant-admin.ts --email you@example.com`. In `.env` (local only): `MEDIA_LOCAL_DIR=".media-local"` and `AI_PROVIDER="fake"` (the free local generator; it binds the offered technique to the first level of its topic).
-2. **Approve the content (only after C1-C7).** In `src/domain/techniques/catalog.ts` set `review: { status: 'approved', approvedBy: '<you>', approvedOn: '<date>' }` for `mouthing-redirect-toy@1`, and add its line to `src/domain/techniques/techniques.lock.json`. The value comes from `npx tsx scripts/technique-fingerprint.ts mouthing-redirect-toy 1` (today: `673d147a…`; it changes with any edit). Run `npx vitest run src/domain`. I make this commit only on your explicit approval.
-3. Put `video.mp4` and `poster.webp` in `pilot/mouthing-redirect-toy-1-standard/`. Fill the production dates and the voice vendor and voice name in `script.json`, re-time the lines to the real audio, then `npx tsx scripts/build-pilot-files.ts pilot/mouthing-redirect-toy-1-standard`.
-4. Ingest as a **draft**: `npx tsx scripts/media-ingest.ts pilot/mouthing-redirect-toy-1-standard --admin-email you@example.com` (no `--fixture`). It prints the version id and fingerprint. Metadata checks passing is **not** a review.
-5. `npm run dev`, open `/admin/media`, open the version. **Watch and listen to the clip in full**, with captions on and with the sound off once. Fill the TECHNICAL and CONTENT checklists (including "watched and listened in full"), mark reviewed, publish.
-6. Register a local account and finish onboarding, then `npx tsx scripts/pilot-bind-local.ts --email you@example.com` (local only; binds the current level to the technique). Open the exercise: tap play, check captions, transcript, the paused/unavailable states by withdrawing and suspending in the admin.
+### 3.3 Initial test prompt (about 5 s; check before the full footage)
 
-### On an iPhone
+> הסבר: בדיקה קצרה וזולה לפני הכול: האם הגור, הידיים והצעצוע נראים אמיתיים, והאם היד באמת נשארת בלי תנועה. אם לא, משנים את הניסוח לפני הצילום המלא.
 
-**A. The clip itself (possible now, no cloud).** On the computer: `node scripts/device-check-server.mjs <folder with video.mp4, captions.vtt, poster.webp>`. It prints a `http://192.168.x.x:8765/` address; open it in Safari on the phone (same Wi-Fi; allow Node through the Windows firewall on private networks). The page uses the app's player attributes (native controls, `playsinline`, `preload="none"`, Hebrew captions) and logs events. Check rows B1, B3-B7, B9 in `docs/MEDIA_QA.md`: tap play, inline playback, fullscreen and rotation, volume, silent-switch behaviour, captions (CC menu), sound quality, narration, sync. This server was smoke-tested here with the synthetic stand-in clip on desktop Chromium (Range requests, captions, playback); it has **not** been tried on an iPhone. It checks the clip only, not the app.
+```
+[CHARACTER AND SCENE REFERENCE]
+One continuous 5-second shot, no cuts. The puppy steps forward and gently mouths the thick grey cuff of the handler's right sleeve. During the whole shot the handler's right hand and forearm stay completely relaxed and motionless: no pulling away, no pushing, no lifting. The puppy's body stays loose and playful; no growling, no bared teeth. The rope toy stays on the rug beside the left knee. Static camera. No dialogue, no music.
+```
 
-**B. Inside the app on the iPhone (blocked for now).** Local mode requires `BETTER_AUTH_URL` to be `localhost` and Better Auth trusts only that one origin, so the app cannot be opened from a phone at the computer's LAN address. Two options, **both need your decision**: (1) a small local-only change that adds the computer's LAN origin as trusted (code in `auth.ts` and `local-mode.ts`, I would add tests); (2) the later hosted path: private Supabase bucket plus a preview deployment (cloud actions I have not taken). Until then B is recorded as PENDING.
+### 3.4 Master prompt (the whole demonstration in one generation, about 20 s)
 
-## 8. The 18 skipped end-to-end tests
+> הסבר: הסרטון כולו בצילום אחד. אם המודל לא מגיע ל-20 שניות או לא שומר על סדר הפעולות, עוברים לחלופה של השוטים (3.5).
 
-CI on `57f4f9f`: 180 listed, **162 passed, 18 skipped**. They were all intended, and every one was a run-time `test.skip`:
+```
+[CHARACTER AND SCENE REFERENCE]
+One continuous, unbroken shot of about 20 seconds, static camera, no cuts, real-time speed. Action in this exact order:
+1. (about 0-3 s) The puppy trots up to the seated handler and puts its mouth on the thick grey cuff of the handler's right sleeve.
+2. (about 3-8 s) The puppy gently mouths the cuff. The handler's right hand and forearm stay completely relaxed and still the whole time: not pulled away, not pushed, not lifted. The handler's left hand rests on the left knee.
+3. (about 8-12 s) The puppy pauses and lets go of the cuff for a moment. Only then the handler's left hand slowly picks up the rope toy from the rug and brings it, low and slow, to the puppy's mouth. The puppy takes the toy in its mouth.
+4. (about 12-17 s) The puppy chews the rope toy, relaxed, while the handler's hands rest still near the toy.
+5. (about 17-20 s) The puppy lies down on the rug and keeps chewing the toy calmly. End on this calm moment.
+Gentle, friendly play only. No dialogue, no speech, no music.
+```
 
-- `demo-video.spec.ts`: 8 tests x 2 non-desktop projects = **16**. These share technique-wide state (the published clip and suspension are common to every account in the test database), so they run once, in the desktop project, and resize the page to 360/768/1280 themselves.
-- `admin-media.spec.ts` "suspends and lifts a technique": 1 test x 2 projects = **2**, same reason.
+### 3.5 Shot-by-shot alternative (if one generation cannot hold the full sequence)
 
-The intended matrix is therefore: 51 tests in each of `mobile-360` and `tablet-768`, and 60 in `desktop-1280` (the same 51 plus the 9 desktop-only ones).
+> הסבר: ארבעה שוטים קצרים, אותה מצלמה ואותו מיקום. כל שוט מתחיל בדיוק בתנוחה שבה הקודם נגמר. אם הכלי מאפשר, משתמשים בפריים האחרון של השוט הקודם כפריים הראשון של הבא.
 
-Change made (config only, so the count means something): the desktop-only tests are no longer "skipped" at run time. `playwright.config.ts` leaves `demo-video.spec.ts` out of the mobile and tablet projects (`testIgnore`) and excludes tests tagged `@desktop-only` there (`grepInvert`); the admin test carries the tag. Listing now shows **162 tests (51 + 51 + 60)** and **0 skipped** by design. Nothing was added or removed: 162 passed before, 162 are listed now. Not re-run in full here (the local test database crashes under full runs); the CI run of this commit is the check.
+All shots: same static camera position and framing as the reference, same light, no cuts inside a shot.
 
-Other skips that are not in this count: the integration suite's one live-model test (`ai-live.test.ts`, needs a real key and a paid call) is skipped on purpose.
+**Shot 1: approach (about 3 s).** Start: the reference image pose (puppy sitting 40 cm away, toy beside the left knee). End: the puppy's mouth on the right sleeve cuff.
+```
+[CHARACTER AND SCENE REFERENCE]
+One continuous 3-second shot, static camera. Starting pose: the puppy sits on the rug about 40 cm in front of the seated handler; the handler's hands rest on the knees; the rope toy lies beside the left knee. The puppy stands up, takes two steps forward and puts its mouth on the thick grey cuff of the handler's right sleeve. Ending pose: the puppy's mouth on the right cuff, the right hand still on the right knee. No dialogue, no music.
+```
 
-## 9. What exists and what is pending
+**Shot 2: hand stays still (about 5-6 s).** Start: the puppy's mouth on the cuff. End: the puppy lets go and pauses, head slightly back, looking at the hand.
+```
+[CHARACTER AND SCENE REFERENCE]
+One continuous 6-second shot, static camera. Starting pose: the puppy's mouth on the thick grey cuff of the handler's right sleeve. The puppy gently mouths the cuff. The handler's right hand and forearm stay completely relaxed and motionless for the whole shot: no pulling away, no pushing, no lifting, no shaking. The left hand rests on the left knee next to the rope toy. Near the end the puppy lets go of the cuff and pauses, head pulled slightly back. Ending pose: the puppy pausing, mouth off the sleeve, looking at the hand. No dialogue, no music.
+```
 
-Added in this package: three sources recorded (`extracted-text`), `pilot/…/script.json`, `src/server/media/pilot-files.ts` and its test, `scripts/build-pilot-files.ts`, `scripts/device-check-server.mjs`, `scripts/technique-fingerprint.ts`, `scripts/pilot-bind-local.ts`.
+**Shot 3: toy at the pause (about 4-5 s).** Start: the puppy pausing, mouth off the sleeve. End: the toy in the puppy's mouth.
+```
+[CHARACTER AND SCENE REFERENCE]
+One continuous 5-second shot, static camera. Starting pose: the puppy has just let go of the handler's right sleeve and pauses, looking at the hand. The handler's left hand slowly picks up the rope toy from the rug and brings it low and slowly to the puppy's mouth. The right hand stays still on the right knee. The puppy takes the toy in its mouth. Ending pose: the rope toy in the puppy's mouth, the left hand releasing it. No dialogue, no music.
+```
 
-Pending: C1-C7, the budget approval, probes, the real clip, the voice audition and audio, assembly, ingest, owner review (watching and listening), publication on the local database, iPhone checks, and everything in `docs/MEDIA_QA.md` section B. `MEDIA_REQUIRED` stays off.
+**Shot 4: chewing and calm ending (about 5-6 s).** Start: the toy in the puppy's mouth. End: the puppy lying down, chewing calmly.
+```
+[CHARACTER AND SCENE REFERENCE]
+One continuous 6-second shot, static camera. Starting pose: the rope toy in the puppy's mouth, the handler's hands resting near the knees. The puppy chews the toy calmly, then lies down on the rug holding the toy between its front paws and keeps chewing. The handler's hands stay relaxed and still. Ending pose: the puppy lying down, chewing the toy, relaxed. No dialogue, no music.
+```
+
+### 3.6 Constraints (append to every prompt)
+
+> הסבר: איסורים שמונעים שגיאות אנטומיה, החלפת זהות, תנועות בלתי אפשריות, טיפול גס, טקסט וחיתוכים.
+
+```
+CONSTRAINTS: exactly one puppy and one adult. Correct anatomy: the puppy has four legs, one tail, two ears and natural paws; each human hand has five fingers; no extra or merging limbs. The puppy, the sweater, the toy, the rug and the room keep the same look, size and colour for the whole video; no morphing or identity change. Physically possible motion only: nothing teleports, nothing passes through anything, the toy only moves when a hand or the puppy moves it. No pulling the hand or sleeve away, no pushing, no grabbing the muzzle, no tug-of-war, no rough play, no scolding gestures, no laughing. The puppy shows no fear and no aggression: no growling, no bared teeth, no stiff body, no cowering. The handler's face never appears. No text, captions, subtitles, logos, watermarks or brand names. No cuts, transitions, zooms or camera movement. No slow motion.
+```
+
+### 3.7 Visual acceptance checklist
+
+> הסבר: בודקים כל צילום מועמד פריים-פריים לפני שמחזירים אותו.
+
+1. The hand stays still and relaxed while the puppy mouths, and is never pulled away.
+2. The toy arrives **after** the puppy pauses or lets go, not during the mouthing and not long after.
+3. The puppy takes the toy and chews it.
+4. The puppy is relaxed throughout: no fear, growling, bared teeth or stiff body.
+5. No pushing, scolding, rough play, laughing, or hands used as toys.
+6. Same puppy, sweater, toy, room and light in every frame and across shots; correct anatomy (legs, tail, paws, five fingers).
+7. The handler's face never appears; no text, logo or watermark; no unintended cut or camera move.
+8. Enough usable footage for about 20 s of action in the right order.
+
+## 4. Hebrew voice workflow (no charges, no account assumed)
+
+Final lines are in `script.json` (section 2). Narrator and demonstrator must be two clearly different voices; the narrator is silent from at least 0.3 s before to 0.3 s after the demonstrator line (the validator enforces it).
+
+| Option | What is verified | Use |
+|---|---|---|
+| **A. Recorded human voices (recommended)** | Nothing to buy; the assembler decodes M4A/MP3/WAV, trims silence and normalises loudness | Two people record the lines on a phone (for example iPhone Voice Memos): one narrator (4 lines), one demonstrator (1 line). Quiet room, phone about 20 cm away, one file per line, named `line-1.m4a` … `line-5.m4a` in script order |
+| B. Azure AI Speech free tier F0 | The official pricing page lists 0.5 million free characters per month for neural voices; the Hebrew voices `he-IL-HilaNeural` and `he-IL-AvriNeural` exist (official voice list) | Only if you already have, or decide to open, an Azure account; eligibility and sign-up terms were **not** checked and no account was created |
+| C. Windows built-in voice (Microsoft Asaf, he-IL) | Installed on this computer; `scripts/local-hebrew-tts.ps1` writes one WAV per line | **Provisional only**: timing and the assembly test. Robotic, not for the real clip |
+
+Timing is provisional until real audio exists: the assembler measures each file (`--measure --write-durations` sets `endMs`); start times are then set by watching the actual footage.
+
+## 5. Assembly tooling (resolved and tested here)
+
+ffmpeg is not installed and installing it would mean downloading a binary or accepting package-manager terms, so assembly uses what is already here: local Chrome/Edge WebCodecs (H.264 and AAC encoders) plus the pure-JS `mp4-muxer` 5.2.2 (MIT, now a pinned devDependency; the package notes it is superseded by Mediabunny, but it works and is what the playable fixture uses).
+
+`node scripts/assemble-clip.mjs <bundle folder> --footage <file> --voices <folder> [--from-ms N] [--poster-ms N]` discards the footage audio, cover-fits it to 1280x720 at 30 fps, places each trimmed voice line at its `startMs`, normalises to about -16 LUFS (BS.1770 K-weighting, gated) with a -1.5 dBFS peak ceiling, encodes H.264 High + AAC stereo 48 kHz, faststart, and writes `video.mp4` plus `poster.webp` from a real frame.
+
+**Verified on this computer on 2026-11-03** (Chrome 156, Windows), with the synthetic playable fixture as footage and the five lines spoken by the local Asaf voice: measured and re-timed the lines (it caught a last line that would have run past 20 s), built the files, assembled (15 s), and the app's validator returned **no issues**: avc1 + mp4a, faststart, 20.0 s, 1280x720; Chromium then decoded video and audio. Loudness came out -15.1 LUFS before gain and was peak-limited. **Not verified:** real footage from Higgsfield (frame rate, codec, length), the Linux CI browser (no AAC encoder there, so this is not a CI test), iPhone playback.
+
+## 6. When the footage comes back
+
+1. Save it as `pilot/mouthing-redirect-toy-1-standard/footage/<name>.mp4` (git-ignored). I watch it and write down, with times, what it actually shows for each step. A mismatch (toy during mouthing, a pulled hand, a changed puppy, an anatomy error) is reported to you and the take is rejected or re-generated; captions are never used to describe something the picture does not show.
+2. Voice: record or synthesize the lines (section 4) into `pilot/…/voice/` (git-ignored). `node scripts/assemble-clip.mjs pilot/mouthing-redirect-toy-1-standard --voices pilot/mouthing-redirect-toy-1-standard/voice --measure --write-durations`, then adjust the start times in `script.json` to the footage.
+3. Fill `production` in `script.json` (dates, the Higgsfield model you used, voice vendor and names), then `npx tsx scripts/build-pilot-files.ts pilot/mouthing-redirect-toy-1-standard`.
+4. `node scripts/assemble-clip.mjs pilot/mouthing-redirect-toy-1-standard --footage <footage> --voices <voice folder> --from-ms <start of the usable action> --poster-ms <a representative frame>`.
+5. Ingest as DRAFT: `npx tsx scripts/media-ingest.ts pilot/mouthing-redirect-toy-1-standard --admin-email you@example.com`. Rejection lists every problem.
+6. Local review: `npm run db:dev`; once, `npx tsx scripts/grant-admin.ts --email you@example.com`; `.env` has `MEDIA_LOCAL_DIR=".media-local"`. `npm run dev`, open `/admin/media`, open the version, **watch and listen in full** (once muted with captions), complete both checklists, mark reviewed. Publishing also needs the approved, locked definition (section 1).
+7. Connect it to a local test exercise: `npx tsx scripts/pilot-bind-local.ts --email you@example.com` adds a new exercise version to your local account's current level through the same versioned path the generator uses. Earlier versions, criteria, attempts and mastery history are untouched.
+8. iPhone: `node scripts/device-check-server.mjs pilot/mouthing-redirect-toy-1-standard` and open the printed `http://192.168.x.x:8765/` in Safari on the same Wi-Fi (allow Node on private networks in the Windows firewall). It checks the clip itself (tap-to-play, inline, sound, captions, sync), not the app. Inside the app on the phone is still blocked by local mode (localhost-only sign-in); that needs either a local-only trusted LAN origin or the hosted path, each your decision.
+9. Viewing/listening approval and every device row in `docs/MEDIA_QA.md` stay PENDING until actually done.
+
+Sources and review records stay internal to the admin workflow. No public sourcing, trainer-approval or AI-generation label is added; the manifest's internal provenance (`production.kind: ai-generated`, vendor, model, dates) is kept.

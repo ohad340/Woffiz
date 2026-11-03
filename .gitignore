@@ -21,3 +21,9 @@ e2e/.outbox/
 # Local media store (slice 3A): large files of a media bundle, git-ignored.
 .media-local/
 e2e/.media/
+
+# Pilot production working files (real footage, voice recordings, assembled media): never committed
+pilot/*/footage/
+pilot/*/voice/
+pilot/*/video.mp4
+pilot/*/poster.webp

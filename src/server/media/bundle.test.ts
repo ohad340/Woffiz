@@ -84,7 +84,7 @@ describe('bundle validation (automated metadata checks, not a review of the clip
   })
 
   it('rejects a clip that demonstrates other parameter values than the catalog', () => {
-    expect(issuesOf(withManifest((m) => (m.demonstratedParams.stillSeconds = 8))).join()).toMatch(/media demonstrates stillSeconds=8/)
+    expect(issuesOf(withManifest((m) => (m.demonstratedParams.rounds = 4))).join()).toMatch(/media demonstrates rounds=4/)
     expect(issuesOf(withManifest((m) => delete m.demonstratedParams.rounds)).join()).toMatch(/rounds/)
   })
 

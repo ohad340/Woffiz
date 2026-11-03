@@ -85,11 +85,13 @@ describe('rendering from the catalog', () => {
     const content = renderTechniqueContent(mouthing, 'STANDARD', defaultParams(mouthing.variants.STANDARD!), ['rotate-toys'])
     expect(exerciseContentSchema.safeParse(content).success).toBe(true)
     expect(content.steps).toHaveLength(3)
-    expect(content.steps[0]).toContain('3 שניות')
+    expect(content.steps[0]).toBe(mouthing.variants.STANDARD!.steps[0]!.text) // no placeholder, no waiting time in seconds
+    expect(content.steps.join(' ')).not.toMatch(/שניות/)
     expect(content.successCriterion).toContain('3 מפגשי')
     expect(content.preparation.at(-1)).toContain('מחליפים אותם')
     expect(content.easierVariant.title).toBe(mouthing.variants.EASIER!.title)
     expect(content.stopConditions.some((s) => /וטרינר/.test(s))).toBe(true)
+    expect(content.stopConditions.some((s) => /מתרחקים/.test(s))).toBe(true)
   })
 
   it('renders the EASIER variant with the generic fallback and rejects unknown tips or bad parameters', () => {
@@ -101,31 +103,35 @@ describe('rendering from the catalog', () => {
 })
 
 describe('parameters', () => {
-  const std = mouthing.variants.STANDARD!
+  // name-look carries the media-bound parameter (distanceMeters); mouthing has none on purpose (no waiting time in seconds).
+  const std = nameLook.variants.STANDARD!
 
   it('accepts only declared integer parameters inside their range', () => {
     expect(validateTechniqueParams(std, defaultParams(std))).toEqual([])
-    expect(validateTechniqueParams(std, { stillSeconds: 11, rounds: 3, sessionsInRow: 3 })).toHaveLength(1)
-    expect(validateTechniqueParams(std, { stillSeconds: 2.5, rounds: 3, sessionsInRow: 3 })[0]).toMatch(/integer/)
-    expect(validateTechniqueParams(std, { stillSeconds: 3, rounds: 3 })[0]).toMatch(/missing/)
-    expect(validateTechniqueParams(std, { stillSeconds: 3, rounds: 3, sessionsInRow: 3, extra: 1 })[0]).toMatch(/unknown/)
+    expect(validateTechniqueParams(std, { distanceMeters: 4, rounds: 5, sessionsInRow: 3 })).toHaveLength(1)
+    expect(validateTechniqueParams(std, { distanceMeters: 1.5, rounds: 5, sessionsInRow: 3 })[0]).toMatch(/integer/)
+    expect(validateTechniqueParams(std, { distanceMeters: 1, rounds: 5 })[0]).toMatch(/missing/)
+    expect(validateTechniqueParams(std, { distanceMeters: 1, rounds: 5, sessionsInRow: 3, extra: 1 })[0]).toMatch(/unknown/)
   })
 
   it('separates media-neutral parameters from media-bound ones', () => {
     const byId = Object.fromEntries(std.params.map((p) => [p.id, p]))
     expect(isMediaNeutral(byId.rounds!)).toBe(true)
     expect(isMediaNeutral(byId.sessionsInRow!)).toBe(true)
-    expect(isMediaNeutral(byId.stillSeconds!)).toBe(false)
+    expect(isMediaNeutral(byId.distanceMeters!)).toBe(false)
+    // The mouthing method has no numerical waiting time: every parameter is media-neutral.
+    expect(mouthing.variants.STANDARD!.params.every(isMediaNeutral)).toBe(true)
+    expect(mouthing.variants.STANDARD!.params.map((p) => p.id)).toEqual(['rounds', 'sessionsInRow'])
   })
 
   it('binds a clip only to parameter values inside the range the clip still shows', () => {
     const shown = demonstratedParams(std)
-    // The written instructions may use 8 seconds, but the fixed clip shows about 3: no media for that combination.
-    expect(validateTechniqueParams(std, { stillSeconds: 8, rounds: 3, sessionsInRow: 3 })).toEqual([])
-    expect(checkMediaParamCompatibility(std, { stillSeconds: 8, rounds: 3, sessionsInRow: 3 }, shown)[0]).toMatch(/outside the range 2-5/)
-    expect(checkMediaParamCompatibility(std, { stillSeconds: 5, rounds: 6, sessionsInRow: 5 }, shown)).toEqual([])
+    // The written instructions may use 3 meters, but the fixed clip shows about 1: no media for that combination.
+    expect(validateTechniqueParams(std, { distanceMeters: 3, rounds: 5, sessionsInRow: 3 })).toEqual([])
+    expect(checkMediaParamCompatibility(std, { distanceMeters: 3, rounds: 5, sessionsInRow: 3 }, shown)[0]).toMatch(/outside the range 1-2/)
+    expect(checkMediaParamCompatibility(std, { distanceMeters: 2, rounds: 8, sessionsInRow: 5 }, shown)).toEqual([])
     // Matching the technique key and variant is not enough: a clip that demonstrates another value is rejected too.
-    expect(checkMediaParamCompatibility(std, defaultParams(std), { ...shown, stillSeconds: 8 })[0]).toMatch(/media demonstrates stillSeconds=8/)
+    expect(checkMediaParamCompatibility(std, defaultParams(std), { ...shown, distanceMeters: 3 })[0]).toMatch(/media demonstrates distanceMeters=3/)
     expect(checkMediaParamCompatibility(std, defaultParams(std), { ...shown, bogus: 1 })[0]).toMatch(/unknown parameter/)
   })
 })

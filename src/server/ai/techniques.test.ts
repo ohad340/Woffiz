@@ -58,11 +58,13 @@ const issues = (plan: PlanOutput, techniques = [MOUTHING], profile = answers()) 
 
 describe('what the model is offered', () => {
   it('shows only the parameter values the clip still shows, and never asset ids', () => {
-    const [model] = modelTechniques([MOUTHING])
-    const standard = model!.variants.find((v) => v.variant === 'STANDARD')!
-    expect(standard.params.find((p) => p.id === 'stillSeconds')).toMatchObject({ min: 2, max: 5, default: 3 })
+    const [mouthingModel, nameModel] = modelTechniques([MOUTHING, NAME])
+    const standard = mouthingModel!.variants.find((v) => v.variant === 'STANDARD')!
     expect(standard.params.find((p) => p.id === 'rounds')).toMatchObject({ min: 1, max: 6 })
-    expect(JSON.stringify(model)).not.toMatch(/slot:|0000-4000/)
+    // A media-bound parameter is offered only inside the range the clip shows (name-look: 1-3 m written, clip 1-2 m).
+    const nameStandard = nameModel!.variants.find((v) => v.variant === 'STANDARD')!
+    expect(nameStandard.params.find((p) => p.id === 'distanceMeters')).toMatchObject({ min: 1, max: 2, default: 1 })
+    expect(JSON.stringify([mouthingModel, nameModel])).not.toMatch(/slot:|0000-4000/)
   })
 
   it('keeps the wire schema closed and without defaults, with the binding required-but-nullable', () => {
@@ -117,10 +119,18 @@ describe('technique-bound plans', () => {
   })
 
   it('rejects parameters the clip does not show, even when the written instructions would allow them', async () => {
-    const at = (value: number) => choice({ params: [{ id: 'stillSeconds', value }, { id: 'rounds', value: 3 }, { id: 'sessionsInRow', value: 3 }] })
-    expect(issues(await planWith({ technique: at(5) }))).toBe('')
-    expect(issues(await planWith({ technique: at(8) }))).toMatch(/outside the range 2-5 that the clip shows/)
-    expect(issues(await planWith({ technique: choice({ params: [{ id: 'stillSeconds', value: 3 }] }) }))).toMatch(/missing parameter "rounds"/)
+    // name-look's distance is written as 1-3 m but its clip shows 1-2 m.
+    const commands = answers({ difficulties: ['commands'] })
+    const namePlan = await fakePlan(commands, [NAME])
+    const at = (value: number) => {
+      const plan = structuredClone(namePlan)
+      const index = plan.levels.findIndex((l) => l.technique)
+      plan.levels[index] = { ...plan.levels[index]!, technique: { key: 'name-look', version: 1, variant: 'STANDARD', params: [{ id: 'distanceMeters', value }, { id: 'rounds', value: 5 }, { id: 'sessionsInRow', value: 3 }], tipIds: [] } }
+      return validatePlan(plan, { answers: commands, catalog: [], techniques: [NAME] }).join(' | ')
+    }
+    expect(at(2)).toBe('')
+    expect(at(3)).toMatch(/outside the range 1-2 that the clip shows/)
+    expect(issues(await planWith({ technique: choice({ params: [{ id: 'sessionsInRow', value: 3 }] }) }))).toMatch(/missing parameter "rounds"/)
     const dup = choice({ params: [...choice().params, { id: 'rounds', value: 2 }] })
     expect(issues(await planWith({ technique: dup }))).toMatch(/given twice/)
     expect(issues(await planWith({ technique: choice({ tipIds: ['made-up'] }) }))).toMatch(/unknown tip "made-up"/)
