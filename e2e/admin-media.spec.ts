@@ -73,8 +73,8 @@ test.describe('review, publication gate and withdrawal in the browser', () => {
     await expect(page.getByText('פיקסצ׳ר בדיקה סינתטי', { exact: false })).toBeVisible()
     await expect(page.getByText('no TECHNICAL review yet')).toBeVisible()
     await expect(page.getByText('הבדיקות האוטומטיות מוכיחות מבנה')).toBeVisible()
-    // The sources are described for what they are, not as a full verification.
-    await expect(page.getByText('זו לא קריאה מלאה של המקור').first()).toBeVisible()
+    // The sources are described for what they are: read by the assistant, not by the owner (extracted-text), never as the owner's verification.
+    await expect(page.getByText('הבעלים עדיין לא קרא אותו').first()).toBeVisible()
     await expectHealthyPage(page)
 
     // Approving needs every item ticked, so the submit button stays disabled until then.
