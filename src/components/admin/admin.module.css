@@ -65,6 +65,7 @@
 
 .table {
   inline-size: 100%;
+  min-inline-size: 32rem; /* narrow screens scroll the table sideways instead of squeezing it to one word per line */
   border-collapse: collapse;
   font-size: 0.875rem;
 }
@@ -183,4 +184,9 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.tableWrap:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
 }

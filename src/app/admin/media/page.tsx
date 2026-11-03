@@ -48,7 +48,7 @@ export default async function AdminMediaPage() {
               {versions.length === 0 ? (
                 <p className={styles.muted}>אין גרסאות סרטון. קליטת חבילה נעשית בפקודה scripts/media-ingest.ts ויוצרת טיוטה בלבד.</p>
               ) : (
-                <div className={styles.tableWrap}>
+                <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="טבלת הגרסאות (אפשר לגלול הצידה)">
                   <table className={styles.table}>
                     <caption className="visually-hidden">גרסאות הסרטון של {id}</caption>
                     <thead>

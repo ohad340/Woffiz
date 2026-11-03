@@ -14,7 +14,7 @@ import type { TechniqueDefinition } from '../src/domain/techniques/types'
 import { prisma } from '../src/server/db'
 import { isLocalMachine } from '../src/server/local-mode'
 import { CHECKLISTS } from '../src/server/media/gates'
-import { ingestBundle, slotId } from '../src/server/media/ingest'
+import { IngestError, ingestBundle, slotId } from '../src/server/media/ingest'
 import { markReviewed, publish, submitReview, suspendTechnique, withdraw } from '../src/server/media/lifecycle'
 import { mediaStoreFromEnv } from '../src/server/media/store'
 import { nameLookBundleInput } from '../test/media/fixtures'
@@ -35,7 +35,15 @@ const admin = await prisma.user.create({ data: { id: randomUUID(), name: 'E2E ad
 await prisma.techniqueVersionState.updateMany({ where: { techniqueKey: 'name-look' }, data: { suspendedAt: null } })
 
 async function publishFixture(variant: 'STANDARD' | 'EASIER') {
-  const { id } = await ingestBundle(nameLookBundleInput(variant, 1 + Math.floor(Math.random() * 900)), { fixture: true, adminId: admin.id, store: store! })
+  // The shared test database may already hold a clip with the same timing: retry with another random shift.
+  let id = ''
+  for (let attempt = 0; !id; attempt++) {
+    try {
+      id = (await ingestBundle(nameLookBundleInput(variant, 1 + Math.floor(Math.random() * 900), { playable: true }), { fixture: true, adminId: admin.id, store: store! })).id
+    } catch (error) {
+      if (attempt >= 20 || !(error instanceof IngestError) || !/already version/.test(error.message)) throw error
+    }
+  }
   const { bundleFingerprint } = await prisma.mediaVersion.findUniqueOrThrow({ where: { id } })
   for (const kind of ['TECHNICAL', 'CONTENT'] as const) {
     await submitReview(admin.id, id, { kind, decision: 'APPROVED', checklist: Object.fromEntries(CHECKLISTS[kind].map((c) => [c, true])), fingerprint: bundleFingerprint })

@@ -93,7 +93,7 @@ export default async function AdminMediaVersionPage({ params }: { params: Promis
           <h2 id="core-title" className={styles.h2}>
             ליבת ההדגמה לעומת הסרטון
           </h2>
-          <div className={styles.tableWrap}>
+          <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="טבלת הצעדים והקטעים (אפשר לגלול הצידה)">
             <table className={styles.table}>
               <caption className="visually-hidden">הצעדים בקטלוג והקטעים בסרטון</caption>
               <thead>
@@ -121,7 +121,7 @@ export default async function AdminMediaVersionPage({ params }: { params: Promis
           </div>
 
           <h3 className={styles.h3}>פרמטרים</h3>
-          <div className={styles.tableWrap}>
+          <div className={styles.tableWrap} tabIndex={0} role="region" aria-label="טבלת הפרמטרים (אפשר לגלול הצידה)">
             <table className={styles.table}>
               <caption className="visually-hidden">פרמטרים והתאמתם לסרטון</caption>
               <thead>

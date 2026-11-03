@@ -1,6 +1,8 @@
 // SYNTHETIC TEST FIXTURES. The "video" built here is a structurally valid MP4 container with empty sample data:
 // it has the right boxes (tracks, codec names, duration, faststart) but nothing that can be watched or heard.
 // It exists only to exercise metadata validation and must never be published or shown as a real clip.
+// playableMedia() is the one exception: a really decodable SYNTHETIC TEST CLIP for browser playback tests (still not training content).
+import { readFileSync } from 'node:fs'
 import { getTechnique } from '@/domain/techniques/catalog'
 import { fingerprintTechnique } from '@/domain/techniques/fingerprint'
 import { demonstratedParams } from '@/domain/techniques/params'
@@ -124,10 +126,18 @@ export function variantBundleInput(variant: number): BundleInput {
 }
 
 /**
+ * The really decodable SYNTHETIC TEST CLIP (H.264 + AAC, moving shapes, test tones, 20 s, 1280x720; scripts/make-playable-fixture.mjs).
+ * Not training content: no dog, no speech. Its tones sit at the voice lines of nameLookBundleInput.
+ */
+export function playableMedia(): { video: Buffer; poster: Buffer } {
+  return { video: readFileSync(new URL('./playable/clip.mp4', import.meta.url)), poster: readFileSync(new URL('./playable/poster.webp', import.meta.url)) }
+}
+
+/**
  * Synthetic bundle of name-look@1 (both variants). Two audible demonstrator lines: the dog's name and the praise, each
  * inside its step. `shift` moves the boundary between the two steps, so every call can make a distinct bundle.
  */
-export function nameLookBundleInput(variant: 'STANDARD' | 'EASIER', shift = 0): BundleInput {
+export function nameLookBundleInput(variant: 'STANDARD' | 'EASIER', shift = 0, options: { playable?: boolean } = {}): BundleInput {
   const def = getTechnique('name-look', 1)!
   const [first, second] = variant === 'STANDARD' ? ['say-name-once', 'treat-on-look'] : ['reward-glance', 'treat-on-look']
   const lines =
@@ -163,7 +173,8 @@ export function nameLookBundleInput(variant: 'STANDARD' | 'EASIER', shift = 0): 
   }
   const captions = ['WEBVTT', '', ...voice.flatMap((v, i) => [cue(i + 1, v.startMs, v.endMs, v.speaker === 'demo' ? `(המדגים:) ${v.text}` : v.text), ''])].join('\n')
   const transcript = voice.map((v) => ({ type: 'speech', speaker: v.speaker, startMs: v.startMs, text: v.text }))
-  return { manifest, video: buildMp4(), poster: buildWebp(), captions, transcript }
+  const media = options.playable ? playableMedia() : { video: buildMp4(), poster: buildWebp() }
+  return { manifest, ...media, captions, transcript }
 }
 
 /** Synthetic EASIER-variant bundle of mouthing-redirect-toy@1 (offer the toy early, praise chewing). */

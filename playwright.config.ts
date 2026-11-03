@@ -44,7 +44,7 @@ export default defineConfig({
       // Synthetic media fixtures of the admin specs (local store, git-ignored).
       MEDIA_LOCAL_DIR: 'e2e/.media',
       // Short-lived playback links, so the expired-link spec does not have to wait ten minutes.
-      MEDIA_URL_TTL_S: '4',
+      MEDIA_URL_TTL_S: '8',
     },
   },
 })

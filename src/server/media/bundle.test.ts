@@ -155,3 +155,13 @@ describe('the other synthetic fixtures are valid bundles too', () => {
     expect(validateBundle(make()).issues).toEqual([])
   })
 })
+
+describe('the playable synthetic test clip (scripts/make-playable-fixture.mjs)', () => {
+  it('is a valid bundle with a real H.264 + AAC track pair, faststart, 20 s, 1280x720', () => {
+    const input = nameLookBundleInput('STANDARD', 0, { playable: true })
+    expect(validateBundle(input).issues).toEqual([])
+    expect(inspectMp4(input.video)).toMatchObject({ faststart: true, video: { codec: 'avc1', width: 1280, height: 720 }, audio: { codec: 'mp4a' } })
+    expect(input.video.length).toBeGreaterThan(100_000) // real samples, unlike the empty containers of buildMp4()
+    expect(isWebp(input.poster)).toBe(true)
+  })
+})
