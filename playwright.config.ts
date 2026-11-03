@@ -10,9 +10,12 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'list',
   use: { baseURL: `http://localhost:${PORT}`, locale: 'he-IL' },
+  // Tests that change technique-wide state (the published clip and suspension are shared by every account in the test
+  // database) run in ONE project and resize the page themselves: demo-video.spec.ts is left out of the other projects and
+  // single tests carry the @desktop-only tag. Not listed means not run on purpose; nothing is skipped at run time.
   projects: [
-    { name: 'mobile-360', use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 780 } } },
-    { name: 'tablet-768', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } } },
+    { name: 'mobile-360', use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 780 } }, testIgnore: /demo-video.spec.ts/, grepInvert: /@desktop-only/ },
+    { name: 'tablet-768', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } }, testIgnore: /demo-video.spec.ts/, grepInvert: /@desktop-only/ },
     { name: 'desktop-1280', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } } },
   ],
   webServer: {
@@ -41,6 +44,10 @@ export default defineConfig({
       AI_DAILY_CALLS_MAX: '100000',
       AI_RETRY_DELAY_MS: '50',
       EMAIL_OUTBOX_DIR: 'e2e/.outbox',
+      // Synthetic media fixtures of the admin specs (local store, git-ignored).
+      MEDIA_LOCAL_DIR: 'e2e/.media',
+      // Short-lived playback links, so the expired-link spec does not have to wait ten minutes.
+      MEDIA_URL_TTL_S: '8',
     },
   },
 })

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { AppError } from './errors'
-import { requireUserFromRequest, type SessionUser } from './session'
+import { requireAdminFromRequest, requireUserFromRequest, type SessionUser } from './session'
 
 /**
  * CSRF defence for cookie-authenticated JSON endpoints: state-changing requests must be JSON
@@ -24,7 +24,27 @@ export function idempotencyKeyFrom(request: Request): string {
   return key
 }
 
-type Handler<T> = (ctx: { user: SessionUser; body: T; request: Request }) => Promise<unknown>
+/**
+ * Admin POST endpoints: same CSRF defence, but the caller must be an ADMIN in the database right now (anyone else
+ * gets 404). Errors also carry `detail`, the English reason an administrator needs (e.g. which publication gate failed).
+ */
+export async function adminRoute(request: Request, handler: (ctx: { user: SessionUser; body: unknown }) => Promise<unknown>) {
+  const headers = { 'Cache-Control': 'private, no-store' }
+  try {
+    assertSameOrigin(request)
+    const user = await requireAdminFromRequest(request)
+    const result = await handler({ user, body: await request.json().catch(() => undefined) })
+    return NextResponse.json(result, { headers })
+  } catch (error) {
+    if (error instanceof AppError) {
+      return NextResponse.json({ error: error.code, message: error.hebrew, detail: error.message }, { status: error.status, headers })
+    }
+    console.error('[api] unexpected error', error)
+    return NextResponse.json({ error: 'INTERNAL', message: 'משהו השתבש. נסו שוב בעוד רגע.' }, { status: 500, headers })
+  }
+}
+
+type Handler<T> =(ctx: { user: SessionUser; body: T; request: Request }) => Promise<unknown>
 
 /** Auth + CSRF + validation + uniform error mapping for POST endpoints. */
 export function postRoute<S extends z.ZodType>(schema: S, handler: Handler<z.infer<S>>) {

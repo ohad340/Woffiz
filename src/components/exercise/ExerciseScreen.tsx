@@ -3,7 +3,7 @@
 import { ArrowRight, Lightbulb, Lock, Timer, TriangleAlert } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
-import { VideoUnavailable } from '@/components/media/VideoUnavailable'
+import { DemoVideo } from '@/components/media/DemoVideo'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Card'
 import { Sheet } from '@/components/ui/Sheet'
@@ -62,98 +62,134 @@ export function ExerciseScreen({ view }: { view: ExerciseView }) {
         <p className={styles.goal}>{content.goal}</p>
       </header>
 
-      <VideoUnavailable />
-
-      {content.preparation.length > 0 && (
-        <section aria-labelledby="prep-title" className={styles.section}>
-          <h2 id="prep-title" className={styles.sectionTitle}>
-            מה מכינים
+      {view.paused ? (
+        <section aria-labelledby="paused-title" className={styles.criterion}>
+          <h2 id="paused-title" className={styles.criterionTitle}>
+            התרגיל מושהה לבדיקה
           </h2>
-          <ul className={styles.list}>
-            {content.preparation.map((item) => (
-              <li key={item}>{item}</li>
+          <p>
+            {mode === 'review'
+              ? 'השלב הזה הושלם וההתקדמות נשמרה. ההוראות של התרגיל מושהות בינתיים.'
+              : 'ההתקדמות שלכם נשמרה. בזמן ההשהיה אי אפשר לדווח על תרגול או לאשר שליטה בתרגיל הזה.'}
+          </p>
+          {mode === 'current' &&
+            (view.replacementAvailable ? (
+              <AiAdjust
+                endpoint="/api/plan/adapt"
+                planRevision={view.planRevision}
+                label="להחליף את התרגיל"
+                loadingLabel="מחליפים…"
+                doneNote="התרגיל הוחלף. תרגלו את הגרסה החדשה; אישור שליטה נעשה רק עליה."
+                onDone={setAdaptNote}
+              />
+            ) : (
+              <p className={styles.muted}>אין כרגע תרגיל חלופי. אפשר לחזור לכאן בהמשך.</p>
             ))}
-          </ul>
+          {adaptNote && (
+            <p role="status" className={styles.muted}>
+              {adaptNote}
+            </p>
+          )}
         </section>
+      ) : (
+        <DemoVideo demo={view.demo} label={`סרטון הדגמה: ${content.title}`} />
       )}
 
-      <section aria-labelledby="steps-title" className={styles.section}>
-        <h2 id="steps-title" className={styles.sectionTitle}>
-          איך מתרגלים
-        </h2>
-        <ol className={styles.steps}>
-          {content.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </section>
+      {!view.paused && (
+        <>
+          {content.preparation.length > 0 && (
+            <section aria-labelledby="prep-title" className={styles.section}>
+              <h2 id="prep-title" className={styles.sectionTitle}>
+                מה מכינים
+              </h2>
+              <ul className={styles.list}>
+                {content.preparation.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-      <section aria-labelledby="criterion-title" className={styles.criterion}>
-        <h2 id="criterion-title" className={styles.criterionTitle}>
-          מתי זה נחשב שליטה?
-        </h2>
-        <p>{content.successCriterion}</p>
-        <p className={styles.criterionNote}>צפייה בסרטון או דיווח על תרגול לא פותחים את השלב הבא. רק אישור שלכם שהגור שולט בתרגיל.</p>
-      </section>
+          <section aria-labelledby="steps-title" className={styles.section}>
+            <h2 id="steps-title" className={styles.sectionTitle}>
+              איך מתרגלים
+            </h2>
+            <ol className={styles.steps}>
+              {content.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </section>
 
-      {content.stopConditions.length > 0 && (
-        <aside className={styles.stop} aria-label="מתי לעצור">
-          <TriangleAlert size={20} aria-hidden="true" />
-          <ul>
-            {content.stopConditions.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </aside>
+          <section aria-labelledby="criterion-title" className={styles.criterion}>
+            <h2 id="criterion-title" className={styles.criterionTitle}>
+              מתי זה נחשב שליטה?
+            </h2>
+            <p>{content.successCriterion}</p>
+            <p className={styles.criterionNote}>צפייה בסרטון או דיווח על תרגול לא פותחים את השלב הבא. רק אישור שלכם שהגור שולט בתרגיל.</p>
+          </section>
+
+          {content.stopConditions.length > 0 && (
+            <aside className={styles.stop} aria-label="מתי לעצור">
+              <TriangleAlert size={20} aria-hidden="true" />
+              <ul>
+                {content.stopConditions.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </aside>
+          )}
+
+          <div className={styles.easier}>
+            <Button variant="secondary" icon={<Lightbulb size={20} aria-hidden="true" />} onClick={() => setEasierOpen(true)}>
+              צריך להקל?
+            </Button>
+            {mode === 'current' && view.strugglesOnVersion >= 2 && (
+              <AiAdjust
+                endpoint="/api/plan/adapt"
+                planRevision={view.planRevision}
+                label="להתאים את התרגיל"
+                loadingLabel="מתאימים…"
+                doneNote="התרגיל הותאם. תרגלו את הגרסה החדשה; אישור שליטה נעשה רק עליה."
+                onDone={setAdaptNote}
+              />
+            )}
+          </div>
+
+          {adaptNote && (
+            <p role="status" className={styles.muted}>
+              {adaptNote}
+            </p>
+          )}
+
+          <div className={styles.practiceBar}>
+            <Button size="cta" fullWidth onClick={() => setReportOpen(true)}>
+              תרגלנו
+            </Button>
+          </div>
+
+          <Sheet
+            open={easierOpen}
+            title={content.easierVariant.title}
+            onClose={() => setEasierOpen(false)}
+            footer={
+              <Button variant="secondary" fullWidth onClick={() => setEasierOpen(false)}>
+                חזרה לתרגיל
+              </Button>
+            }
+          >
+            <p className={styles.muted}>גרסה מוכנה מראש לתרגיל הזה. היא לא משנה את הקריטריון ולא פותחת שלב.</p>
+            {view.easierDemo?.state === 'ready' && <DemoVideo demo={view.easierDemo} label={`סרטון הדגמה: ${content.easierVariant.title}`} />}
+            <ol className={styles.steps}>
+              {content.easierVariant.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </Sheet>
+
+          <PracticeReport view={view} open={reportOpen} onClose={() => setReportOpen(false)} />
+        </>
       )}
-
-      <div className={styles.easier}>
-        <Button variant="secondary" icon={<Lightbulb size={20} aria-hidden="true" />} onClick={() => setEasierOpen(true)}>
-          צריך להקל?
-        </Button>
-        {mode === 'current' && view.strugglesOnVersion >= 2 && (
-          <AiAdjust
-            endpoint="/api/plan/adapt"
-            planRevision={view.planRevision}
-            label="להתאים את התרגיל"
-            loadingLabel="מתאימים…"
-            doneNote="התרגיל הותאם. תרגלו את הגרסה החדשה; אישור שליטה נעשה רק עליה."
-            onDone={setAdaptNote}
-          />
-        )}
-      </div>
-
-      {adaptNote && (
-        <p role="status" className={styles.muted}>
-          {adaptNote}
-        </p>
-      )}
-
-      <div className={styles.practiceBar}>
-        <Button size="cta" fullWidth onClick={() => setReportOpen(true)}>
-          תרגלנו
-        </Button>
-      </div>
-
-      <Sheet
-        open={easierOpen}
-        title={content.easierVariant.title}
-        onClose={() => setEasierOpen(false)}
-        footer={
-          <Button variant="secondary" fullWidth onClick={() => setEasierOpen(false)}>
-            חזרה לתרגיל
-          </Button>
-        }
-      >
-        <p className={styles.muted}>גרסה מוכנה מראש לתרגיל הזה. היא לא משנה את הקריטריון ולא פותחת שלב.</p>
-        <ol className={styles.steps}>
-          {content.easierVariant.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </Sheet>
-
-      <PracticeReport view={view} open={reportOpen} onClose={() => setReportOpen(false)} />
     </div>
   )
 }
