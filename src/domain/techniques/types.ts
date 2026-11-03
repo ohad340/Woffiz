@@ -63,8 +63,12 @@ export type TechniqueSource = {
   title: string
   /** ISO date the page was fetched and compared with the instructions. */
   verifiedOn: string
-  /** `fetched-summary`: content checked through a tool-produced summary of the page. `owner-read`: the owner read it. */
-  verification: 'fetched-summary' | 'owner-read'
+  /**
+   * `fetched-summary`: checked through a tool-produced summary of the page.
+   * `extracted-text`: the full raw text of the page/PDF was extracted by a tool and read in full by the assistant (not the owner).
+   * `owner-read`: the owner read it.
+   */
+  verification: 'fetched-summary' | 'extracted-text' | 'owner-read'
   /** Step ids, parameter ids or boundary names (e.g. "forbidden") this source supports. */
   supports: string[]
   /** Paraphrase of what the source says that supports those items. */

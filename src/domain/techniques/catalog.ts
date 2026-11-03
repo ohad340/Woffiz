@@ -95,11 +95,31 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
       url: 'https://www.dogstrust.org.uk/dog-advice/unwanted-behaviours/stop-your-dog-chewing-mouthing',
       publisher: 'Dogs Trust',
       title: 'Mouthing, nipping and puppy biting',
-      verifiedOn: '2026-11-02',
-      verification: 'fetched-summary',
+      verifiedOn: '2026-11-03',
+      verification: 'extracted-text',
       supports: ['stay-still', 'offer-toy', 'offer-toy-early', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden'],
       summary:
-        'Offer a suitable toy when the puppy gets ready to play, before mouthing; keep several toys and rotate them; do not pull hands away quickly, stay still and redirect to a toy; praise chewing an appropriate item; overtired puppies mouth more; avoid punishment, raised voices and rough play.',
+        'Quick wins: avoid pulling hands, arms or legs away quickly (it turns into a game); "stay still and redirect your dog when there is a brief pause in the behaviour"; redirect the mouth onto an age-appropriate toy or dog-safe chew kept in several places. Redirecting: spot early play signs and give a toy before mouthing starts; use three or four toys and swap them every couple of days; praise chewing an appropriate item or bringing a toy; ignoring a brought toy can teach that mouthing gets more attention. Avoid raised voices or pushing the dog down. Puppies need 18-20 hours of sleep. NOTE: the page numbered ladder differs: stay still, drop or hide a toy you hold, then turn away with crossed arms, then step away, then reward calm. No seconds, repetitions or mastery criterion are given.',
+    },
+    {
+      url: 'https://www.rspca.org.uk/documents/1494939/7712578/Understand%20mouthing%20and%20play%20biting%20behaviour%20(156%20KB)/a444ab58-8ef0-32e2-6b34-0726fdc652ed',
+      publisher: 'RSPCA (UK)',
+      title: 'Understanding mouthing and play-biting behaviour (guidance for new dog owners, last updated November 2015)',
+      verifiedOn: '2026-11-03',
+      verification: 'extracted-text',
+      supports: ['stay-still', 'offer-toy', 'praise-chewing', 'forbidden'],
+      summary:
+        'Mouthing should always be redirected onto a suitable toy; have a toy in hand when playing; if the puppy touches a hand, body or clothing, keep that part still and distract them at once by offering a toy instead; keep the toy interesting by moving it; do not smile or laugh at the mouthing; no rough games without toys; be consistent. No seconds or repetitions given. It is an adopter leaflet dated 2015.',
+    },
+    {
+      url: 'https://www.dogsforgood.org/media/biwlp0nd/family-dog-programme-puppy-biting.pdf',
+      publisher: 'Dogs for Good',
+      title: 'Puppy biting, nipping, and mouthing (family dog programme handout, 2015)',
+      verifiedOn: '2026-11-03',
+      verification: 'extracted-text',
+      supports: ['stay-still', 'offer-toy', 'praise-chewing', 'rotate-toys', 'enough-sleep', 'forbidden'],
+      summary:
+        'Redirect the puppy onto something suitable to bite and chew; when a puppy holds clothing, quietly stand very still and when they let go redirect them onto something suitable; always use a toy, never hands or arms, for play; praise verbally when the puppy chooses to chew a toy; do not use anything aversive, shout or drag by the scruff; puppies need 18-20 hours of sleep. No seconds or repetitions given. A 2015 handout.',
     },
   ],
 }

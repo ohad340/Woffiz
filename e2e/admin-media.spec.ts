@@ -114,9 +114,8 @@ test.describe('review, publication gate and withdrawal in the browser', () => {
     await expectHealthyPage(page)
   })
 
-  test('suspends and lifts a technique from the list', async ({ page }, testInfo) => {
-    // Suspension is technique-wide shared state: exercise it in one viewport only so parallel projects do not interfere.
-    test.skip(testInfo.project.name !== 'desktop-1280', 'technique-wide state is exercised once')
+  // Suspension is technique-wide shared state: tagged so only the desktop project runs it and parallel projects do not interfere.
+  test('suspends and lifts a technique from the list', { tag: '@desktop-only' }, async ({ page }) => {
     const email = freshEmail()
     await register(page, email)
     seedDraft(email, true)

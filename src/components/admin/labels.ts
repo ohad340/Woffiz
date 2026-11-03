@@ -49,5 +49,6 @@ export const BASIS_LABELS: Record<string, string> = {
 /** The label never overstates what was checked. */
 export const VERIFICATION_LABELS: Record<string, string> = {
   'fetched-summary': 'נבדק דרך סיכום של הדף שנשלף בכלי. זו לא קריאה מלאה של המקור.',
+  'extracted-text': 'הטקסט המלא של המקור חולץ בכלי ונקרא במלואו בידי העוזר, לא בידי הבעלים. הבעלים עדיין לא קרא אותו.',
   'owner-read': 'נקרא במלואו בידי הבעלים',
 }

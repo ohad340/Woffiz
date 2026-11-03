@@ -10,9 +10,12 @@ export default defineConfig({
   fullyParallel: true,
   reporter: 'list',
   use: { baseURL: `http://localhost:${PORT}`, locale: 'he-IL' },
+  // Tests that change technique-wide state (the published clip and suspension are shared by every account in the test
+  // database) run in ONE project and resize the page themselves: demo-video.spec.ts is left out of the other projects and
+  // single tests carry the @desktop-only tag. Not listed means not run on purpose; nothing is skipped at run time.
   projects: [
-    { name: 'mobile-360', use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 780 } } },
-    { name: 'tablet-768', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } } },
+    { name: 'mobile-360', use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 780 } }, testIgnore: /demo-video.spec.ts/, grepInvert: /@desktop-only/ },
+    { name: 'tablet-768', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } }, testIgnore: /demo-video.spec.ts/, grepInvert: /@desktop-only/ },
     { name: 'desktop-1280', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 860 } } },
   ],
   webServer: {

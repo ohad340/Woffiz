@@ -1,0 +1,27 @@
+{
+  "technique": { "key": "mouthing-redirect-toy", "version": 1, "variant": "STANDARD" },
+  "video": { "durationMs": 20000, "width": 1280, "height": 720 },
+  "timeline": [
+    { "kind": "setting", "startMs": 0, "endMs": 3000 },
+    { "kind": "step", "stepId": "stay-still", "startMs": 3000, "endMs": 8000 },
+    { "kind": "step", "stepId": "offer-toy", "startMs": 8000, "endMs": 13000 },
+    { "kind": "step", "stepId": "praise-chewing", "startMs": 13000, "endMs": 17000 },
+    { "kind": "setting", "startMs": 17000, "endMs": 20000 }
+  ],
+  "voice": [
+    { "speaker": "narrator", "startMs": 400, "endMs": 2500, "text": "כשהגור נוגס לנו ביד —" },
+    { "speaker": "narrator", "startMs": 3200, "endMs": 6700, "text": "לא מושכים את היד. נשארים במקום, בלי תנועה." },
+    { "speaker": "narrator", "startMs": 8400, "endMs": 11000, "text": "ומקרבים לפה שלו צעצוע מתאים." },
+    { "speaker": "demo", "startMs": 14000, "endMs": 15200, "text": "יופי, איזה צעצוע!", "stepId": "praise-chewing" },
+    { "speaker": "narrator", "startMs": 17200, "endMs": 19600, "text": "משבחים כשהוא לועס צעצוע — לא ידיים." }
+  ],
+  "visual": [
+    { "startMs": 3000, "text": "[המבוגר לא מזיז את היד בזמן שהגור נוגס בשרוול]" },
+    { "startMs": 8500, "text": "[המבוגר מקרב צעצוע רך לפה של הגור, והגור עובר ללעוס אותו]" }
+  ],
+  "production": {
+    "video": { "vendor": "Google (Gemini API)", "model": "gemini-omni-1.1-flash", "date": "0000-00-00" },
+    "voice": { "vendor": "TBD after audition", "voiceName": "TBD after audition", "date": "0000-00-00" },
+    "assembly": "Silent AI video, Hebrew voice added in post (one synthesized file per line, placed by timeline), local ffmpeg, H.264+AAC, faststart"
+  }
+}

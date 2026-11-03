@@ -8,12 +8,9 @@ import { ORIGIN, expect, freshEmail, onboardViaApi, register, test } from './fix
 // the desktop, captions, link refresh, error handling, layout and that watching writes nothing. They say nothing about
 // iPhone/Android playback, loudness, Hebrew narration or whether any real training clip is correct (docs/MEDIA_QA.md).
 //
-// The technique's state (published clip, suspension) is shared, so these tests run one after another in one project and
-// resize the page themselves to cover 360, 768 and 1280.
+// The technique's state (published clip, suspension) is shared, so these tests run one after another in the desktop project
+// only (playwright.config.ts leaves this file out of the other projects) and resize the page themselves to cover 360, 768 and 1280.
 test.describe.configure({ mode: 'serial' })
-test.beforeEach(({}, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-1280', 'technique-wide state: run once, sizes covered inside the test')
-})
 
 const VIEWPORTS = [
   { width: 360, height: 780 },

@@ -1,6 +1,6 @@
 # Phase 3 plan: reusable AI demonstration videos in exercises
 
-Status: slices **3A (foundations), 3B (admin review, publication, withdrawal, suspension) 3C (technique-bound generation) and 3D (owner playback, suspension guard)** implemented on branch feature/phase-3a-media-foundations; 3E: the automated playback verification is done (docs/MEDIA_QA.md, decision 84); real-device QA, sound and narration review and mandatory coverage are not started. Decisions: docs/DECISIONS.md rows 58-83. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
+Status: slices **3A (foundations), 3B (admin review, publication, withdrawal, suspension) 3C (technique-bound generation) and 3D (owner playback, suspension guard)** implemented on branch feature/phase-3a-media-foundations; 3E: the automated playback verification is done (docs/MEDIA_QA.md, decision 84); real-device QA, sound and narration review and mandatory coverage are not started. The pilot production package is docs/PILOT_MOUTHING_STANDARD.md (decision 85); the Veo 3.1 vendor proposal in section B below is obsolete (shut down 2026-10-22). Decisions: docs/DECISIONS.md rows 58-83. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
 
 
 ## Context

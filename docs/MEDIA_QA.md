@@ -49,6 +49,8 @@ Layout was inspected visually (screenshots at 360/768/1280 of the exercise scree
 | B12 | Firefox and desktop Safari playback | desktop | PENDING |
 | B13 | Real training content review: each demonstrated step matches the rendered instructions; no aversive handling; puppy at ease (the admin CONTENT checklist) | owner, per clip | PENDING |
 
+The production package for the first real pilot (script, prompts, providers and costs, assembly, local and iPhone steps) is `docs/PILOT_MOUTHING_STANDARD.md`. A bare-page phone check of a clip is `scripts/device-check-server.mjs`; it checks the clip only, not the app.
+
 ## C. Not done by design in this step
 
 `MEDIA_REQUIRED` stays off, both real techniques stay DRAFT, nothing is approved or published, and no real clip, paid video or TTS call exists.
