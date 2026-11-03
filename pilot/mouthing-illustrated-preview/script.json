@@ -1,0 +1,70 @@
+{
+  "note": "LOCAL CREATIVE PREVIEW ONLY (DRAFT technique). Illustrated alternative to compare with the ChatGPT version. Not an approved or published technique video. Voice: Microsoft Edge neural voice he-IL-AvriNeural (free Edge read-aloud service via msedge-tts, installed outside the repo; the text of the three lines was sent to Microsoft). Alternative render with he-IL-HilaNeural: *-hila-female.mp4.",
+  "technique": {
+    "key": "mouthing-redirect-toy",
+    "version": 1,
+    "variant": "STANDARD",
+    "status": "DRAFT"
+  },
+  "reference": [
+    "2.png",
+    "1.png",
+    "3.png"
+  ],
+  "referenceNote": "Scene order: mouthing the sleeve, toy offered, chewing. File names are as saved by the owner (1.png is the toy-offered still, 2.png the mouthing one).",
+  "video": {
+    "durationMs": 24000,
+    "width": 1280,
+    "height": 720,
+    "posterMs": 15600
+  },
+  "voice": [
+    {
+      "speaker": "narrator",
+      "startMs": 1000,
+      "endMs": 5137,
+      "text": "כשהגור נוגס ביד או בשרוול, משאירים את היד רפויה ושקטה."
+    },
+    {
+      "speaker": "narrator",
+      "startMs": 8800,
+      "endMs": 12497,
+      "text": "כשהגור עוצר או משחרר, מציעים צעצוע מתאים."
+    },
+    {
+      "speaker": "narrator",
+      "startMs": 14200,
+      "endMs": 17804,
+      "text": "כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע."
+    }
+  ],
+  "captions": [
+    {
+      "step": 1,
+      "startMs": 600,
+      "endMs": 8500,
+      "lines": [
+        "כשהגור נוגס ביד או בשרוול,",
+        "משאירים את היד רפויה ושקטה."
+      ]
+    },
+    {
+      "step": 2,
+      "startMs": 8600,
+      "endMs": 12800,
+      "lines": [
+        "כשהגור עוצר או משחרר,",
+        "מציעים צעצוע מתאים."
+      ]
+    },
+    {
+      "step": 3,
+      "startMs": 12800,
+      "endMs": 23400,
+      "lines": [
+        "כשהגור לועס את הצעצוע,",
+        "משבחים אותו בקול רגוע."
+      ]
+    }
+  ]
+}

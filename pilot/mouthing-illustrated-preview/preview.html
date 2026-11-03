@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Woffiz illustrated preview (live)</title>
+    <style>
+      body { margin: 0; background: #14304f; color: #fff; font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; gap: 8px; }
+      canvas { width: min(100vw, 1280px); height: auto; background: #fff; }
+      label { direction: ltr; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <!-- Live editing view of scene-v2.js (needs reference/*.png and script.json, so serve it over http). Open it from a local server in the repo root (for example: npx http-server . -p 4173)
+         so that script.json and the Heebo font load; without them the scene still plays with a system font and no captions. -->
+    <canvas id="c" width="1280" height="720"></canvas>
+    <label>t = <span id="tv">0.0</span> s <input id="r" type="range" min="0" max="24" step="0.04" value="0" style="width: 520px" /> <button id="p">play / pause</button></label>
+    <script src="scene-v2.js"></script>
+    <script>
+      const ctx = document.getElementById('c').getContext('2d')
+      const r = document.getElementById('r')
+      let playing = true
+      let t0 = performance.now()
+      const font = new FontFace('Heebo', 'url(../../node_modules/@fontsource/heebo/files/heebo-hebrew-800-normal.woff2)', { weight: '800' })
+      Promise.allSettled([font.load().then((f) => document.fonts.add(f)), fetch('script.json').then((x) => x.json()).then(async (s) => {
+        const images = await Promise.all(s.reference.map((f) => new Promise((ok, no) => Object.assign(new Image(), { onload() { ok(this) }, onerror: no, src: 'reference/' + f }))))
+        WoffizScene.init({ ...s, images })
+      })]).then(() => {
+        const tick = (now) => {
+          if (playing) r.value = ((now - t0) / 1000) % 24
+          else t0 = now - r.value * 1000
+          document.getElementById('tv').textContent = Number(r.value).toFixed(1)
+          WoffizScene.draw(ctx, Number(r.value))
+          requestAnimationFrame(tick)
+        }
+        requestAnimationFrame(tick)
+      })
+      document.getElementById('p').onclick = () => (playing = !playing)
+      r.oninput = () => (playing = false)
+    </script>
+  </body>
+</html>
