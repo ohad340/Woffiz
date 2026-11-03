@@ -106,3 +106,7 @@ Signed-in administrators open `/admin/media` (anyone else gets the normal 404 pa
 ### Technique-bound generation (Phase 3, slice 3C)
 
 Generation may bind a level to a reviewed technique that has a published, compatible clip; the server then stores the catalog's instructions instead of model text and rechecks the clip under the technique lock at commit (decisions 74-78). Both real techniques are draft, so **production offers nothing and plans stay free-form**. `MEDIA_REQUIRED` stays off until the published catalog is verified.
+
+### Owner playback and suspension (Phase 3, slice 3D)
+
+Technique-bound exercises show their published demonstration (tap to play, Hebrew captions, transcript); free-form exercises keep the placeholder. A suspended technique pauses the exercise: reports and mastery are refused (`GUIDANCE_PAUSED`) and, on the current level, a replacement is offered only when another approved technique of the same topic is published. Watching never writes anything (decisions 79-83). Real-device playback checks are still pending (3E).

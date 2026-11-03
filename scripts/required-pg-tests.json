@@ -23,7 +23,10 @@
     "media lifecycle on standard PostgreSQL parallel suspensions of one technique create one suspension and one event",
     "media generation on standard PostgreSQL a generation commit waits for an in-flight withdrawal and then refuses the withdrawn clip",
     "media generation on standard PostgreSQL a generation commit waits for an in-flight suspension and then refuses the suspended technique",
-    "media generation on standard PostgreSQL a withdrawal waits for a generation commit that holds the technique row, so the committed binding predates it"
+    "media generation on standard PostgreSQL a withdrawal waits for a generation commit that holds the technique row, so the committed binding predates it",
+    "suspension guard on standard PostgreSQL an attempt waits for an in-flight suspension and is then refused",
+    "suspension guard on standard PostgreSQL a mastery confirmation waits for an in-flight suspension and is then refused",
+    "suspension guard on standard PostgreSQL a suspension racing mastery confirmations either lets one land first or refuses them, never deadlocks"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"

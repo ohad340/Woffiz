@@ -123,6 +123,49 @@ export function variantBundleInput(variant: number): BundleInput {
   return { ...input, manifest }
 }
 
+/**
+ * Synthetic bundle of name-look@1 (both variants). Two audible demonstrator lines: the dog's name and the praise, each
+ * inside its step. `shift` moves the boundary between the two steps, so every call can make a distinct bundle.
+ */
+export function nameLookBundleInput(variant: 'STANDARD' | 'EASIER', shift = 0): BundleInput {
+  const def = getTechnique('name-look', 1)!
+  const [first, second] = variant === 'STANDARD' ? ['say-name-once', 'treat-on-look'] : ['reward-glance', 'treat-on-look']
+  const lines =
+    variant === 'STANDARD'
+      ? { a: 'אומרים את שמו פעם אחת.', firstDemo: 'בוני!', b: 'כשהוא מסתכל, אומרים יופי ונותנים חטיף.', secondDemo: 'יופי!' }
+      : { a: 'כל פעם שהגור מציץ, נותנים חטיף.', firstDemo: 'יופי!', b: 'עכשיו אומרים את שמו פעם אחת.', secondDemo: 'בוני!' }
+  const voice = [
+    { speaker: 'narrator', startMs: 300, endMs: 1800, text: 'עומדים מול הגור בחדר שקט.' },
+    { speaker: 'narrator', startMs: 2200, endMs: 5000, text: lines.a },
+    { speaker: 'demo', startMs: 5400, endMs: 6200, text: lines.firstDemo, stepId: first },
+    { speaker: 'narrator', startMs: 9200 + shift, endMs: 12000 + shift, text: lines.b },
+    { speaker: 'demo', startMs: 12400 + shift, endMs: 13200 + shift, text: lines.secondDemo, stepId: second },
+    { speaker: 'narrator', startMs: 16200, endMs: 19500, text: 'מתגמלים כל מבט.' },
+  ]
+  const manifest = {
+    schema: 'woffiz-media-manifest-v1',
+    technique: { key: def.key, version: def.version, variant, fingerprint: fingerprintTechnique(def) },
+    demonstratedParams: demonstratedParams(def.variants[variant]!),
+    video: { durationMs: 20_000, width: 1280, height: 720, hasAudio: true },
+    timeline: [
+      { kind: 'setting', startMs: 0, endMs: 2000 },
+      { kind: 'step', stepId: first, startMs: 2000, endMs: 9000 + shift },
+      { kind: 'step', stepId: second, startMs: 9000 + shift, endMs: 16000 },
+      { kind: 'setting', startMs: 16000, endMs: 20000 },
+    ],
+    voice,
+    production: {
+      kind: 'ai-generated',
+      video: { vendor: 'test-fixture', model: 'none', date: '2026-11-03' },
+      voice: { vendor: 'test-fixture', voiceName: 'none', date: '2026-11-03' },
+      assembly: 'synthetic container, no media',
+    },
+  }
+  const captions = ['WEBVTT', '', ...voice.flatMap((v, i) => [cue(i + 1, v.startMs, v.endMs, v.speaker === 'demo' ? `(המדגים:) ${v.text}` : v.text), ''])].join('\n')
+  const transcript = voice.map((v) => ({ type: 'speech', speaker: v.speaker, startMs: v.startMs, text: v.text }))
+  return { manifest, video: buildMp4(), poster: buildWebp(), captions, transcript }
+}
+
 /** Synthetic EASIER-variant bundle of mouthing-redirect-toy@1 (offer the toy early, praise chewing). */
 export function easierBundleInput(): BundleInput {
   const def = getTechnique('mouthing-redirect-toy', 1)!

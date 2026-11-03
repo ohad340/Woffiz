@@ -106,3 +106,9 @@ export function choiceFromColumns(row: {
     tipIds: stored.tipIds ?? [],
   }
 }
+
+/** Offered techniques that can replace a paused exercise: same topic, allowed for the puppy's age, with a STANDARD clip. */
+export function eligibleReplacements(offers: readonly OfferedTechnique[], topic: string, answers: { age: string | null }) {
+  const age = answers.age ?? 'unsure'
+  return offers.filter((o) => o.def.topic === topic && (o.def.audience.allowedAges as readonly string[]).includes(age) && o.slots.some((s) => s.variant === 'STANDARD'))
+}

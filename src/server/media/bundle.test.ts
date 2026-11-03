@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMp4, buildWebp, validBundleInput } from '../../../test/media/fixtures'
+import { buildMp4, buildWebp, easierBundleInput, nameLookBundleInput, validBundleInput } from '../../../test/media/fixtures'
 import { validateBundle, type BundleInput } from './bundle'
 import { inspectMp4, isWebp } from './mp4'
 import { parseCaptions } from './vtt'
@@ -143,5 +143,15 @@ describe('bundle validation (automated metadata checks, not a review of the clip
   it('rejects a manifest that is not strictly the expected shape', () => {
     expect(issuesOf(withManifest((m) => (m.extra = 1)))[0]).toMatch(/^manifest:/)
     expect(issuesOf(withManifest((m) => ((m.production as { kind: string }).kind = 'recorded')))[0]).toMatch(/^manifest: production\.kind/)
+  })
+})
+
+describe('the other synthetic fixtures are valid bundles too', () => {
+  it.each([
+    ['mouthing EASIER', () => easierBundleInput()],
+    ['name-look STANDARD', () => nameLookBundleInput('STANDARD')],
+    ['name-look EASIER', () => nameLookBundleInput('EASIER', 300)],
+  ])('%s', (_name, make) => {
+    expect(validateBundle(make()).issues).toEqual([])
   })
 })

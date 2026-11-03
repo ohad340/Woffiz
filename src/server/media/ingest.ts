@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { getTechnique } from '@/domain/techniques/catalog'
+import { TECHNIQUES } from '@/domain/techniques/catalog'
+import type { TechniqueDefinition } from '@/domain/techniques/types'
 import type { Prisma } from '@/generated/prisma/client'
 import { assertAdmin } from '../admin'
 import { prisma } from '../db'
@@ -19,6 +20,8 @@ export type IngestOptions = {
   adminId: string
   store: MediaStore
   env?: Env
+  /** The technique catalog (tests inject definitions; the real catalog by default). */
+  techniques?: readonly TechniqueDefinition[]
 }
 
 export const FIXTURE_VENDOR = 'test-fixture'
@@ -38,7 +41,8 @@ export async function ingestBundle(input: BundleInput, options: IngestOptions) {
   }
   await assertAdmin(options.adminId)
 
-  const { issues, bundle } = validateBundle(input)
+  const techniques = options.techniques ?? TECHNIQUES
+  const { issues, bundle } = validateBundle(input, techniques)
   if (!bundle) throw new IngestError(issues)
   const { manifest } = bundle
   const labelledFixture = manifest.production.video.vendor === FIXTURE_VENDOR || manifest.production.voice.vendor === FIXTURE_VENDOR
@@ -46,7 +50,7 @@ export async function ingestBundle(input: BundleInput, options: IngestOptions) {
     throw new IngestError([options.fixture ? 'a fixture bundle must be labelled with the test-fixture vendor' : 'a bundle labelled test-fixture cannot be ingested as production media'])
   }
 
-  const def = getTechnique(manifest.technique.key, manifest.technique.version)!
+  const def = techniques.find((t) => t.key === manifest.technique.key && t.version === manifest.technique.version)!
   const assetId = slotId(def.key, def.version, manifest.technique.variant)
   const id = randomUUID()
   const keys = mediaKeys(id, options.fixture)

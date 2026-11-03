@@ -19,6 +19,8 @@ export type ErrorCode =
   | 'ADAPT_NOT_NEEDED'
   | 'REVISE_NOT_NEEDED'
   | 'MEDIA_CONFLICT'
+  | 'GUIDANCE_PAUSED'
+  | 'ADAPT_UNAVAILABLE'
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -41,6 +43,8 @@ const STATUS: Record<ErrorCode, number> = {
   ADAPT_NOT_NEEDED: 409,
   REVISE_NOT_NEEDED: 409,
   MEDIA_CONFLICT: 409,
+  GUIDANCE_PAUSED: 409,
+  ADAPT_UNAVAILABLE: 409,
 }
 
 /** Hebrew messages safe to show owners. Never include internals or other users' data. */
@@ -65,6 +69,8 @@ const MESSAGE: Record<ErrorCode, string> = {
   ADAPT_NOT_NEEDED: 'אפשר להתאים את התרגיל אחרי כמה ניסיונות שלא יצאו בעצמאות.',
   REVISE_NOT_NEEDED: 'אין שלבים עתידיים לעדכן.',
   MEDIA_CONFLICT: 'הפעולה אינה אפשרית במצב הנוכחי של הסרטון או של הטכניקה.',
+  GUIDANCE_PAUSED: 'התרגיל הזה מושהה לבדיקה. ההתקדמות שלכם נשמרה.',
+  ADAPT_UNAVAILABLE: 'אין כרגע תרגיל חלופי מאושר. ההתקדמות שלכם נשמרה.',
 }
 
 export class AppError extends Error {

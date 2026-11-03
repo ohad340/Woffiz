@@ -1,6 +1,6 @@
 # Phase 3 plan: reusable AI demonstration videos in exercises
 
-Status: slices **3A (foundations), 3B (admin review, publication, withdrawal, suspension) and 3C (technique-bound generation)** implemented on branch feature/phase-3a-media-foundations; 3D-3E not started. Decisions: docs/DECISIONS.md rows 58-78. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
+Status: slices **3A (foundations), 3B (admin review, publication, withdrawal, suspension) 3C (technique-bound generation) and 3D (owner playback, suspension guard)** implemented on branch feature/phase-3a-media-foundations; 3E (real-device QA, mandatory coverage) not started. Decisions: docs/DECISIONS.md rows 58-83. The text below is the approved plan; where the implementation differs, DECISIONS.md and the code win.
 
 
 ## Context
@@ -264,3 +264,9 @@ Out of scope: per-user or playback-time TTS or AI, HLS, analytics, PWA caching, 
 - Implemented as planned, with one simplification: no free-text "personal note" for bound levels. The model only chooses the technique, parameters within the clip's range and catalog tips; all instruction text of a bound level is the catalog's.
 - The output keeps one level shape (a nullable `technique` next to the existing fields) instead of a union, so the existing provider path and recordings keep working; for a bound level the model's text is discarded.
 - Generation-versus-withdrawal and generation-versus-suspension races are proven on PostgreSQL (required tests). A suspension does not yet pause existing exercises; that guard on attempts and mastery is 3D.
+
+## Reconciliation after implementing 3D (2026-11-03)
+- Implemented as planned. The "none" placeholder keeps its existing development disclosure; "unavailable" and "paused" are new states.
+- Signed links are rendered with the page and refreshed through `GET /api/media/playback` on error (one silent refresh, then an error state with retry). The e2e server uses a 4 s link lifetime to prove expiry and refresh.
+- Fixture clips are structurally valid but not playable, so real playback, audio and caption timing are verified only on real devices with a real clip (3E). E2E proves authorization, captions, transcript, refresh, error and paused states, layout and accessibility, and that watching writes nothing.
+- A test-only second version of a technique (approved copy) stands in for a same-topic replacement in the integration tests; the real catalog has none, so the paused screen says no replacement is available.

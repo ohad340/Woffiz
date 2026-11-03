@@ -42,7 +42,7 @@ export function initialPlanRequest(input: InitialPlanInput): GenerateRequest {
 export function adaptCurrentRequest(input: AdaptCurrentInput): GenerateRequest {
   return {
     kind: 'ADAPT_CURRENT',
-    system: `${POLICY}\nTask adapt_current: the owner struggled with the current exercise (see recentAttempts). Rewrite ONLY this exercise so it is easier to succeed at while keeping the same topic and goal. If currentTechnique is set and the same technique (same key and version) offers an EASIER variant in input.techniques, bind technique to that EASIER variant instead of rewriting the text; otherwise technique is null. Explain briefly in Hebrew what changed.`,
+    system: `${POLICY}\nTask adapt_current: the owner struggled with the current exercise (see recentAttempts). Rewrite ONLY this exercise so it is easier to succeed at while keeping the same topic and goal. If currentTechnique is set and the same technique (same key and version) offers an EASIER variant in input.techniques, bind technique to that EASIER variant instead of rewriting the text. If mediaRequired is true, the current technique is unavailable: bind an offered technique of the same topic (variant STANDARD). Otherwise technique is null. Explain briefly in Hebrew what changed.`,
     input,
     schema: jsonSchemaOf(adaptOutputSchema),
   }

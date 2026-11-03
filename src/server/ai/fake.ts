@@ -131,10 +131,20 @@ export async function fakeGenerate(request: GenerateRequest, timeoutMs = 45_000)
     const easierVariant = current
       ? input.techniques.find((t) => t.key === current.key && t.version === current.version)?.variants.find((v) => v.variant === 'EASIER')
       : undefined
-    const technique: TechniqueChoice | null =
+    const sameTechnique: TechniqueChoice | null =
       current && easierVariant
         ? { key: current.key, version: current.version, variant: 'EASIER', params: easierVariant.params.map((p) => ({ id: p.id, value: p.default })), tipIds: [] }
         : null
+    // A suspended technique must be replaced by another offered technique of the same topic (mediaRequired is set then).
+    const replacement = !sameTechnique && input.mediaRequired
+      ? input.techniques.find((t) => t.topic === input.currentLevel.topic && t.allowedAges.includes(input.profile.age ?? 'unsure'))
+      : undefined
+    const replacementStandard = replacement?.variants.find((v) => v.variant === 'STANDARD')
+    const technique: TechniqueChoice | null =
+      sameTechnique ??
+      (replacement && replacementStandard
+        ? { key: replacement.key, version: replacement.version, variant: 'STANDARD', params: replacementStandard.params.map((p) => ({ id: p.id, value: p.default })), tipIds: [] }
+        : null)
     const output: AdaptOutput = {
       explanation: 'הקלנו את התרגיל: פחות חזרות וצעדים קטנים יותר (הדגמה מקומית).',
       exercise: {

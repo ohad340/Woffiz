@@ -1,4 +1,5 @@
-import { getTechnique } from '@/domain/techniques/catalog'
+import { TECHNIQUES } from '@/domain/techniques/catalog'
+import type { TechniqueDefinition } from '@/domain/techniques/types'
 import { canonicalJson, fingerprintTechnique, sha256 } from '@/domain/techniques/fingerprint'
 import { checkMediaParamCompatibility, demonstratedParams } from '@/domain/techniques/params'
 import { manifestSchema, transcriptSchema, type Manifest, type TranscriptEntry } from './manifest'
@@ -41,13 +42,13 @@ export type BundleResult = { issues: string[]; bundle: ValidatedBundle | null }
  * the picture shows the demonstrated method, or that sound and image really line up: only the owner watching and
  * listening to the clip can establish that.
  */
-export function validateBundle(input: BundleInput): BundleResult {
+export function validateBundle(input: BundleInput, techniques: readonly TechniqueDefinition[] = TECHNIQUES): BundleResult {
   const issues: string[] = []
   const parsed = manifestSchema.safeParse(input.manifest)
   if (!parsed.success) return { issues: parsed.error.issues.map((i) => `manifest: ${i.path.join('.')} ${i.message}`), bundle: null }
   const manifest = parsed.data
 
-  const def = getTechnique(manifest.technique.key, manifest.technique.version)
+  const def = techniques.find((t) => t.key === manifest.technique.key && t.version === manifest.technique.version)
   const variant = def?.variants[manifest.technique.variant]
   if (!def || !variant) {
     return { issues: [`unknown technique ${manifest.technique.key}@${manifest.technique.version} ${manifest.technique.variant}`], bundle: null }

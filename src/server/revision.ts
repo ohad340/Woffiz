@@ -10,7 +10,7 @@ import { hashPayload } from './idempotency'
 import { readAnswers } from './onboarding'
 import { lockPlan } from './progress'
 import { boundColumns, modelTechniques } from './ai/techniques'
-import { choiceFromColumns, loadOfferedTechniques, mediaRequired, recheckBoundTechniques, techniqueDeps, type TechniqueDeps } from './media/offer'
+import { choiceFromColumns, eligibleReplacements, loadOfferedTechniques, mediaRequired, recheckBoundTechniques, techniqueDeps, type TechniqueDeps } from './media/offer'
 
 export type GenerationOptions = { techniqueDeps?: Partial<TechniqueDeps> }
 
@@ -86,8 +86,14 @@ export async function adaptCurrentExercise(
     const struggles = await tx.attempt.count({
       where: { levelId: level.id, exerciseVersionId: exercise.id, mode: 'CURRENT', outcome: { not: 'INDEPENDENT' } },
     })
-    if (struggles < MIN_STRUGGLES) throw new AppError('ADAPT_NOT_NEEDED')
+    // A suspended technique pauses the guidance: the owner may ask for a replacement without the struggle rule.
+    const state = exercise.techniqueKey && exercise.techniqueVersion !== null
+      ? await tx.techniqueVersionState.findUnique({ where: { techniqueKey_techniqueVersion: { techniqueKey: exercise.techniqueKey, techniqueVersion: exercise.techniqueVersion } } })
+      : null
+    const suspended = Boolean(state?.suspendedAt)
+    if (!suspended && struggles < MIN_STRUGGLES) throw new AppError('ADAPT_NOT_NEEDED')
     return {
+      suspended,
       puppyId: puppy.id,
       profile: readAnswers(puppy.profileJson),
       planId: plan.id,
@@ -100,7 +106,12 @@ export async function adaptCurrentExercise(
 
   const catalog = offeredCatalog()
   const techniques = await loadOfferedTechniques(prisma, deps)
-  const required = mediaRequired(deps.env)
+  // After a suspension the replacement MUST be another offered technique of the same topic. When there is none, say so
+  // now: before any job, quota unit or model call (no repeated failing adaptations).
+  if (snapshot.suspended && eligibleReplacements(techniques, snapshot.level.topic, snapshot.profile).length === 0) {
+    throw new AppError('ADAPT_UNAVAILABLE')
+  }
+  const required = snapshot.suspended || mediaRequired(deps.env)
   const job = await startJob({
     kind: 'ADAPT_CURRENT',
     puppyId: snapshot.puppyId,
@@ -119,7 +130,7 @@ export async function adaptCurrentExercise(
       policyVersion: POLICY_VERSION,
       currentLevel: { stableKey: snapshot.level.stableKey, topic: snapshot.level.topic, position: snapshot.level.position },
       currentExercise: contentOf(snapshot.exercise.contentJson),
-      currentTechnique: choiceFromColumns(snapshot.exercise),
+      currentTechnique: snapshot.suspended ? null : choiceFromColumns(snapshot.exercise),
       recentAttempts: snapshot.attempts,
     }),
     parseAdapt({ answers: snapshot.profile, catalog, techniques, mediaRequired: required }, snapshot.level.topic),
