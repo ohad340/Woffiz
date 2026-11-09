@@ -37,7 +37,8 @@ export const MOUTHING_REDIRECT_TOY: TechniqueDefinition = {
       steps: [
         { id: 'stay-still', text: 'כשהגור נוגס ביד או בשרוול, לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה.' },
         { id: 'offer-toy', text: 'ברגע שהגור עוצר לרגע או משחרר, מקרבים לפה שלו צעצוע מתאים.' },
-        { id: 'praise-chewing', text: 'כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע.', speechCue: 'praise' },
+        // The pilot clip carries this praise as narration and caption only (the owner removed the demonstrator line), so no speechCue here; EASIER keeps its cue.
+        { id: 'praise-chewing', text: 'כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע.' },
       ],
       params: [
         neutral('rounds', 'Repetitions per practice session', 'rounds', 1, 6, 3, 1, ROUNDS_NOTE),

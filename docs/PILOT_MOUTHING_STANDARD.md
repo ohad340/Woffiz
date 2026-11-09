@@ -35,7 +35,7 @@ No video-provider API, credentials, prepaid credit or automated video-generation
 |---|---|---|---|
 | 1 | `stay-still` | כשהגור נוגס ביד או בשרוול, לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה. | Supported by all three |
 | 2 | `offer-toy` | ברגע שהגור עוצר לרגע או משחרר, מקרבים לפה שלו צעצוע מתאים. | Supported: Dogs Trust (pause) and Dogs for Good (release). RSPCA differs on timing |
-| 3 | `praise-chewing` (demonstrator says the praise) | כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע. | Praise supported by Dogs Trust and Dogs for Good; "calm voice" is a product default consistent with all three warning against raised voices |
+| 3 | `praise-chewing` (narrated; no demonstrator line, decision 89) | כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע. | Praise supported by Dogs Trust and Dogs for Good; "calm voice" is a product default consistent with all three warning against raised voices |
 
 **No waiting time in seconds.** The previous draft had "about {stillSeconds} seconds" (default 3); no source gives a number, and the toy is tied to the puppy's pause or release, not to a clock. The parameter was removed, so the clip has no media-bound parameter: any length of stillness in the footage matches the instructions as long as the toy comes at the pause or release.
 
@@ -61,7 +61,7 @@ Preparation: צעצוע רך או חפץ לעיסה מתאים לגור; עוד 
 
 Unchanged: EASIER variant (offer the toy early, at the first play signs; Dogs Trust), tips (rotate toys; enough sleep), all age bands (no source gives a limit). Must never appear in the clip: pulling the hand or clothing away, punishment, raised voice, pushing down, rough play or hands as toys, smiling or laughing at the mouthing, ignoring a brought toy.
 
-**Fingerprint:** the corrected draft is `7503f788…` (`npx tsx scripts/technique-fingerprint.ts mouthing-redirect-toy 1`). v1 was never released, so it was edited in place under the existing rules; approval will freeze it in `techniques.lock.json`, and any later change becomes v2.
+**Fingerprint:** the corrected draft is `5fc4f1e9…` (was `7503f788…` before the demonstrator praise line was dropped, decision 89) (`npx tsx scripts/technique-fingerprint.ts mouthing-redirect-toy 1`). v1 was never released, so it was edited in place under the existing rules; approval will freeze it in `techniques.lock.json`, and any later change becomes v2.
 
 **To approve:** reply with "approve as proposed" or the exact changes. I then set `review.status: approved` and add the lock entry in one commit.
 
@@ -74,12 +74,12 @@ Single continuous take preferred; same puppy, handler clothing, toy, room and li
 | 0-2.5 s | setting | Puppy trots to the seated adult, mouth goes to the sweater cuff | Narrator: כשהגור נוגס ביד או בשרוול — |
 | 2.5-8.5 s | `stay-still` | Puppy gently mouths the cuff; the hand stays relaxed and motionless | Narrator: לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה. |
 | 8.5-13 s | `offer-toy` | Puppy pauses or lets go; the other hand slowly brings the rope toy to its mouth; puppy takes it | Narrator: כשהוא עוצר לרגע, מקרבים לפה שלו צעצוע. |
-| 13-17 s | `praise-chewing` | Puppy chews the toy, relaxed; hands still | Demonstrator: יופי, איזה צעצוע! (narrator silent around it) |
+| 13-17 s | `praise-chewing` | Puppy chews the toy, relaxed; hands still | Narrator only: כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע. (the demonstrator line "יופי, איזה צעצוע!" of the first storyboard was removed by the owner, decision 89) |
 | 17-20 s | setting | Calm chewing, puppy settles | Narrator: משבחים בקול רגוע כשהוא לועס צעצוע, לא ידיים. |
 
 Transcript visual notes: [הגור נוגס בשרוול. היד של המבוגר נשארת רפויה ולא זזה] · [הגור משחרר לרגע. היד השנייה מקרבת צעצוע רך, והגור לוקח אותו] · [הגור לועס את הצעצוע, רגוע].
 
-Muted: the captions carry every instruction; the demonstrator's praise is captioned "(המדגים:) …".
+Muted: the captions carry every instruction (no demonstrator line in STANDARD since decision 89; a demonstrator line elsewhere is captioned "(המדגים:) …").
 
 Source of truth: `pilot/mouthing-redirect-toy-1-standard/script.json` (times are **provisional**). `npx tsx scripts/build-pilot-files.ts <folder>` generates `manifest.json`, `captions.vtt` (lines over 42 characters wrap to two) and `transcript.json`.
 
@@ -187,7 +187,7 @@ CONSTRAINTS: exactly one puppy and one adult. Correct anatomy: the puppy has fou
 
 ## 4. Hebrew voice workflow (no charges, no account assumed)
 
-Final lines are in `script.json` (section 2). Narrator and demonstrator must be two clearly different voices; the narrator is silent from at least 0.3 s before to 0.3 s after the demonstrator line (the validator enforces it).
+Final lines are in `script.json` (section 2). Where a clip has a demonstrator line (EASIER and other techniques), narrator and demonstrator must be two clearly different voices and the narrator is silent from at least 0.3 s before to 0.3 s after it (the validator enforces it). The STANDARD clip has narration only (decision 89).
 
 | Option | What is verified | Use |
 |---|---|---|

@@ -136,7 +136,9 @@ const result = await page.evaluate(
     const video = document.createElement('video')
     video.muted = true
     video.preload = 'auto'
-    video.src = '/f/footage'
+    // A blob URL, not the Playwright route: a fulfilled route has no Range support, so Chrome treats the file as unseekable and every
+    // frame comes out as the first one (a frozen clip). A blob is fully seekable.
+    video.src = URL.createObjectURL(await (await fetch('/f/footage')).blob())
     await new Promise((ok, fail) => {
       video.onloadedmetadata = ok
       video.onerror = () => fail(new Error('the footage cannot be decoded by this browser'))

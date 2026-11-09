@@ -63,7 +63,6 @@ export const MOUTHING_VOICE = [
   { speaker: 'narrator', startMs: 200, endMs: 2800, text: 'כשהגור נוגס ביד במשחק' },
   { speaker: 'narrator', startMs: 3200, endMs: 7800, text: 'לא מושכים את היד. נשארים בלי תנועה.' },
   { speaker: 'narrator', startMs: 8200, endMs: 12500, text: 'מקרבים צעצוע מתאים לפה שלו.' },
-  { speaker: 'demo', startMs: 14000, endMs: 15200, text: 'יופי, איזה צעצוע!', stepId: 'praise-chewing' },
   { speaker: 'narrator', startMs: 17200, endMs: 19800, text: 'משבחים כשהוא לועס צעצוע, לא ידיים.' },
 ] as const
 
@@ -98,9 +97,7 @@ export function validBundleInput(): BundleInput {
     '',
     cue(3, 8200, 12500, 'מקרבים צעצוע מתאים לפה שלו.'),
     '',
-    cue(4, 14000, 15200, '(המדגים:) יופי, איזה צעצוע!'),
-    '',
-    cue(5, 17200, 19800, 'משבחים כשהוא לועס צעצוע, לא ידיים.'),
+    cue(4, 17200, 19800, 'משבחים כשהוא לועס צעצוע, לא ידיים.'),
     '',
   ].join('\n')
   const transcript = [
@@ -109,8 +106,7 @@ export function validBundleInput(): BundleInput {
     { type: 'speech', speaker: 'narrator', startMs: 3200, text: MOUTHING_VOICE[1].text },
     { type: 'speech', speaker: 'narrator', startMs: 8200, text: MOUTHING_VOICE[2].text },
     { type: 'visual', startMs: 10000, text: '[הגור עובר ללעוס את הצעצוע]' },
-    { type: 'speech', speaker: 'demo', startMs: 14000, text: MOUTHING_VOICE[3].text },
-    { type: 'speech', speaker: 'narrator', startMs: 17200, text: MOUTHING_VOICE[4].text },
+    { type: 'speech', speaker: 'narrator', startMs: 17200, text: MOUTHING_VOICE[3].text },
   ]
   return { manifest, video: buildMp4(), poster: buildWebp(), captions, transcript }
 }

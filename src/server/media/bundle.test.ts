@@ -14,6 +14,14 @@ function withManifest(edit: (m: Mutable) => void, extra: Partial<BundleInput> = 
   return { ...input, manifest, ...extra }
 }
 
+/** The EASIER fixture: its praise step keeps a speech cue, so it exercises the shared demonstrator-line rules. Voice = [narrator, narrator, demo (11000-12200), narrator]. */
+function easierWithManifest(edit: (m: Mutable) => void, extra: Partial<BundleInput> = {}): BundleInput {
+  const input = easierBundleInput()
+  const manifest = structuredClone(input.manifest) as Mutable
+  edit(manifest)
+  return { ...input, manifest, ...extra }
+}
+
 const issuesOf = (input: BundleInput) => validateBundle(input).issues
 
 describe('MP4 inspection (metadata only)', () => {
@@ -108,20 +116,27 @@ describe('bundle validation (automated metadata checks, not a review of the clip
     expect(issuesOf(withManifest((m) => m.timeline.splice(2, 1))).join()).toMatch(/must equal the core/)
   })
 
-  it('requires an audible demonstrator line at every speech-cue step, at the right moment', () => {
-    expect(issuesOf(withManifest((m) => m.voice.splice(3, 1))).join()).toMatch(/needs exactly one audible demonstrator line .*found 0/)
-    expect(issuesOf(withManifest((m) => ((m.voice[3] as { stepId: string }).stepId = 'offer-toy'))).join()).toMatch(/speech cue/)
-    expect(issuesOf(withManifest((m) => { m.voice[3]!.startMs = 12_800; m.voice[3]!.endMs = 14_000 })).join()).toMatch(/lies outside its step|after the other speaker/)
+  it('requires an audible demonstrator line at every speech-cue step, at the right moment (EASIER keeps the praise cue)', () => {
+    expect(issuesOf(easierBundleInput())).toEqual([])
+    expect(issuesOf(easierWithManifest((m) => m.voice.splice(2, 1))).join()).toMatch(/needs exactly one audible demonstrator line .*found 0/)
+    expect(issuesOf(easierWithManifest((m) => ((m.voice[2] as { stepId: string }).stepId = 'offer-toy-early'))).join()).toMatch(/speech cue/)
+    expect(issuesOf(easierWithManifest((m) => { m.voice[2]!.startMs = 9_800; m.voice[2]!.endMs = 11_000 })).join()).toMatch(/lies outside its step|after the other speaker/)
+  })
+
+  it('STANDARD mouthing: the praise step carries no speech cue, so the clip needs no demonstrator line and a demonstrator line there is refused', () => {
+    expect(issuesOf(validBundleInput())).toEqual([])
+    const withDemo = withManifest((m) => m.voice.splice(3, 0, { speaker: 'demo', startMs: 14_000, endMs: 15_200, text: 'יופי, איזה צעצוע!', stepId: 'praise-chewing' }))
+    expect(issuesOf(withDemo).join()).toMatch(/speech cue/)
   })
 
   it('rejects competing voices and too little space between speakers', () => {
-    expect(issuesOf(withManifest((m) => (m.voice[2]!.endMs = 14_500))).join()).toMatch(/overlaps the previous line/)
-    expect(issuesOf(withManifest((m) => (m.voice[2]!.endMs = 13_800))).join()).toMatch(/less than 300 ms/)
+    expect(issuesOf(easierWithManifest((m) => (m.voice[1]!.endMs = 11_500))).join()).toMatch(/overlaps the previous line/)
+    expect(issuesOf(easierWithManifest((m) => (m.voice[1]!.endMs = 10_800))).join()).toMatch(/less than 300 ms/)
   })
 
   it('rejects captions that do not show a spoken line, or show it out of sync', () => {
-    const v = validBundleInput()
-    expect(issuesOf({ ...v, captions: v.captions.replace(/00:14\.000 --> 00:15\.200/, '00:16.000 --> 00:16.900') }).join()).toMatch(/do not show the demo line/)
+    const v = easierBundleInput()
+    expect(issuesOf({ ...v, captions: v.captions.replace(/00:11\.000 --> 00:12\.200/, '00:13.000 --> 00:13.900') }).join()).toMatch(/do not show the demo line/)
     expect(issuesOf({ ...v, captions: 'WEBVTT\n\n00:01.000 --> 00:03.000\nמשהו אחר\n' }).join()).toMatch(/do not show/)
   })
 

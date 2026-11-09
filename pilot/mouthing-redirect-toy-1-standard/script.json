@@ -1,28 +1,84 @@
 {
-  "technique": { "key": "mouthing-redirect-toy", "version": 1, "variant": "STANDARD" },
-  "video": { "durationMs": 20000, "width": 1280, "height": 720 },
+  "technique": {
+    "key": "mouthing-redirect-toy",
+    "version": 1,
+    "variant": "STANDARD"
+  },
+  "video": {
+    "durationMs": 18333,
+    "width": 1280,
+    "height": 720
+  },
   "timeline": [
-    { "kind": "setting", "startMs": 0, "endMs": 2500 },
-    { "kind": "step", "stepId": "stay-still", "startMs": 2500, "endMs": 8500 },
-    { "kind": "step", "stepId": "offer-toy", "startMs": 8500, "endMs": 13000 },
-    { "kind": "step", "stepId": "praise-chewing", "startMs": 13000, "endMs": 17000 },
-    { "kind": "setting", "startMs": 17000, "endMs": 20000 }
+    {
+      "kind": "step",
+      "stepId": "stay-still",
+      "startMs": 0,
+      "endMs": 1700
+    },
+    {
+      "kind": "setting",
+      "startMs": 1700,
+      "endMs": 3800
+    },
+    {
+      "kind": "step",
+      "stepId": "offer-toy",
+      "startMs": 3800,
+      "endMs": 8500
+    },
+    {
+      "kind": "step",
+      "stepId": "praise-chewing",
+      "startMs": 8500,
+      "endMs": 18333
+    }
   ],
   "voice": [
-    { "speaker": "narrator", "startMs": 300, "endMs": 2300, "text": "כשהגור נוגס ביד או בשרוול —" },
-    { "speaker": "narrator", "startMs": 2800, "endMs": 7600, "text": "לא מושכים ולא מזיזים את היד. משאירים אותה רפויה ושקטה." },
-    { "speaker": "narrator", "startMs": 8700, "endMs": 11900, "text": "כשהוא עוצר לרגע, מקרבים לפה שלו צעצוע." },
-    { "speaker": "demo", "startMs": 14200, "endMs": 15400, "text": "יופי, איזה צעצוע!", "stepId": "praise-chewing" },
-    { "speaker": "narrator", "startMs": 16400, "endMs": 19700, "text": "משבחים בקול רגוע כשהוא לועס צעצוע, לא ידיים." }
+    {
+      "speaker": "narrator",
+      "startMs": 158,
+      "endMs": 4293,
+      "text": "כשהגור נוגס ביד או בשרוול, משאירים את היד רפויה ושקטה."
+    },
+    {
+      "speaker": "narrator",
+      "startMs": 4737,
+      "endMs": 8432,
+      "text": "כשהגור עוצר או משחרר, מציעים צעצוע מתאים."
+    },
+    {
+      "speaker": "narrator",
+      "startMs": 13895,
+      "endMs": 17499,
+      "text": "כשהגור לועס את הצעצוע, משבחים אותו בקול רגוע."
+    }
   ],
   "visual": [
-    { "startMs": 2500, "text": "[הגור נוגס בשרוול. היד של המבוגר נשארת רפויה ולא זזה]" },
-    { "startMs": 8500, "text": "[הגור משחרר לרגע. היד השנייה מקרבת צעצוע רך, והגור לוקח אותו]" },
-    { "startMs": 13000, "text": "[הגור לועס את הצעצוע, רגוע]" }
+    {
+      "startMs": 0,
+      "text": "[הגור נוגס בשרוול והיד נשארת שקטה.]"
+    },
+    {
+      "startMs": 3800,
+      "text": "[לאחר שהגור משחרר, יד מקרבת אליו את צעצוע החבל והוא תופס אותו.]"
+    },
+    {
+      "startMs": 8500,
+      "text": "[הגור יורד לשטיח ולועס את הצעצוע.]"
+    }
   ],
   "production": {
-    "video": { "vendor": "Higgsfield (via ChatGPT)", "model": "TBD: model chosen at generation", "date": "0000-00-00" },
-    "voice": { "vendor": "TBD after the voice decision", "voiceName": "TBD", "date": "0000-00-00" },
-    "assembly": "Footage audio discarded; Hebrew voice lines placed by script.json; scripts/assemble-clip.mjs (Chrome WebCodecs + mp4-muxer), H.264 + AAC, faststart"
+    "video": {
+      "vendor": "Higgsfield (via ChatGPT)",
+      "model": "Seedance 2.0 Mini",
+      "date": "2026-11-09"
+    },
+    "voice": {
+      "vendor": "Microsoft Edge Read Aloud (preview voice, not cleared for distribution)",
+      "voiceName": "he-IL-AvriNeural (narrator)",
+      "date": "2026-11-09"
+    },
+    "assembly": "Silent 864x486 footage (approved 18.33 s cut, not re-timed) cover-fit to 1280x720; voice lines placed by script.json; assemble-clip.mjs, H.264+AAC; native captions"
   }
 }
