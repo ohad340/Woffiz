@@ -5,6 +5,7 @@ import '@fontsource/heebo/700.css'
 import '@fontsource/heebo/800.css'
 import '@/styles/tokens.css'
 import '@/styles/base.css'
+import { ServiceWorkerRegistration } from '@/components/pwa/ServiceWorkerRegistration'
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/app'
 
 export const metadata: Metadata = {
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           דילוג לתוכן הראשי
         </a>
         {children}
+        <ServiceWorkerRegistration />
       </body>
     </html>
   )

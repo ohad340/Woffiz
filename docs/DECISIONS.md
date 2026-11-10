@@ -94,6 +94,14 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 55 | No automatic provider or model fallback. `AI_MODEL_ID` must match the provider (`claude-*` for Claude, `gemini-*` for Gemini) or the service is disabled; a Gemini key never enables Claude | Confirmed (owner) | Haiku 5.5 has no server-side refusal fallback; a refused or failed generation keeps the answers and offers a retry. |
 | 52 | Media in Phase 2 is an isolated test catalog (`MediaAsset`, `AI_TEST_MEDIA`, local and tests only). The catalog offered to the model is empty in production; `mediaId` stays null and the video placeholder remains until Phase 3 | Confirmed | Unknown or incompatible media ids are rejected by validation. |
 
+## Phase 4 — PWA quality — 2026-11-09
+
+Numbered `P4-n` so they cannot collide with numbers added on the Phase 3 branch.
+
+| # | Decision | Status | Notes |
+|---|---|---|---|
+| P4-1 | Offline recovery service worker (`public/sw.js`), registered from the root layout in production builds only (`ServiceWorkerRegistration`, scope `/`, `updateViaCache: 'none'`). Network first for GET page navigations only; every other request (API, RSC, assets, non-GET) is not intercepted. A successful response, including 404 and 5xx, is returned unchanged; only a network failure serves the precached static `public/offline.html` (Hebrew RTL, "ניסיון חוזר" always reloads the current URL). The cache `woffiz-offline-v1` holds that one file and nothing is ever written to it at runtime, so private pages, API responses and user data are never cached. `/sw.js` is served `no-cache, no-store, must-revalidate` with a same-origin CSP (Next.js PWA guide) | Confirmed (owner, slice 1 plan) | Supersedes the "no service worker" part of 6. Rollback: publish a `sw.js` that deletes the `woffiz-*` caches and calls `self.registration.unregister()`. Public shell asset caching, install guidance and update behavior are later Phase 4 slices. |
+
 ## Provider decisions
 
 | Area | Recommendation to evaluate | Status |
