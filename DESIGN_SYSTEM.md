@@ -217,7 +217,12 @@ Verify keyboard flow, screen reader announcements, contrast and reduced motion.
 | Feedback | No option selected | Saving, no duplicate submit | Recorded/unlocked | Retain selection, retry |
 | Review | No completed levels | List skeleton | Completed exercises | Retry list |
 | Profile | Missing optional fields | Saving | Updated | Retain edits |
-| Entire app offline | Cached shell only | No fake progress | Reconnected | Connection notice |
+| Entire app offline | Static offline page when a page cannot load (`public/offline.html`) | No fake progress | Reconnected: "ניסיון חוזר" reloads the same page | Connection notice; the offline page with "ניסיון חוזר" |
+
+Offline page: `public/offline.html` must work with no network, so it is self-contained. It copies the
+token values it uses into its own `:root` (kept identical to `src/styles/tokens.css` by `src/lib/offline-page.test.ts`),
+inlines the Lucide Wi-Fi-off icon, and renders in the Arial fallback of the font stack when Heebo is unavailable.
+It follows the StateMessage layout: warning icon, page title, muted body, one full-width CTA.
 
 ## 15. Remaining design decisions
 Final app name, logo and puppy illustration style remain open.

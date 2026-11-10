@@ -1,17 +1,4 @@
-import AxeBuilder from '@axe-core/playwright'
-import type { Page } from '@playwright/test'
-import { currentLevelId, expect, test } from './fixtures'
-
-async function expectHealthyPage(page: Page) {
-  await expect(page.locator('html')).toHaveAttribute('lang', 'he')
-  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
-  await expect(page.locator('h1').first()).toBeAttached()
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-  expect(overflow).toBeLessThanOrEqual(0)
-  const results = await new AxeBuilder({ page }).analyze()
-  const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
-  expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([])
-}
+import { currentLevelId, expect, expectHealthyPage, test } from './fixtures'
 
 test('welcome page is Hebrew RTL, has no overflow and no serious a11y violations', async ({ page }) => {
   await page.goto('/')

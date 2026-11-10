@@ -146,6 +146,14 @@ Short record of Phase 0 decisions. Proposed = reversible default; Open = needs t
 | 88 | Mouthing content correction (draft v1, never released, edited in place): no waiting time in seconds (`stillSeconds` removed; all its parameters are media-neutral); the toy is offered when the puppy pauses or lets go (Dogs Trust: brief pause; Dogs for Good: after release), not during the mouthing; RSPCA UK (2015) differs ("at once") and is recorded as differing. Dogs for Good is no longer described as supporting redirection during mouthing. New stop condition: step away briefly and come back calmly with a toy. Fingerprint `7503f788…` | Proposed | Stays DRAFT until the owner approves the content. |
 | 89 | Pilot review (owner, 2026-11-09): the demonstrator line "יופי, איזה צעצוע!" is removed from the `mouthing-redirect-toy@1` STANDARD clip. The `praise-chewing` step of STANDARD no longer has `speechCue: 'praise'` (the step and its written guidance stay; EASIER keeps its cue; the shared validator is unchanged). The praise is carried by the narrator and the Hebrew captions. New draft fingerprint `5fc4f1e9…`. The local draft v1 (with the demonstrator line) stays as history; the local `TechniqueVersionState` of the unreleased v1 was re-registered at the new fingerprint (nothing published or bound). | Proposed | Stays DRAFT until the owner approves the content. |
 
+## Phase 4 — PWA quality — 2026-11-09
+
+Numbered `P4-n` so they cannot collide with numbers added on the Phase 3 branch.
+
+| # | Decision | Status | Notes |
+|---|---|---|---|
+| P4-1 | Offline recovery service worker (`public/sw.js`), registered from the root layout in production builds only (`ServiceWorkerRegistration`, scope `/`, `updateViaCache: 'none'`). Network first for GET page navigations only; every other request (API, RSC, assets, non-GET) is not intercepted. A successful response, including 404 and 5xx, is returned unchanged; only a network failure serves the precached static `public/offline.html` (Hebrew RTL, "ניסיון חוזר" always reloads the current URL). The cache `woffiz-offline-v1` holds that one file and nothing is ever written to it at runtime, so private pages, API responses and user data are never cached. `/sw.js` is served `no-cache, no-store, must-revalidate` with a same-origin CSP (Next.js PWA guide) | Confirmed (owner, slice 1 plan) | Supersedes the "no service worker" part of 6. Rollback: publish a `sw.js` that deletes the `woffiz-*` caches and calls `self.registration.unregister()`. Public shell asset caching, install guidance and update behavior are later Phase 4 slices. |
+
 ## Provider decisions
 
 | Area | Recommendation to evaluate | Status |
