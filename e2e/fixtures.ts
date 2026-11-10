@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright'
 import { randomUUID } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -82,6 +83,18 @@ export const test = base.extend<Fixtures>({
 })
 
 export { expect }
+
+/** Hebrew RTL, a heading, no horizontal overflow and no serious or critical axe violations. */
+export async function expectHealthyPage(page: Page) {
+  await expect(page.locator('html')).toHaveAttribute('lang', 'he')
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
+  await expect(page.locator('h1').first()).toBeAttached()
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+  expect(overflow).toBeLessThanOrEqual(0)
+  const results = await new AxeBuilder({ page }).analyze()
+  const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
+  expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([])
+}
 
 /** Id of the current level, read from the home screen's main action. */
 export async function currentLevelId(page: Page) {
