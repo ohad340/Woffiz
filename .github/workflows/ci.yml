@@ -34,7 +34,8 @@ jobs:
 
   postgres:
     name: Integration and e2e on standard PostgreSQL
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-latest (Ubuntu 26.04) apt DNS resolution failed during the Playwright dependency install; revisit when ubuntu-latest is stable.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17

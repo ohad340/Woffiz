@@ -85,7 +85,7 @@ npm run test:e2e                  # Playwright at 360/768/1280: registration + e
 
 Locally, if PGlite drops connections under parallel load (`ConnectionClosed`, `P2028`), restart it (`npm run db:test:stop && npm run db:test:dev`) and use `npm run test:e2e -- --workers=2`. No test ever sends real email.
 
-**Concurrency and row-locking tests run only on standard PostgreSQL.** PGlite serves one connection, so locally they are skipped and reported as skipped, not passed. The GitHub Actions workflow (`.github/workflows/ci.yml`) runs them against a `postgres:17` service with `TEST_DB_KIND=postgres`.
+**Concurrency and row-locking tests run only on standard PostgreSQL.** PGlite serves one connection, so locally they are skipped and reported as skipped, not passed. The GitHub Actions workflow (`.github/workflows/ci.yml`) runs them against a `postgres:17` service with `TEST_DB_KIND=postgres`. That job runs on `ubuntu-24.04` rather than `ubuntu-latest`, because on the Ubuntu 26.04 runner apt could not resolve the Ubuntu package hosts while installing the Playwright browser dependencies.
 
 ## Layout
 
