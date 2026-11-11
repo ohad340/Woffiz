@@ -4,7 +4,9 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_MANAGER
+STATUS: APPROVED
+
+Slice 4.2 approved in final review on 2026-11-11 (see "Architect Review"). The next revision of this file designs slice 4.3 and resets this status to DRAFT.
 
 ## Phase Goal
 Deliver the remaining ROADMAP Phase 4 work (PWA quality and private pilot) as the ordered slices 4.2-4.8 of `team-Yuri/plan.md`.
@@ -148,8 +150,54 @@ Real device (owner, recorded as PENDING until done; none blocks the merge of 4.2
 - Record decision `P4-2` in docs/DECISIONS.md, superseding the gating note of decision 9 and the auto-activation part of P4-1.
 
 ## Architect Review
-ARCHITECT_REVIEW_STATUS: NOT_REVIEWED
+ARCHITECT_REVIEW_STATUS: APPROVED
 
 ### Review Notes
+Final review of slice 4.2, 2026-11-11.
+- Inputs: `team-Yuri/manager-phase4.md` (revision 2, MANAGER_REVIEW_STATUS: APPROVED) and `team-Yuri/dev-phase4.md` (STATUS: COMPLETE).
+- Branch `feature/phase-4-install-update`: code HEAD `6a028f5`, merge `d5218af` (parents `cb4b5df` and `505e2db`), artifact commits `05b9dc9` and `d6b629c`.
+- Checked read-only with git against `origin/main` `505e2db`. Tests were not re-run by the Architect.
+
+**Scope.** `git diff --stat 505e2db 6a028f5` = 26 files, +1321/−19, equal to the Developer evidence. Absent from the diff: `next.config.ts`, `public/offline.html`, `src/app/manifest.ts`, icons, `src/app/layout.tsx`, `src/app/(main)/home/*`, `playwright.config.ts`, `.env.example`, `prisma/`, `e2e/offline.spec.ts`, `e2e/shell.spec.ts`, `e2e/auth.spec.ts`. No test hook in application code (`git grep` for the e2e trigger in `src/` and `public/` is empty).
+
+**Compliance with D1-D11:**
+
+| Decision | Verdict | Evidence |
+|---|---|---|
+| D1 Base and PR #3 | Compliant | Branched from `d8add95` without assuming PR #3. After PR #3 merged (`505e2db`), the branch merged `main` as D1 prescribes for the second merger. One conflict (`ExerciseScreen.tsx`) resolved to `main` plus a marker. The three overlapping docs are insertions only. |
+| D2 Server gate | Compliant | `devPreviewsEnabled(env)` = `NODE_ENV` development or test, or `isLocalMachine(env)`, in `src/server/local-mode.ts`. Matrix tested, including `APP_ENV=local` with an HTTPS URL and look-alike hosts. Production-build check `test:previews-gate`: A-C blocked, D shown. |
+| D3 Single choke point | Compliant | `parseDevState(value, enabled)` has a required argument (`@ts-expect-error` proof). The static test pins the three callers, and its negative check is recorded. |
+| D4 Owner-activated update | Compliant | `skipWaiting()` removed from `install`. The `message` handler accepts only a same-origin `{ type: 'SKIP_WAITING' }`. A first install activates by browser semantics (no active worker), and `activate` keeps `clients.claim()`. One reload after a requested `controllerchange`, with a once-guard shared by the 10 s fallback. |
+| D5 Update meaning and checks | Compliant | `// sw-version:` marker; README documents bumping it. Throttled `registration.update()` at most hourly while visible, with rejections swallowed. |
+| D6 Rollback path | Compliant | The `sw.js` header and README state that a rollback worker calls `skipWaiting()` itself, purges `woffiz-*` and unregisters. |
+| D7 Offline fallback preserved | Compliant | `activate`, `fetch`, `CACHE` (`woffiz-offline-v1`) and `OFFLINE_URL` unchanged; `offline.html` and headers untouched. Unchanged `offline.spec.ts` green at three widths, including under the new worker. |
+| D8 Install cases | Compliant | Pure `detectInstallCase` (installed, prompt, ios, other) with iPadOS desktop-class detection. Honest copy and no identical-prompt promise. The UA chooses text only. |
+| D9 Placement | Compliant | Card on `/puppy` only (`#install`). `/home` untouched. No `localStorage`, `sessionStorage` or new cache. |
+| D10 Banner | Compliant (acknowledged markup deviation accepted) | `role="status"` sits on the visible banner element, inside an always-present `aria-live="polite"` wrapper. This satisfies D10's "non-modal banner with `role="status"` (polite)" literally and avoids an empty status element on every page, which broke the unchanged `auth.spec.ts`. No focus move, 48 px buttons, safe area, no animation, reduced motion. Placement above the exercise practice bar via a presentation-only `data-practice-bar` attribute (owner-approved, revision 2). That attribute does not touch progression logic. |
+| D11 No server, data, env or dependency change | Compliant | No API, schema, migration or environment variable. `package.json` adds only the `test:previews-gate` script; `package-lock.json` equals `main`. |
+
+**Evidence assessment.**
+- `npm run check` is green on a clean checkout.
+- Unit: 216 tests, 64 of them new.
+- Integration and e2e pass locally only with documented PGlite reruns (no test failed twice). This is accepted as local evidence; the authoritative single run is CI on standard PostgreSQL (C1).
+- The Playwright limitation on service-worker script interception is documented. The fallback (controller unit tests, a script-URL e2e trigger in test code only, and a recorded two-build manual check of the real `sw-version` trigger) meets the arch requirement.
+- Functional testability is demonstrated (install cases, update flow, gated previews).
+
+**Non-blocking observations:**
+1. A `status` element inside a polite live region may be announced twice by some screen readers. Covered by real-device item 7 (VoiceOver).
+2. `preventDefault()` on `beforeinstallprompt` on every page suppresses Chromium's mini-infobar, so installation runs through `/puppy` or the browser menu. This is recorded in `P4-2`; re-evaluate with the usability sessions (4.8).
+3. The first production deployment of 4.2 shows the update banner once to existing P4-1 installs, as accepted in D4. From then on, a deployment reaches installed clients' workers only if `sw-version` is bumped (README).
+4. In this shared working copy, `npm run check` fails at lint on untracked files (`.claude/worktrees/` leftover, `pilot/` scripts). Not a code defect; owner housekeeping.
+
+**Merge conditions:**
+- **C1 (open):** CI green in a single run on standard PostgreSQL ("Integration and e2e on standard PostgreSQL" including `assert-required-tests`, and the e2e job). The branch is not on the remote yet, and CI runs on push and pull request, so pushing it and opening the PR is an owner-approved step. A CI failure reopens this review.
+- **C2 (resolved by the owner, 2026-11-11):** the Team Yuri artifacts stay in the PR. This review changes `arch-phase4.md` after `05b9dc9`, so the updated file needs its own commit before the PR is opened.
+- **C3 (open, does not block this merge):** all real-device and deployed-build items stay PENDING and block the pilot release (4.8).
+
+**Next slice (Architect decision): 4.3, public shell asset caching**, as ordered in the approved plan.
+- Rationale: it extends the same service worker, and it relies on the `sw-version` update mechanism that 4.2 delivers.
+- Its design starts only after 4.2 is merged to `main`, because both change `public/sw.js`.
+- Slices 4.4 (account deletion) and 4.5 (allowlist) follow. Neither is needed sooner, because opening the pilot is already gated by the verified sender domain and by 4.8.
 
 ### Required Corrections
+None.
