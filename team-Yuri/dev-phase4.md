@@ -292,6 +292,40 @@ PR: https://github.com/ohad340/Woffiz/pull/5 (draft, `feature/phase-4-install-up
 
 No e2e test failed or was retried in either run, which is the single clean run on standard PostgreSQL that the local PGlite runs could not give.
 
+## Media-generation test correction (manager revision 4, "C1 reopened")
+
+Commit `f38ed53`, test-only: `test/integration/media-generation.test.ts` (+173/−4) and `scripts/required-pg-tests.json` (+2, the two new PostgreSQL-only titles). `git diff --stat f38ed53~1 f38ed53 -- src` is empty: no production code changed. No 4.2 file is involved.
+
+**Diagnosis: confirmed as a test flaw, by construction; the original CI failure itself was not reproduced.**
+- Free-form ordering, constructed: the new test "a generation that starts after the withdrawal committed saves a free-form plan with no binding" withdraws first and then generates. The generation succeeds, the job is `SUCCEEDED`, no exercise version is bound, and `finishedAt >= withdrawnAt`. That is exactly the state the old assertion (`finishedAt <= withdrawnAt` on any success) rejected. It passed in every run below.
+- Bound ordering, forced: in the named test a technique-bound plan commits while the withdrawal is observed waiting, and the withdrawal completes afterwards. In no run did a bound plan commit after a withdrawal, and in no run did a withdrawal fail to wait. **No production defect was found.**
+- Not shown: which ordering occurred in the failing CI run `43101057240`; its log does not contain the saved plan.
+
+**Synchronization mechanism (test-only).** The test opens its own transaction and takes `LOCK TABLE "Plan" IN SHARE MODE`. Reads pass, but the generation commit's first plan `INSERT` waits. In `completeOnboarding` that `INSERT` comes after `recheckBoundTechniques`, so a commit that waits there already holds the technique row `FOR SHARE`. The lock is taken by the test on a test connection; `src/` has no hook and was not touched. No sleep orders anything: the only pause spaces the polls of `pg_stat_activity`.
+
+What the named test does and observes in the database (`pg_stat_activity` with `pg_blocking_pids`):
+1. Generation starts with the clip published. The test waits until a backend is waiting for a lock, blocked by the test's lock holder, with an `INSERT INTO "Plan"` query. It then checks the clip is still `PUBLISHED` and no plan exists.
+2. Only then the withdrawal starts. The test waits until another backend is waiting on `"TechniqueVersionState" … FOR UPDATE`, blocked by the generation commit's backend. Neither promise has settled and the clip is still `PUBLISHED`.
+3. The test releases its lock (in `finally`, so a failed expectation cannot leave anything locked).
+
+Assertions after that: generation fulfilled (`created: true`) and settled before the withdrawal; job `SUCCEEDED`; exactly one bound exercise version with `techniqueKey`, `techniqueVersion`, `techniqueVariant`, slot `mediaId`, parameters and the catalog rendering; the media version `WITHDRAWN` with `withdrawnAt`, `withdrawnById`, reason and note; `finishedAt <= withdrawnAt`; the stored exercises identical before and after (history not rewritten).
+
+The unsynchronized race is kept as its own test ("a withdrawal racing a generation leaves a refused candidate, a binding that predates it, or a free-form plan") and decides by what was saved: refused candidate (nothing stored, unit refunded), bound plan (timestamp order asserted), or free-form plan (no binding, no timestamp comparison). The two existing "generation commit waits for an in-flight withdrawal / suspension" tests are unchanged, and no existing title in `scripts/required-pg-tests.json` changed.
+
+**Runs on standard PostgreSQL (not PGlite).** No standard PostgreSQL was installed on this machine, so with the owner's approval a throwaway PostgreSQL 17.11 server (`embedded-postgres` npm package, real PostgreSQL binaries) was started from the session scratchpad on `127.0.0.1:54329`, outside the repository, and stopped and deleted afterwards. Nothing was added to the project. `TEST_DB_KIND=postgres`; `DATABASE_POOL_MAX` unset as in CI.
+
+| Run | Result |
+|---|---|
+| `npm run test:integration -- test/integration/media-generation.test.ts` | 14 passed (14) |
+| The PostgreSQL-only group (`-t "media generation on standard PostgreSQL"`, 5 tests, including the named test), **25 consecutive runs** | 25 of 25 green; 125 test executions, 0 failures |
+| Full `npm run test:integration` with the JSON reporter | 179 passed, 3 skipped (182); 13 files passed, 2 skipped |
+
+- A first attempt failed for an environment reason, not a code one: the local `.env` sets `DATABASE_POOL_MAX="1"` for PGlite, and with one connection even the two unchanged race tests fail with `P2028`. With the variable unset, as in CI, everything passed.
+- `node scripts/assert-required-tests.mjs` on that local report listed only the two `ci-guard.test.ts` cases as skipped; they run only when `CI=true`. Every other required title, including the two new ones, executed and passed. The authoritative check is CI.
+- How often the unsynchronized race took each of its three branches was not measured.
+
+CI on the pushed head is recorded in the next section once the runs finish.
+
 ## Known Issues / Limitations
 - Playwright cannot serve a changed `sw.js` body to the browser's worker update check (spike above). The automated flow uses a script-URL trigger; the real `sw-version` trigger was verified manually with two builds.
 - Local PGlite is unstable under load: it dropped connections during the integration suite and produced protocol errors during e2e even with `--workers=2`. Every affected test passed on a rerun after restarting the test database. A fully clean single run needs standard PostgreSQL (CI).
