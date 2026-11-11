@@ -4,7 +4,7 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_DEVELOPER
+STATUS: APPROVED
 
 Scope of this revision: **slice 4.2 only** (install guidance, owner-activated update, production gate for `?state=` previews). Slices 4.3-4.8 are not designed here.
 
@@ -168,7 +168,7 @@ Rules:
 
 `src/components/pwa/UpdatePrompt.tsx` (+ `UpdatePrompt.module.css`):
 - Status comes from `useSyncExternalStore(controller.subscribe, controller.getStatus, () => 'idle')`.
-- Markup: an always-present wrapper `<div role="status" aria-live="polite">` (the same pattern as `OfflineNotice`). When the status is `available` or `activating`, it contains a surface with:
+- Markup (amended at Manager review, commit `6a028f5`): an always-present live-region wrapper `<div aria-live="polite">` with **no role**. When the status is `available` or `activating`, it contains the banner surface carrying `role="status"`, which matches arch D10 ("a non-modal banner with `role="status"`"). An empty `role="status"` mounted on every page collided with each page's own status messages (it broke `e2e/auth.spec.ts`). The banner surface contains:
   - text: **"גרסה חדשה של Woffiz מוכנה. העדכון יטען מחדש את העמוד."**
   - `<Button variant="primary" loading={status === 'activating'} loadingLabel="מעדכנים…">לעדכן עכשיו</Button>`
   - `<Button variant="ghost">אחר כך</Button>`
@@ -324,8 +324,33 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 No blocking open question remains for implementation.
 
 ## Manager Review
-MANAGER_REVIEW_STATUS: NOT_REVIEWED
+MANAGER_REVIEW_STATUS: APPROVED
 
 ### Review Notes
+Reviewed 2026-11-11: `team-Yuri/dev-phase4.md` on `feature/phase-4-install-update` (HEAD `05b9dc9`, code HEAD `6a028f5`, merge `d5218af`). The Developer review checklist passes on every item. The claims below were re-checked independently with git (read-only); test runs were not repeated.
+
+1. **M0b merge and final diff.**
+   - Verified: `origin/main` = `505e2db`; `d5218af` has parents `cb4b5df` (checkpoint, parent `d8add95`) and `505e2db`; `git merge-base HEAD origin/main` = `505e2db`. The branch is not on the remote (nothing pushed).
+   - Nothing lost: `git diff cb4b5df d5218af` over the 4.2-only files is empty.
+   - `git diff --stat origin/main...6a028f5` = 26 files, +1321/−19, matching the evidence. None of these files is in that diff: `playwright.config.ts`, `.env.example`, `next.config.ts`, `public/offline.html`, the manifest, `layout.tsx`, the icons, `offline/shell/auth.spec.ts`, `eslint.config.mjs`, `package-lock.json` or `prisma/`.
+   - `ExerciseScreen.tsx` changes by the marker and its comment only. `package.json` adds only `test:previews-gate`. The three docs have 0 removed lines against `main`.
+   - **Accepted.**
+2. **Deviation in the M5 wrapper markup (`6a028f5`).** The deviation is justified and minimal: one component file, and no test was changed to accommodate it. The always-present polite live region is kept, and `role="status"` on the visible banner matches arch D10 literally. **Accepted;** M5 is amended above. Residual risk: a status element inside a polite live region may be announced twice by some screen readers. Real-device item 7 (VoiceOver) covers this and stays PENDING.
+3. **Integration and e2e reruns.**
+   - Integration: 11 failures in the last two files, all "connection closed" within about 100 ms after a 540 s run. After restarting the test database, the same files gave 11/11 PASS. Combined: 151 passed, 29 skipped (PostgreSQL-only), 0 failed.
+   - E2E (`--workers=2`): 9 first-run failures, none in a 4.2 area, with PostgreSQL protocol errors (`08P01`/`P2039`) in the server log. `--last-failed --workers=1` passed 9/9; 210/210 combined, and no test failed twice.
+   - All 4.2-relevant suites (`offline`, `shell`, `pwa`, `auth`) passed in the first run at all three widths. 4.2 changes no server, database or progression code, and the PGlite instability is a known, documented limitation (README).
+   - **Accepted for local evidence, with merge condition C1.**
+4. Other points checked:
+   - The M2 case D expectation was adjusted within M2's latitude (the body text is the signal); the A-C blocking proofs are intact.
+   - The M8 spike failed, as M8 anticipated. The arch fallback plus a test-only script-URL trigger (test code only; no hook in app code) and a recorded two-build manual check of the real `sw-version` trigger exceed the fallback minimum.
+   - `npm run check` is green on a clean checkout. The local lint failure comes only from untracked files.
+   - `MEDIA_REQUIRED` stays off and video production stays paused; nothing was pushed or deployed.
+
+**Merge conditions (owner and orchestrator; no Developer correction required):**
+- C1. Before merging to `main`, the PR's CI must be green on standard PostgreSQL in a single run: the CI job "Integration and e2e on standard PostgreSQL", including `assert-required-tests` for the 29 PostgreSQL-only tests, and the e2e job. A failure there reopens this review.
+- C2. Commit `05b9dc9` commits the Team Yuri artifacts (`PHASE.md`, `plan.md`, `arch-phase4.md`, `manager-phase4.md`, `dev-phase4.md`). M0 left that to the owner, and `dev-phase4.md` records no decision. The owner decides whether that commit stays in the PR. This manager document has changed since `05b9dc9` (this review), so if the commit stays, it needs updating. **Resolved 2026-11-11: the owner decided to keep the artifacts in the PR. This reviewed manager document is committed on top as its own commit.**
+- C3. Real-device and deployed-build items stay PENDING. They block the pilot release (4.8), not this merge.
 
 ### Required Corrections
+None.
