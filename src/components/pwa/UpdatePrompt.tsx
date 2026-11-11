@@ -30,10 +30,12 @@ export function UpdatePrompt({ controller }: { controller: UpdateController }) {
     }
   }, [visible])
 
+  // The live region is always in the DOM so the banner is announced when it appears. It carries no role while it is
+  // empty: this component mounts on every page, and an empty role="status" would compete with each page's own status.
   return (
-    <div role="status" aria-live="polite">
+    <div aria-live="polite">
       {visible && (
-        <div ref={surface} className={styles.banner} data-update-banner="">
+        <div ref={surface} role="status" className={styles.banner} data-update-banner="">
           <p className={styles.text}>גרסה חדשה של Woffiz מוכנה. העדכון יטען מחדש את העמוד.</p>
           <div className={styles.actions}>
             <Button variant="primary" loading={status === 'activating'} loadingLabel="מעדכנים…" onClick={() => controller.applyUpdate()}>
