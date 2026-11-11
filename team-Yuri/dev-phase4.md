@@ -270,6 +270,28 @@ Android Chrome: PENDING — the native install button appears and installs; the 
 Desktop Chrome/Edge: PENDING — the install button works. Desktop Firefox and Safari: PENDING — honest instructions or the not-supported message.
 Deployed build (after an owner-approved deployment only): PENDING — HTTPS, a valid manifest (DevTools Application panel), icons, and `?state=` ignored on the production URL.
 
+## CI on standard PostgreSQL (merge condition C1; manager revision 3)
+
+PR: https://github.com/ohad340/Woffiz/pull/5 (draft, `feature/phase-4-install-update` → `main`).
+
+**Before the runner pin, head `f24da02` (`ubuntu-latest` = Ubuntu 26.04):** runs `43054638786` (push) and `43054685522` (pull_request) failed in job "Integration and e2e on standard PostgreSQL" at `npx playwright install --with-deps chromium`: apt could not resolve `azure.archive.ubuntu.com`, `archive.ubuntu.com` and `security.ubuntu.com` ("Temporary failure resolving"), so "End-to-end tests" was skipped. Integration tests and `assert-required-tests` passed in both. A second attempt of `43054685522` failed at the same step.
+
+**Runner pin, commit `0ce5973`** (only `.github/workflows/ci.yml` and `README.md`): the `postgres` job runs on `ubuntu-24.04` with a one-line comment; the `quality` job stays on `ubuntu-latest`. No test, assertion or step changed; no `continue-on-error`, retry or skip. Checked first: the Playwright documentation (System requirements) lists Ubuntu 22.04 / 24.04 / 26.04 on x86-64 and arm64, and the installed `playwright-core` 1.64.1 contains the `ubuntu24.04-x64` platform.
+
+**Result on head `0ce5973`: both runs green, each in a single attempt (attempt 1).**
+
+| Step | Run `43063382772` (push) | Run `43063386873` (pull_request) |
+|---|---|---|
+| Job "Typecheck, lint, unit tests, build" | success (job `130671692952`) | success (job `130671708560`) |
+| Job "Integration and e2e on standard PostgreSQL" | success (job `130671692378`) | success (job `130671709024`) |
+| Runner image of that job | `ubuntu-24.04` | `ubuntu-24.04` (version 20261101.360.1) |
+| Integration tests (includes concurrency / row locking) | success: 179 passed, 1 skipped (180) | success: 179 passed, 1 skipped (`ai-live.test.ts`) (180) |
+| Require the PostgreSQL-only tests to have executed and passed | success | success: "All 26 required PostgreSQL tests executed and passed (180 tests in the report)." |
+| `npx playwright install --with-deps chromium` | success | success |
+| End-to-end tests | success: 210 passed (4.0 min), 2 workers | success: 210 passed (3.8 min), 2 workers |
+
+No e2e test failed or was retried in either run, which is the single clean run on standard PostgreSQL that the local PGlite runs could not give.
+
 ## Known Issues / Limitations
 - Playwright cannot serve a changed `sw.js` body to the browser's worker update check (spike above). The automated flow uses a script-URL trigger; the real `sw-version` trigger was verified manually with two builds.
 - Local PGlite is unstable under load: it dropped connections during the integration suite and produced protocol errors during e2e even with `--workers=2`. Every affected test passed on a rerun after restarting the test database. A fully clean single run needs standard PostgreSQL (CI).
