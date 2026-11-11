@@ -298,7 +298,7 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 ## Out of Scope
 - Slices 4.3-4.8: asset caching, account deletion, pilot allowlist, metrics and alerts, drills and measurements, device matrix and usability.
 - Push, background or periodic sync, manifest screenshots or shortcuts, a custom iOS install UI beyond instructions, build-version polling, a home-screen install hint, dismissal persistence.
-- Any change to `public/offline.html`, `src/app/manifest.ts`, icons, `next.config.ts`, `playwright.config.ts`, `.env.example`, CI workflow, server APIs, database schema or environment variables.
+- Any change to `public/offline.html`, `src/app/manifest.ts`, icons, `next.config.ts`, `playwright.config.ts`, `.env.example`, CI workflow (except the runner pin approved in revision 3), server APIs, database schema or environment variables.
 - The DECISIONS provider-table correction (deferred until PR #3 merges).
 - Deployment, merge to `main`, production changes or real-device runs (the owner does these after approval). The M0b merge of `main` into the 4.2 branch is in scope.
 - Video production, media ingest or publication, technique status changes and the `MEDIA_REQUIRED` switch.
@@ -354,3 +354,24 @@ Reviewed 2026-11-11: `team-Yuri/dev-phase4.md` on `feature/phase-4-install-updat
 
 ### Required Corrections
 None.
+
+### Scope amendment (revision 3, 2026-11-11): CI runner pin for PR #5
+Approved by the owner and the Manager. This is a narrowly scoped CI fix so that merge condition C1 can be evaluated. It is not a product change.
+
+**Facts (CI runs `43054638786` push and `43054685522` pull_request, both on `f24da02`):** job "Typecheck, lint, unit tests, build" passed. In job "Integration and e2e on standard PostgreSQL", `npm ci`, the integration tests and `assert-required-tests` (the PostgreSQL-only tests) **passed**. Then `npx playwright install --with-deps chromium` **failed** and "End-to-end tests" was **skipped**. The job uses `runs-on: ubuntu-latest`, which resolved to Ubuntu 26.04 (`resolute`). `apt` repeatedly failed with "Temporary failure resolving" for `azure.archive.ubuntu.com`, `archive.ubuntu.com` and `security.ubuntu.com`, while `packages.microsoft.com` resolved. The failure is in runner infrastructure, before any 4.2 e2e code runs.
+
+**Approved change (Developer, a separate commit):**
+- Before editing, verify against Playwright's official documentation (system requirements and release notes for 1.64.1) that Ubuntu 24.04 is a supported platform for Chromium and `install --with-deps`. Record the source and finding in `dev-phase4.md`. If it is not supported, stop and report.
+- In `.github/workflows/ci.yml`, change **only** the `postgres` job: `runs-on: ubuntu-latest` → `runs-on: ubuntu-24.04`, with a one-line YAML comment giving the reason (Ubuntu 26.04 apt DNS failures during the Playwright dependency install; revisit when `ubuntu-latest` is stable). The `quality` job stays on `ubuntu-latest`.
+- Keep everything else byte-for-byte: services, environment, every step, `npx playwright install --with-deps chromium`, the integration and required-tests steps, `npm run test:e2e`, and the report upload. No `continue-on-error`, no retries or `|| true`, no skipped or filtered tests, no changed assertions, no timeout changes, no cache shortcuts in place of the dependency install.
+- One commit containing only `ci.yml` plus the documentation below; no application, test or config file. Documentation: one sentence in README `## Checks` (the paragraph about the GitHub Actions workflow) saying the PostgreSQL job runs on `ubuntu-24.04` and why, and the evidence in `dev-phase4.md`.
+
+**Verification and stop rules:**
+- Push the commit to the PR branch (the PR already exists, so CI runs on that commit) and record the run IDs and the result of both jobs on that commit. C1 is met only if both jobs pass in a single run, including e2e.
+- If the same failure (apt DNS resolution) persists on `ubuntu-24.04`: do not retry blindly and do not change anything else. Inspect the logs (runner image and version, which hosts fail, whether any apt host resolves) and report the findings to the owner. Only then may a Playwright container image (`mcr.microsoft.com/playwright:v1.64.1-…`) be **proposed**. It needs a new approval before implementation.
+- If a different failure appears (for example a real test failure), report it with the log excerpt; this review reopens. Do not fix tests under this amendment.
+- No merge to `main`, no deployment, no change to the PR's draft status without the owner.
+
+**Required evidence in `dev-phase4.md`:** the Playwright compatibility source, the commit hash and its diff (`ci.yml` and the README sentence only), the CI run IDs with the conclusion of each job and step, and, if it failed, the log analysis.
+
+**C1 status:** integration and the PostgreSQL-only tests on standard PostgreSQL passed on `f24da02`. The e2e job is not yet evaluated (skipped because of the runner failure). C1 stays **open** until e2e passes in CI.
