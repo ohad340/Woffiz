@@ -164,7 +164,7 @@ Dialogs/sheets: named heading, focus trap, Escape dismissal where safe, focus re
 Feedback: radio group with accessible group label; selection uses border and check, not color alone.
 Toasts: noncritical success only; durable errors remain inline until resolved.
 Bottom nav: four labeled destinations on a rounded white bar; active state has a tinted icon pill plus bold text.
-Video: poster, native or equivalently accessible controls, Hebrew captions and transcript toggle.
+Video: poster, native controls (including volume and mute), Hebrew voice guidance, Hebrew captions and transcript toggle. Playback starts only after a tap; no autoplay and no loop. The loading state is a static "loading" label (no spinner, because there are no looping animations). Unavailable, paused-for-review and playback-error states keep the written instructions and the transcript visible and never mention sources, review or AI quality.
 Map node: 72px nominal circle (86px current); label area permits wrapping and never overlaps adjacent nodes.
 Do not rely on tooltips for essential mobile instructions.
 Update banner: non-modal surface (`role="status"`, polite), primary “לעדכן עכשיו” and ghost “אחר כך”, 48px controls that wrap at 360px, no focus movement, no animation, clear of fixed navigation and action bars.
@@ -225,7 +225,7 @@ Verify keyboard flow, screen reader announcements, contrast and reduced motion.
 | Onboarding | Start profile | Save indicator | Summary | Retain input and mark field |
 | Plan creation | No plan yet | Preparing plan (focused heading, skeleton, up to about a minute) | First level | Retry with saved profile; daily limit explained with no retry; unavailable service explained |
 | Map | Onboarding action | Stable shell | Current frontier | Reload without resetting |
-| Video | Unavailable notice | Poster and spinner | Playback | Transcript and retry |
+| Video | Unavailable notice (instructions stay) | Poster and static loading label | Tap-to-play with captions and sound | Transcript and retry |
 | Feedback | No option selected | Saving, no duplicate submit | Recorded/unlocked | Retain selection, retry |
 | Review | No completed levels | List skeleton | Completed exercises | Retry list |
 | Profile | Missing optional fields | Saving | Updated | Retain edits |

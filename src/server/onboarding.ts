@@ -6,6 +6,8 @@ import { ensureTestMediaRows, offeredCatalog } from './ai/media'
 import { parsePlan } from './ai/parse'
 import { PLAN_LEVELS, POLICY_VERSION, initialPlanRequest } from './ai/prompts'
 import { EMPTY_ANSWERS, onboardingAnswersSchema, type OnboardingAnswers } from './content'
+import { modelTechniques, boundColumns } from './ai/techniques'
+import { loadOfferedTechniques, mediaRequired, recheckBoundTechniques, techniqueDeps, type TechniqueDeps } from './media/offer'
 
 export const ONBOARDING_STEPS = 5
 
@@ -86,7 +88,10 @@ async function existingResult(tx: Tx, puppyId: string): Promise<OnboardingResult
  * commits the plan. Idempotent: a repeated call after success returns the existing plan, a concurrent call
  * while generating answers GENERATION_PENDING. On any failure the puppy stays not-onboarded with its answers.
  */
-export async function completeOnboarding(userId: string): Promise<OnboardingResult> {
+export type GenerationOptions = { techniqueDeps?: Partial<TechniqueDeps> }
+
+export async function completeOnboarding(userId: string, options: GenerationOptions = {}): Promise<OnboardingResult> {
+  const deps = techniqueDeps(options.techniqueDeps)
   const prepared = await prisma.$transaction(async (tx) => {
     const puppy = await ensurePuppy(tx, userId)
     await lockPuppy(tx, puppy.id)
@@ -100,6 +105,8 @@ export async function completeOnboarding(userId: string): Promise<OnboardingResu
   if (prepared.kind === 'done') return prepared.result
 
   const catalog = offeredCatalog()
+  const techniques = await loadOfferedTechniques(prisma, deps)
+  const required = mediaRequired(deps.env)
   // The request is identified by the answers' revision: asking again for the same answers is the same request.
   const job = await startJob({
     kind: 'INITIAL_PLAN',
@@ -114,10 +121,12 @@ export async function completeOnboarding(userId: string): Promise<OnboardingResu
       task: 'initial_plan',
       profile: prepared.answers,
       mediaCatalog: catalog,
+      techniques: modelTechniques(techniques),
+      mediaRequired: required,
       policyVersion: POLICY_VERSION,
       levelCount: PLAN_LEVELS,
     }),
-    parsePlan({ answers: prepared.answers, catalog }),
+    parsePlan({ answers: prepared.answers, catalog, techniques, mediaRequired: required }),
   )
 
   const committed = await prisma.$transaction(async (tx) => {
@@ -127,6 +136,8 @@ export async function completeOnboarding(userId: string): Promise<OnboardingResu
     if (fresh.onboardedAt) return { kind: 'stale' as const, existing: await existingResult(tx, fresh.id) }
     // The answers changed while the plan was being generated: the candidate no longer matches them.
     if (fresh.revision !== prepared.revision) return { kind: 'stale' as const, existing: null }
+    // A bound technique may have been withdrawn or suspended while the model was working: recheck under its lock.
+    if ((await recheckBoundTechniques(tx, output.levels.map((level) => level.technique), deps)).length > 0) return { kind: 'media' as const }
 
     await ensureTestMediaRows(tx, output.levels.map((level) => level.mediaId))
     const plan = await tx.plan.create({
@@ -139,7 +150,7 @@ export async function completeOnboarding(userId: string): Promise<OnboardingResu
     })
     let firstLevelId: string | null = null
     for (const [index, level] of output.levels.entries()) {
-      const { stableKey, topic, prerequisites, mediaId, ...content } = level
+      const { stableKey, topic, prerequisites, mediaId, technique, ...content } = level
       const created = await tx.level.create({
         data: {
           planId: plan.id,
@@ -148,7 +159,7 @@ export async function completeOnboarding(userId: string): Promise<OnboardingResu
           state: index === 0 ? 'CURRENT' : 'LOCKED',
           stableKey,
           prerequisitesJson: prerequisites,
-          exerciseVersions: { create: { version: 1, criterionVersion: 1, contentJson: content, mediaId } },
+          exerciseVersions: { create: { version: 1, criterionVersion: 1, contentJson: content, mediaId, ...boundColumns(technique, techniques) } },
         },
       })
       if (index === 0) firstLevelId = created.id
@@ -160,6 +171,11 @@ export async function completeOnboarding(userId: string): Promise<OnboardingResu
   }, COMMIT_TX)
 
   if (committed.kind === 'created') return committed.result
+  if (committed.kind === 'media') {
+    // Nothing was stored; the unit is refunded and the owner can simply try again (the candidate is kept for review).
+    await settleWithoutResult(job, 'REJECTED', { errorCode: 'media-unavailable' })
+    throw new AppError('GENERATION_FAILED', 'a bound demonstration became unavailable before commit')
+  }
   await settleWithoutResult(job, 'STALE', { errorCode: 'stale' })
   if (committed.existing) return committed.existing
   throw new AppError('STALE_PLAN')

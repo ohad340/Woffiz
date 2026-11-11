@@ -1,6 +1,7 @@
 import { prisma, type Tx } from './db'
 import { AppError } from './errors'
 import { withIdempotency } from './idempotency'
+import { assertGuidanceAvailable } from './media/guard'
 
 /**
  * Progression service (PRD section 5). All frontier changes happen here, inside one transaction
@@ -61,6 +62,8 @@ export async function recordAttempt(userId: string, input: RecordAttemptInput): 
 
         const mode = level.state === 'CURRENT' ? 'CURRENT' : 'REVIEW'
         const exercise = await latestExercise(tx, level.id)
+        // A suspended technique pauses the guidance: no new reports (current or review) on it.
+        await assertGuidanceAvailable(tx, exercise)
         const attempt = await tx.attempt.create({
           data: {
             puppyId: owned.plan.puppyId,
@@ -140,6 +143,8 @@ export async function confirmMastery(userId: string, input: ConfirmMasteryInput)
         // puppy, against the exercise and criterion version that was displayed.
         const attempt = await tx.attempt.findUnique({ where: { id: input.attemptId } })
         const exercise = await latestExercise(tx, level.id)
+        // A suspension that committed first refuses the confirmation; one that comes later waits for it (same row).
+        await assertGuidanceAvailable(tx, exercise)
         const valid =
           attempt !== null &&
           attempt.puppyId === plan.puppyId &&

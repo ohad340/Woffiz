@@ -1,6 +1,9 @@
 import type { Level, LevelState, Puppy, Topic } from '@/domain/types'
 import { prisma } from './db'
 import { AGE_LABELS, AGE_BANDS, exerciseContentSchema, type ExerciseContent } from './content'
+import { eligibleReplacements, loadOfferedTechniques, techniqueDeps } from './media/offer'
+import { demoView, resolveDemo, type DemoView } from './media/resolve'
+import { readAnswers } from './onboarding'
 
 /** Read models for server components. Every query is scoped to the authenticated owner. */
 
@@ -92,10 +95,22 @@ export type ExerciseView = {
   nextPosition: number | null
   /** Reports on this exact version of a CURRENT level that were not "independent"; 2 or more offer an AI adaptation. */
   strugglesOnVersion: number
+  /** The demonstration of this exercise version (slice 3D). Playing it writes nothing. */
+  demo: DemoView
+  /** The EASIER clip for the "easier" sheet of a STANDARD technique exercise, when one is published and compatible. */
+  easierDemo: DemoView | null
+  /** The technique is suspended: the guidance is paused, reports and mastery are refused until it is replaced. */
+  paused: boolean
+  /** Paused CURRENT level only: another offered technique of the same topic can replace it (adapt). */
+  replacementAvailable: boolean
 }
 
 /** Returns null both when the level does not exist and when it belongs to someone else. */
-export async function getExercise(userId: string, levelId: string): Promise<ExerciseView | null> {
+export async function getExercise(
+  userId: string,
+  levelId: string,
+  options: { techniqueDeps?: Parameters<typeof techniqueDeps>[0] } = {},
+): Promise<ExerciseView | null> {
   const level = await prisma.level.findUnique({
     where: { id: levelId },
     include: {
@@ -107,6 +122,16 @@ export async function getExercise(userId: string, levelId: string): Promise<Exer
   if (!level || !exercise || level.plan.puppy.ownerId !== userId) return null
 
   const content = exerciseContentSchema.parse(exercise.contentJson)
+  const open = level.state !== 'LOCKED'
+  const resolved = open ? await resolveDemo(prisma, exercise) : ({ state: 'none' } as const)
+  const paused = resolved.state === 'paused'
+  const demo = await demoView(resolved, exercise.id, exercise.techniqueVariant ?? 'STANDARD')
+  const easierDemo =
+    open && !paused && exercise.techniqueVariant === 'STANDARD' ? await demoView(await resolveDemo(prisma, exercise, 'EASIER'), exercise.id, 'EASIER') : null
+  const replacementAvailable =
+    paused && level.state === 'CURRENT'
+      ? eligibleReplacements(await loadOfferedTechniques(prisma, techniqueDeps(options.techniqueDeps)), level.topic, readAnswers(level.plan.puppy.profileJson)).length > 0
+      : false
   const strugglesOnVersion =
     level.state === 'CURRENT'
       ? await prisma.attempt.count({
@@ -131,6 +156,10 @@ export async function getExercise(userId: string, levelId: string): Promise<Exer
     mode: level.state === 'CURRENT' ? 'current' : level.state === 'COMPLETED' ? 'review' : 'locked',
     nextPosition: level.position + 1,
     strugglesOnVersion,
+    demo,
+    easierDemo,
+    paused,
+    replacementAvailable,
   }
 }
 

@@ -29,6 +29,8 @@ for (const evalCase of EVAL_CASES) {
     task: 'initial_plan',
     profile: evalCase.answers,
     mediaCatalog: [],
+      techniques: [],
+      mediaRequired: false,
     policyVersion: POLICY_VERSION,
     levelCount: PLAN_LEVELS,
   })
