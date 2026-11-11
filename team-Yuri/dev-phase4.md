@@ -324,7 +324,20 @@ The unsynchronized race is kept as its own test ("a withdrawal racing a generati
 - `node scripts/assert-required-tests.mjs` on that local report listed only the two `ci-guard.test.ts` cases as skipped; they run only when `CI=true`. Every other required title, including the two new ones, executed and passed. The authoritative check is CI.
 - How often the unsynchronized race took each of its three branches was not measured.
 
-CI on the pushed head is recorded in the next section once the runs finish.
+**CI on head `afbb030` (the test correction plus its evidence): both runs green, each in a single attempt (attempt 1), job runner `ubuntu-24.04`.**
+
+| Step | Run `43110046263` (push) | Run `43110054197` (pull_request) |
+|---|---|---|
+| Job "Typecheck, lint, unit tests, build" | success (job `130823347391`) | success (job `130823374355`) |
+| Job "Integration and e2e on standard PostgreSQL" | success (job `130823346713`) | success (job `130823373973`) |
+| Integration tests (includes concurrency / row locking) | success: 181 passed, 1 skipped (182); 14 files passed, 1 skipped | success: 181 passed, 1 skipped (182); 14 files passed, 1 skipped |
+| Require the PostgreSQL-only tests to have executed and passed | success: "All 28 required PostgreSQL tests executed and passed (182 tests in the report)." | same line |
+| `npx playwright install --with-deps chromium` | success | success |
+| End-to-end tests | success: 210 passed (4.1 min), 2 workers | success: 210 passed (4.1 min), 2 workers |
+
+The previous heads had 26 required tests and 180 tests in the report; the two new titles raise them to 28 and 182. The one skipped test is `ai-live.test.ts` (live model, skipped in CI by design). No test failed or was retried in either run, so the corrected test passed on standard PostgreSQL in CI too. The earlier failing run `43101057240` (head `9b5e973`) was not rerun.
+
+This evidence is committed after `afbb030`; that commit changes only this file, so its own CI runs are expected to repeat the verdict and are checked separately.
 
 ## Known Issues / Limitations
 - Playwright cannot serve a changed `sw.js` body to the browser's worker update check (spike above). The automated flow uses a script-URL trigger; the real `sw-version` trigger was verified manually with two builds.
