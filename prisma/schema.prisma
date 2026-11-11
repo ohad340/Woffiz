@@ -174,17 +174,23 @@ model Level {
 }
 
 model ExerciseVersion {
-  id               String      @id @default(uuid()) @db.Uuid
-  levelId          String      @db.Uuid
-  level            Level       @relation(fields: [levelId], references: [id], onDelete: Cascade)
-  version          Int         @default(1)
+  id                  String                 @id @default(uuid()) @db.Uuid
+  levelId             String                 @db.Uuid
+  level               Level                  @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  version             Int                    @default(1)
   // Hebrew content: title, goal, preparation, steps, successCriterion, stopConditions, easierVariant.
-  contentJson      Json
-  criterionVersion Int         @default(1)
+  contentJson         Json
+  criterionVersion    Int                    @default(1)
   // Phase 2: only ids of the isolated test catalog (MediaAsset). Reviewed media arrives in Phase 3.
-  mediaId          String?
-  media            MediaAsset? @relation(fields: [mediaId], references: [id])
-  createdAt        DateTime    @default(now())
+  mediaId             String?
+  media               MediaAsset?            @relation(fields: [mediaId], references: [id])
+  // Phase 3: set only for catalog-rendered (technique-bound) exercises; null for free-form and legacy versions.
+  techniqueKey        String?
+  techniqueVersion    Int?
+  techniqueVariant    MediaVariant?
+  techniqueParamsJson Json?
+  techniqueState      TechniqueVersionState? @relation(fields: [techniqueKey, techniqueVersion], references: [techniqueKey, techniqueVersion])
+  createdAt           DateTime               @default(now())
 
   attempts Attempt[]
 
@@ -308,14 +314,148 @@ model AiUsageDay {
   @@index([day])
 }
 
-// Isolated development media catalog. Real, reviewed media is Phase 3.
+// ----- Phase 3: reviewed demonstration media -----
+
+enum MediaVariant {
+  STANDARD
+  EASIER
+}
+
+enum MediaVersionStatus {
+  DRAFT
+  REVIEWED
+  PUBLISHED
+  WITHDRAWN
+}
+
+enum MediaReviewKind {
+  TECHNICAL
+  CONTENT
+}
+
+enum ReviewDecision {
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+enum WithdrawReason {
+  SUPERSEDED
+  TECHNICAL
+  SAFETY
+}
+
+enum SuspensionAction {
+  SUSPEND
+  LIFT
+}
+
+// One slot per (technique version, variant) = what a published clip is bound to. Legacy Phase 2 test rows have a null technique.
+// Real media versions live in MediaVersion; this row only names the slot.
 model MediaAsset {
-  id            String   @id
-  family        String
-  variant       String
-  status        String   @default("TEST")
-  isTestFixture Boolean  @default(true)
-  createdAt     DateTime @default(now())
+  id               String   @id
+  family           String
+  variant          String
+  status           String   @default("TEST")
+  isTestFixture    Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  techniqueKey     String?
+  techniqueVersion Int?
 
   exerciseVersions ExerciseVersion[]
+  versions         MediaVersion[]
+
+  @@unique([techniqueKey, techniqueVersion, variant])
+}
+
+// The lock row for one technique version (both variants): publication, suspension and the commits that depend on
+// them take it in a fixed order (see docs/PHASE_3_PLAN.md). suspendedAt is the safety suspension.
+model TechniqueVersionState {
+  techniqueKey     String
+  techniqueVersion Int
+  fingerprint      String
+  suspendedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  exerciseVersions ExerciseVersion[]
+
+  @@id([techniqueKey, techniqueVersion])
+}
+
+// Append-only history of suspensions and lifts.
+model TechniqueSuspensionEvent {
+  id               String           @id @default(uuid()) @db.Uuid
+  techniqueKey     String
+  techniqueVersion Int
+  action           SuspensionAction
+  note             String
+  actorId          String
+  createdAt        DateTime         @default(now())
+
+  @@index([techniqueKey, techniqueVersion, createdAt])
+}
+
+// Immutable content bundle. Only lifecycle columns change (database trigger).
+model MediaVersion {
+  id                     String             @id @default(uuid()) @db.Uuid
+  assetId                String
+  asset                  MediaAsset         @relation(fields: [assetId], references: [id])
+  version                Int
+  status                 MediaVersionStatus @default(DRAFT)
+  techniqueKey           String
+  techniqueVersion       Int
+  variant                MediaVariant
+  techniqueFingerprint   String
+  // Object keys in the private bucket (never public URLs).
+  videoKey               String
+  posterKey              String
+  videoSha256            String
+  posterSha256           String
+  captionsSha256         String
+  transcriptSha256       String
+  // SHA-256 over every content part and the exact technique definition. Reviews are bound to it.
+  bundleFingerprint      String
+  bytes                  Int
+  width                  Int
+  height                 Int
+  durationMs             Int
+  hasAudio               Boolean
+  captionsVtt            String
+  transcriptJson         Json
+  timelineJson           Json
+  voiceJson              Json
+  // Parameter values the fixed clip demonstrates (must equal the catalog's `demonstrated` values).
+  demonstratedParamsJson Json
+  productionJson         Json
+  isTestFixture          Boolean            @default(false)
+  createdById            String
+  createdAt              DateTime           @default(now())
+  reviewedAt             DateTime?
+  publishedAt            DateTime?
+  publishedById          String?
+  withdrawnAt            DateTime?
+  withdrawnById          String?
+  withdrawReason         WithdrawReason?
+  withdrawNote           String?
+
+  reviews MediaReview[]
+
+  @@unique([assetId, version])
+  @@unique([assetId, bundleFingerprint])
+  @@index([techniqueKey, techniqueVersion, status])
+}
+
+// Append-only editorial review by an ADMIN, bound to the exact bundle that was reviewed.
+model MediaReview {
+  id                  String          @id @default(uuid()) @db.Uuid
+  mediaVersionId      String          @db.Uuid
+  mediaVersion        MediaVersion    @relation(fields: [mediaVersionId], references: [id])
+  kind                MediaReviewKind
+  decision            ReviewDecision
+  reviewerId          String
+  reviewedFingerprint String
+  checklistJson       Json
+  notes               String?
+  createdAt           DateTime        @default(now())
+
+  @@index([mediaVersionId, kind, createdAt])
 }

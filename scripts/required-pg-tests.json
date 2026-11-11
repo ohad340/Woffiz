@@ -13,7 +13,20 @@
     "reclaiming race: of 10 simultaneous retries of an expired job exactly one takes it over",
     "reclaiming race: of 10 simultaneous new requests over an expired job, one job is started and the old unit is refunded once",
     "the account unit is refunded at most once is atomic: 12 simultaneous refund attempts of one job lower the counter by exactly one",
-    "the account unit is refunded at most once is atomic when owners race: a reclaim closing a job and the job closing itself refund once"
+    "the account unit is refunded at most once is atomic when owners race: a reclaim closing a job and the job closing itself refund once",
+    "media concurrency on standard PostgreSQL parallel ingests of different bundles get distinct version numbers",
+    "media concurrency on standard PostgreSQL parallel publishes of two versions leave exactly one PUBLISHED version",
+    "media lifecycle on standard PostgreSQL parallel publishes of the same reviewed version succeed exactly once",
+    "media lifecycle on standard PostgreSQL parallel publishes of two reviewed versions serialise: both succeed in turn and exactly one stays published",
+    "media lifecycle on standard PostgreSQL a SAFETY withdrawal racing the publication of the same version leaves it withdrawn and the technique suspended once",
+    "media lifecycle on standard PostgreSQL an explicit suspension racing a publication never lets the publication land after the suspension",
+    "media lifecycle on standard PostgreSQL parallel suspensions of one technique create one suspension and one event",
+    "media generation on standard PostgreSQL a generation commit waits for an in-flight withdrawal and then refuses the withdrawn clip",
+    "media generation on standard PostgreSQL a generation commit waits for an in-flight suspension and then refuses the suspended technique",
+    "media generation on standard PostgreSQL a withdrawal waits for a generation commit that holds the technique row, so the committed binding predates it",
+    "suspension guard on standard PostgreSQL an attempt waits for an in-flight suspension and is then refused",
+    "suspension guard on standard PostgreSQL a mastery confirmation waits for an in-flight suspension and is then refused",
+    "suspension guard on standard PostgreSQL a suspension racing mastery confirmations either lets one land first or refuses them, never deadlocks"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"

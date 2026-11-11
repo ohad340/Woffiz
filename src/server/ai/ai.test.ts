@@ -24,7 +24,7 @@ const answers = (extra: Partial<OnboardingAnswers> = {}): OnboardingAnswers => (
 })
 
 async function fakePlan(profile: OnboardingAnswers, mediaCatalog = [] as typeof TEST_MEDIA[number][]): Promise<PlanOutput> {
-  const request = initialPlanRequest({ task: 'initial_plan', profile, mediaCatalog, policyVersion: POLICY_VERSION, levelCount: PLAN_LEVELS })
+  const request = initialPlanRequest({ task: 'initial_plan', profile, mediaCatalog, techniques: [], mediaRequired: false, policyVersion: POLICY_VERSION, levelCount: PLAN_LEVELS })
   return planOutputSchema.parse((await fakeGenerate(request)).json)
 }
 

@@ -1,5 +1,6 @@
 import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
+import { assertAdmin } from './admin'
 import { auth } from './auth'
 import { AppError } from './errors'
 
@@ -34,4 +35,26 @@ export async function requireUserFromRequest(request: Request): Promise<SessionU
   const user = toUser(session.user)
   if (!user.emailVerified) throw new AppError('EMAIL_NOT_VERIFIED')
   return user
+}
+
+/**
+ * For admin route handlers: a verified session whose account is an ADMIN in the database right now.
+ * Everyone else gets 404 (see assertAdmin).
+ */
+export async function requireAdminFromRequest(request: Request): Promise<SessionUser> {
+  const user = await requireUserFromRequest(request)
+  await assertAdmin(user.id)
+  return { ...user, role: 'ADMIN' }
+}
+
+/** For admin pages: anyone who is not a current ADMIN sees the normal 404 page. */
+export async function requireAdminOrNotFound(): Promise<SessionUser> {
+  const user = await getSessionUser()
+  if (!user || !user.emailVerified) notFound()
+  try {
+    await assertAdmin(user.id)
+  } catch {
+    notFound()
+  }
+  return { ...user, role: 'ADMIN' }
 }

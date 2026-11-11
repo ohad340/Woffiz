@@ -18,7 +18,8 @@ function strip(schema: unknown, drop: ReadonlySet<string>, minItemsCap: number |
   return schema
 }
 
-const GEMINI_DROP = new Set(['$schema', 'additionalProperties', 'maxItems'])
+// 'default' (null for the optional technique binding) is applied by our own parsing, so it never needs to be on the wire.
+const GEMINI_DROP = new Set(['$schema', 'additionalProperties', 'maxItems', 'default'])
 
 /** Gemini answers 400 for this schema with maxItems (checked against gemini-3.5-flash-lite). */
 export function forGemini(schema: unknown): unknown {
@@ -27,7 +28,7 @@ export function forGemini(schema: unknown): unknown {
 
 // Anthropic structured outputs: no numeric or length constraints, no maxItems, no large {n,m} regex ranges, and
 // every object must say additionalProperties:false (zod's JSON Schema output already does).
-const ANTHROPIC_DROP = new Set(['$schema', 'minLength', 'maxLength', 'minimum', 'maximum', 'multipleOf', 'maxItems', 'pattern'])
+const ANTHROPIC_DROP = new Set(['$schema', 'minLength', 'maxLength', 'minimum', 'maximum', 'multipleOf', 'maxItems', 'pattern', 'default'])
 
 export function forAnthropic(schema: unknown): unknown {
   return strip(schema, ANTHROPIC_DROP, 1)

@@ -87,3 +87,26 @@ Locally, if PGlite drops connections under parallel load (`ConnectionClosed`, `P
 - `src/fixtures/devPlan.ts` — the labeled development plan used to create every plan
 - `src/styles/tokens.css` — design tokens (keep in sync with DESIGN_SYSTEM.md)
 - `test/integration/` and `e2e/` — database and browser tests
+
+## Reviewed demonstration media (Phase 3, slice 3A: foundations only)
+
+Plan: [docs/PHASE_3_PLAN.md](docs/PHASE_3_PLAN.md); decisions 58-67. Slice 3A adds the technique catalog (`src/domain/techniques`, both techniques are **draft**), the media schema with database integrity rules, bundle validation (MP4 metadata, Hebrew WebVTT, voice/caption/transcript agreement, fingerprints), a private storage adapter, administrator checks and a draft-only ingest command. There are **no videos, no admin pages, no player and no publication yet**; exercises still show the "no demonstration" placeholder.
+
+```bash
+npx tsx scripts/grant-admin.ts --email you@example.com      # owner only, by hand; prints the database host
+npx tsx scripts/media-ingest.ts <folder> --admin-email you@example.com   # DRAFT only; add --fixture for synthetic test bundles (local machine only)
+```
+
+Automated checks are **metadata validation**: they cannot tell whether the voice is intelligible Hebrew or whether picture and sound line up. That is the owner's review of the actual clip. Real-device playback checks are pending (slice 3E).
+
+### Media administration (Phase 3, slice 3B)
+
+Signed-in administrators open `/admin/media` (anyone else gets the normal 404 page). Make an account an administrator by hand with `scripts/grant-admin.ts`. An ingested bundle is a draft; the owner watches and listens to it, records a technical and a content review (each bound to the exact bundle), marks it reviewed and publishes it. Publication also needs the technique definition to be approved and frozen in `src/domain/techniques/techniques.lock.json`; **both definitions are draft, so nothing real can be published yet**. Withdrawing a version is permanent; a safety withdrawal also suspends the technique (both variants). Decisions 68-73.
+
+### Technique-bound generation (Phase 3, slice 3C)
+
+Generation may bind a level to a reviewed technique that has a published, compatible clip; the server then stores the catalog's instructions instead of model text and rechecks the clip under the technique lock at commit (decisions 74-78). Both real techniques are draft, so **production offers nothing and plans stay free-form**. `MEDIA_REQUIRED` stays off until the published catalog is verified.
+
+### Owner playback and suspension (Phase 3, slice 3D)
+
+Technique-bound exercises show their published demonstration (tap to play, Hebrew captions, transcript); free-form exercises keep the placeholder. A suspended technique pauses the exercise: reports and mastery are refused (`GUIDANCE_PAUSED`) and, on the current level, a replacement is offered only when another approved technique of the same topic is published. Watching never writes anything (decisions 79-83). Real-device playback checks are still pending (3E).

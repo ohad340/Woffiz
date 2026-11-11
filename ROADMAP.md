@@ -69,10 +69,13 @@ Exit artifact: personalized planning service and recorded evaluation cases.
 
 ## Phase 3 — AI video library and publication
 Objective: replace development media with usable reviewed demonstrations.
-Inputs: production briefs, video budget, provider and qualified reviewer.
+Inputs: technique definitions with recorded sources, video and voice budget and providers, owner (ADMIN) review time.
+Slices: 3A foundations (technique catalog, media schema, bundle validation, storage adapter, admin guards, ingest) →
+3B admin review/publish/withdraw → 3C catalog-rendered generation → 3D player, resolver and safety suspension →
+3E real-device QA and mandatory-coverage switch. Tests ship inside each slice. Plan: docs/PHASE_3_PLAN.md.
 Tasks:
-- Generate clips outside the user request path; review against exercise briefs.
-- Add Hebrew captions, transcripts, poster images and published versions.
+- Generate clips (picture and Hebrew voice) outside the user request path; the owner reviews them against exercise briefs and sources.
+- Add Hebrew voice guidance, synchronized captions, transcripts, poster images and published versions.
 - Implement a restricted media review/publish/withdraw workflow.
 - Match every reachable exercise and easier variant to compatible published media.
 - Handle withdrawn media and playback failures without fabricated completion.
@@ -80,7 +83,8 @@ Acceptance:
 - Every published level has a compatible reviewed video and transcript.
 - Unpublished/withdrawn versions cannot be newly assigned.
 - Existing affected levels show safe replacement or unavailable state.
-- Real mobile playback, captions and timing are reviewed.
+- Real mobile playback, audio, captions and timing are reviewed by listening and watching on real devices (recorded as pending until done).
+- Approvals are bound to the exact content bundle and technique definition; a safety suspension is atomic with attempts, mastery and generation commits.
 Exit artifact: production media catalog with review records.
 Dependency note: media work may start earlier; public publishing waits for this gate.
 
