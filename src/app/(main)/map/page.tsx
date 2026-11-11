@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Card'
 import { StateMessage } from '@/components/ui/StateMessage'
 import { parseDevState } from '@/lib/devState'
+import { devPreviewsEnabled } from '@/server/local-mode'
 import { requireOverview } from '@/server/queries'
 import { requireUserOrRedirect } from '@/server/session'
 import styles from '../page.module.css'
@@ -12,7 +13,7 @@ import styles from '../page.module.css'
 export const metadata: Metadata = { title: 'המפה' }
 
 export default async function MapPage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
-  const state = parseDevState((await searchParams).state)
+  const state = parseDevState((await searchParams).state, devPreviewsEnabled())
 
   if (state === 'loading') {
     return (

@@ -144,6 +144,16 @@ Edit profile, view recent practice and manage account.
 Profile changes do not erase history; explain when locked future levels will be refreshed.
 Account deletion uses a confirmation dialog with an honest scope statement.
 
+### Install guidance and app update
+Install guidance lives only on /puppy, in the card “התקנה במסך הבית” (anchor `#install`), placed after “המסלול” and before “חשבון”. Home shows no install hint, and there is no dismissal state.
+The card always starts with “אפשר להוסיף את Woffiz למסך הבית ולפתוח אותה כמו אפליקציה.” and then shows exactly one case, detected on the client only:
+- Installed (standalone display, or the browser just reported the installation): “Woffiz כבר מותקנת במכשיר הזה.”
+- Native prompt available (Chromium): primary button “התקנה” that opens the browser's own dialog once; muted line “הדפדפן יציג חלון אישור משלו.”
+- iPhone and iPad (including iPadOS with a desktop-class user agent): an ordered list of three steps (Share button, “הוספה למסך הבית”, “הוספה”) and a muted note that labels may differ between versions. The wording is proposed until the real-iPhone check.
+- Any other browser: honest browser-menu instructions and the statement that some browsers do not support installation and the app keeps working in the browser. Never promise an identical prompt.
+Update banner: when a new app version is waiting on an existing installation, a non-modal banner says “גרסה חדשה של Woffiz מוכנה. העדכון יטען מחדש את העמוד.” with “לעדכן עכשיו” (primary) and “אחר כך” (ghost). Only “לעדכן עכשיו” activates the new version, and the page reloads once. “אחר כך” hides it until the next page load. The banner never moves focus, is announced by a polite live region, comes after the page content in the tab order, and has no animation.
+Placement: fixed above the bottom navigation below 1024px, and above the exercise screen's fixed report bar when that bar is present; near the bottom edge at 1024px and above. While it shows, the page gets bottom padding equal to its height so content and focused controls can scroll clear of it. Modal sheets stay above it.
+
 ## 9. Components and states
 Buttons: primary filled, secondary outlined, ghost and destructive.
 Default minimum height 48px; main mobile CTA 52px. Touch area at least 44px.
@@ -157,6 +167,8 @@ Bottom nav: four labeled destinations on a rounded white bar; active state has a
 Video: poster, native or equivalently accessible controls, Hebrew captions and transcript toggle.
 Map node: 72px nominal circle (86px current); label area permits wrapping and never overlaps adjacent nodes.
 Do not rely on tooltips for essential mobile instructions.
+Update banner: non-modal surface (`role="status"`, polite), primary “לעדכן עכשיו” and ghost “אחר כך”, 48px controls that wrap at 360px, no focus movement, no animation, clear of fixed navigation and action bars.
+Install card: a Card with a section heading; steps use an ordered list; decorative 20px Lucide icons (`aria-hidden`); the native-prompt case uses one primary button.
 
 ## 10. Iconography and motion
 Proposed library: Lucide, 2px stroke, 20px or 24px icons.
@@ -218,6 +230,8 @@ Verify keyboard flow, screen reader announcements, contrast and reduced motion.
 | Review | No completed levels | List skeleton | Completed exercises | Retry list |
 | Profile | Missing optional fields | Saving | Updated | Retain edits |
 | Entire app offline | Static offline page when a page cannot load (`public/offline.html`) | No fake progress | Reconnected: "ניסיון חוזר" reloads the same page | Connection notice; the offline page with "ניסיון חוזר" |
+| Install guidance | Intro line only until the browser is detected (no loading text) | Not applicable | One case: installed, “התקנה” button, iOS steps or browser-menu instructions | Prompt dismissed or unsupported: browser-menu instructions with the honest “not supported” statement |
+| App update | No banner (no waiting version, first install, or “אחר כך” on this page load) | “לעדכן עכשיו” shows “מעדכנים…” and is disabled | One reload under the new version; no banner | No takeover within 10 s: one reload anyway |
 
 Offline page: `public/offline.html` must work with no network, so it is self-contained. It copies the
 token values it uses into its own `:root` (kept identical to `src/styles/tokens.css` by `src/lib/offline-page.test.ts`),

@@ -6,6 +6,7 @@ import { Badge, Card, Skeleton } from '@/components/ui/Card'
 import { StateMessage } from '@/components/ui/StateMessage'
 import { TOPIC_LABELS } from '@/domain/types'
 import { parseDevState } from '@/lib/devState'
+import { devPreviewsEnabled } from '@/server/local-mode'
 import { requireOverview } from '@/server/queries'
 import { requireUserOrRedirect } from '@/server/session'
 import styles from '../page.module.css'
@@ -17,7 +18,7 @@ export default async function ReviewPage({
 }: {
   searchParams: Promise<Record<string, string | string[]>>
 }) {
-  const state = parseDevState((await searchParams).state)
+  const state = parseDevState((await searchParams).state, devPreviewsEnabled())
   const user = await requireUserOrRedirect()
   const overview = await requireOverview(user.id)
   const completed = state === 'empty' ? [] : overview.levels.filter((level) => level.state === 'completed')

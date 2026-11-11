@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Mascot } from '@/components/art/Mascot'
 import { AiAdjust } from '@/components/exercise/AiAdjust'
 import { SignOutButton } from '@/components/auth/SignOutButton'
+import { InstallGuide } from '@/components/pwa/InstallGuide'
 import { Card } from '@/components/ui/Card'
 import { getRecentAttempts, requireOverview } from '@/server/queries'
 import { requireUserOrRedirect } from '@/server/session'
@@ -71,6 +72,13 @@ export default async function PuppyPage() {
           />
         </Card>
       )}
+
+      <Card id="install" aria-labelledby="install-title" className={styles.sectionStack}>
+        <h2 id="install-title" className={styles.cardTitle}>
+          התקנה במסך הבית
+        </h2>
+        <InstallGuide />
+      </Card>
 
       <Card aria-labelledby="account-title" className={styles.sectionStack}>
         <h2 id="account-title" className={styles.cardTitle}>
