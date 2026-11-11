@@ -348,7 +348,7 @@ Reviewed 2026-11-11: `team-Yuri/dev-phase4.md` on `feature/phase-4-install-updat
    - `MEDIA_REQUIRED` stays off and video production stays paused; nothing was pushed or deployed.
 
 **Merge conditions (owner and orchestrator; no Developer correction required):**
-- C1. Before merging to `main`, the PR's CI must be green on standard PostgreSQL in a single run: the CI job "Integration and e2e on standard PostgreSQL", including `assert-required-tests` for the 29 PostgreSQL-only tests, and the e2e job. A failure there reopens this review.
+- C1. Before merging to `main`, the PR's CI must be green on standard PostgreSQL in a single run: the CI job "Integration and e2e on standard PostgreSQL", including `assert-required-tests` for the required PostgreSQL-only tests (26 listed in `scripts/required-pg-tests.json`; the 29 local skips also included tests that are skipped for other reasons), and the e2e job. A failure there reopens this review. **Closed 2026-11-11, see "C1 closure" below.**
 - C2. Commit `05b9dc9` commits the Team Yuri artifacts (`PHASE.md`, `plan.md`, `arch-phase4.md`, `manager-phase4.md`, `dev-phase4.md`). M0 left that to the owner, and `dev-phase4.md` records no decision. The owner decides whether that commit stays in the PR. This manager document has changed since `05b9dc9` (this review), so if the commit stays, it needs updating. **Resolved 2026-11-11: the owner decided to keep the artifacts in the PR. This reviewed manager document is committed on top as its own commit.**
 - C3. Real-device and deployed-build items stay PENDING. They block the pilot release (4.8), not this merge.
 
@@ -375,3 +375,28 @@ Approved by the owner and the Manager. This is a narrowly scoped CI fix so that 
 **Required evidence in `dev-phase4.md`:** the Playwright compatibility source, the commit hash and its diff (`ci.yml` and the README sentence only), the CI run IDs with the conclusion of each job and step, and, if it failed, the log analysis.
 
 **C1 status:** integration and the PostgreSQL-only tests on standard PostgreSQL passed on `f24da02`. The e2e job is not yet evaluated (skipped because of the runner failure). C1 stays **open** until e2e passes in CI.
+
+### C1 closure and final owner approval readiness (2026-11-11)
+Verified independently with `gh` (run metadata, job and step conclusions, logs) and `git` (read-only).
+
+**Runner pin commit `0ce5973`:** only `.github/workflows/ci.yml` (`postgres` job: `runs-on: ubuntu-24.04` plus a one-line reason comment) and one sentence in README `## Checks`. The `quality` job stays on `ubuntu-latest`. No step, test, assertion or dependency install changed, and there is no `continue-on-error`, retry or skip. The Playwright compatibility check is recorded in `dev-phase4.md` (System requirements list Ubuntu 24.04; `playwright-core` 1.64.1 has `ubuntu24.04-x64`). **Within revision 3.**
+
+| Head | Run | Event | Attempt | Quality job | PostgreSQL job (`ubuntu-24.04`, image 20261101.360.1) |
+|---|---|---|---:|---|---|
+| `0ce5973` | `43063382772` | push | 1 | success | success |
+| `0ce5973` | `43063386873` | pull_request | 1 | success | success |
+| `49ea7d3` | `43065122170` | push | 1 | success | success |
+| `49ea7d3` | `43065132886` | pull_request | 1 | success | success |
+
+In every PostgreSQL job, every step succeeded; the only skipped step is "Upload Playwright report on failure". On `49ea7d3`, both runs show integration test files 14 passed / 1 skipped (180 tests: 179 passed, 1 skipped). The skipped file is `test/integration/ai-live.test.ts`, which is `describe.skipIf(!live)`: the live model is never called in CI, by design. Each run also shows "All 26 required PostgreSQL tests executed and passed (180 tests in the report)." and e2e "Running 210 tests using 2 workers … 210 passed", with no failed or flaky test.
+
+`49ea7d3` changes only `team-Yuri/dev-phase4.md` (+22 lines, the CI evidence for `0ce5973`). The runs on `49ea7d3` are recorded here only; `dev-phase4.md` does not list them. That is not a gap, because they repeat the same verdict on a documentation-only head.
+
+**C1: CLOSED.** CI is green on standard PostgreSQL in a single attempt, with integration, the required PostgreSQL tests and e2e all passing, on two consecutive heads, including the current PR head `49ea7d3`.
+
+**PR #5 status for the owner's final approval:**
+- PR #5 `feature/phase-4-install-update` → `main`: open, **draft**, GitHub reports mergeable and merge state `CLEAN`, head `49ea7d3` (local = remote at verification time).
+- Final diff against `main` (`505e2db`): 32 files, +2400/−21. That is the 26 slice 4.2 files reviewed above, plus `.github/workflows/ci.yml` (revision 3) and the five Team Yuri artifacts kept by the owner (C2). None of these is in the diff: `playwright.config.ts`, `.env.example`, `next.config.ts`, `public/offline.html`, the manifest, `layout.tsx`, `offline/shell/auth.spec.ts`, `eslint.config.mjs`, `package-lock.json` or `prisma/`.
+- Merge conditions: C1 closed; C2 resolved (artifacts kept); C3 stays PENDING (real-device and deployed-build checks block the pilot release in 4.8, not this merge).
+- This closure note is committed locally on top of `49ea7d3` and is **not pushed**. If it is pushed, the new head is documentation-only, and its CI must also be green before merging, consistent with C1.
+- Remaining owner actions, none of them performed here: mark PR #5 ready for review, approve, and merge; then any deployment as a separate approved step. No merge or deployment was done.
