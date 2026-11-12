@@ -153,7 +153,7 @@ All IDs are UUIDs unless an external authentication ID is required.
 
 Index ownership lookups, ordered plan levels and recent attempts. Scope all reads and writes by authenticated ownership; never trust a client-supplied owner ID. Verify referenced attempt, level and puppy belong together. Administrator permissions must be enforced server-side.
 
-Account deletion deletes personal profiles, plans and attempts and removes linked job payloads. Shared media assets remain. Proposed failed-job payload retention: 30 days; application backups and provider retention must be documented before launch. Never expose private content through shared caches.
+Account deletion deletes personal profiles, plans and attempts and removes linked job payloads. Shared media assets remain. Failed-job payload retention: 30 days (owner-approved 2026-11-12); application backups and provider retention must be documented before launch. Never expose private content through shared caches.
 
 ## 9. UX and design
 Design goal: make the next useful practice action obvious while showing gradual progress. Reward consistency without implying the puppy has failed.

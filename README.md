@@ -76,7 +76,14 @@ Hosting is Vercel (project `woffiz`, region `cdg1`, Node 24) and the database is
 - **`?state=` previews** (`/map?state=error`, …) work only under `next dev`, unit tests and a production build on this machine (`APP_ENV=local` with a localhost `BETTER_AUTH_URL`, as in the e2e server). Everywhere else, including Vercel, `?state=` is ignored.
 - **`npm run test:previews-gate`** (after `npm run build`, needs `TEST_DATABASE_URL`) starts the production build four times on port 3101 and proves that the previews stay off for the Vercel shape, `APP_ENV=local` with a public URL, and `APP_ENV=preview` on localhost, and stay on for this machine. It is not part of `npm run check` because it needs a build.
 
-## Checks
+## Account deletion (Phase 4, slice 4)
+
+- **Where**: the "חשבון" card on `/puppy`, "מחיקת החשבון". The owner reads the scope statement, re-enters the current password and confirms. At most 5 attempts per 15 minutes per account; the attempt is counted before the password is checked.
+- **What is deleted now, irreversibly**: the account, email address and password, every session on every device, the puppy profile and questionnaire answers, all plans and exercises, practice reports and mastery confirmations, idempotency records, password-reset tokens, the account's daily request counters and the personalization (generation) records including their stored outputs. It is one database transaction: all or nothing, and a failure leaves the account fully usable.
+- **What stays**: the shared demonstration videos (they never held owner data); the short-lived abuse-protection counters, which hold hashes and no address; for a former administrator, the opaque id inside the video review and publication records (no email, no foreign key; those tables are append-only). An administrator account cannot be deleted in the app: revoke the role first with `npx tsx scripts/grant-admin.ts --email … --revoke` (owner only, by hand).
+- **Limits, stated honestly in the dialog**: the account cannot be restored. Copies can stay for a limited time in the backups and logs of the providers, under their own retention: Supabase backups depend on the plan (the "backups" decision in `team-Yuri/plan.md` is still open), Resend keeps delivery logs, Vercel keeps runtime logs, and the AI provider keeps requests under its own policy, including a request that was already being processed. No removal time is promised. Failed generation payloads of remaining accounts are kept at most 30 days (owner-approved).
+- **Testing**: only disposable accounts on the local or CI test database. Never delete a real account to check this: `npm run test:integration` (the six lock-order tests run only on standard PostgreSQL, `TEST_DB_KIND=postgres`) and `npm run test:e2e` create and delete their own accounts. A code rollback does not bring a deleted account back.
+
 
 ```bash
 npm run check                     # typecheck, lint, unit tests, production build

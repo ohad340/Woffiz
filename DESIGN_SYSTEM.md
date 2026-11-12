@@ -143,6 +143,11 @@ The path card offers “לעדכן את המשך המסלול”: the server reb
 Edit profile, view recent practice and manage account.
 Profile changes do not erase history; explain when locked future levels will be refreshed.
 Account deletion uses a confirmation dialog with an honest scope statement.
+Account card order: sign-out, then the destructive “מחיקת החשבון” last (destructive button, no icon-only variant).
+The dialog is the existing Sheet (native `<dialog>`): heading “מחיקת החשבון”, the scope statement, a labelled password field “הסיסמה הנוכחית” (`autocomplete="current-password"`, error text tied to the field and announced politely), “ביטול” (secondary, initial focus) and “מחיקה לצמיתות” (destructive, disabled while the field is empty or a request is sending). Escape and the close button close it and restore focus to the opening button; closing clears the password.
+Scope copy (no removal time promised, no provider named): “מה יימחק עכשיו, ולא ניתן לשחזר:” the account, email address and password and every sign-in on every device, the puppy profile and questionnaire answers, all plans and exercises, practice reports and mastery confirmations, personalization records including their stored outputs; “מה נשאר:” the shared demonstration videos, which never held the owner's data; only for an account that appears in video review records, one line that those records keep an internal identifier without an email address, no longer linked to any account here, and that earlier backups may still link it until they expire; “כדאי לדעת:” the account cannot be restored, copies may remain for a limited time in the backups and logs of the hosting and mail providers under their own retention, and in any personalization request already being processed.
+An administrator account sees the explanation instead of the form: deletion needs the administrator role revoked first, an action of the system owner.
+After success the page is replaced by the welcome page with a status line “החשבון נמחק.” (`/?deleted=1`, a constant marker with no personal data).
 
 ### Install guidance and app update
 Install guidance lives only on /puppy, in the card “התקנה במסך הבית” (anchor `#install`), placed after “המסלול” and before “חשבון”. Home shows no install hint, and there is no dismissal state.
@@ -232,6 +237,7 @@ Verify keyboard flow, screen reader announcements, contrast and reduced motion.
 | Entire app offline | Static offline page when a page cannot load (`public/offline.html`) | No fake progress | Reconnected: "ניסיון חוזר" reloads the same page | Connection notice; the offline page with "ניסיון חוזר" |
 | Install guidance | Intro line only until the browser is detected (no loading text) | Not applicable | One case: installed, “התקנה” button, iOS steps or browser-menu instructions | Prompt dismissed or unsupported: browser-menu instructions with the honest “not supported” statement |
 | App update | No banner (no waiting version, first install, or “אחר כך” on this page load) | “לעדכן עכשיו” shows “מעדכנים…” and is disabled | One reload under the new version; no banner | No takeover within 10 s: one reload anyway |
+| Account deletion | “מחיקת החשבון” opens the dialog; the field is empty and “מחיקה לצמיתות” is disabled | “מוחקים…”, no duplicate submit | Full navigation to the welcome page with “החשבון נמחק.”; every device signed out | Wrong password: inline error, field cleared and focused, nothing deleted. Too many attempts or no connection: explained, nothing deleted. Administrator: the explanation instead of the form |
 
 Offline page: `public/offline.html` must work with no network, so it is self-contained. It copies the
 token values it uses into its own `:root` (kept identical to `src/styles/tokens.css` by `src/lib/offline-page.test.ts`),
