@@ -6,14 +6,232 @@ PHASE=4
 ## Status
 STATUS: APPROVED
 
+Scope of this revision: **slice 4.3 only** (public shell asset caching), revision 1, 2026-11-12. Input: the completed 4.3 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions S1-S10) and the owner decision of 2026-11-12 that `/art/*.webp` stays outside the cache. Slice 4.2 is merged (`7bc45f8`) and deployed; its design and reviews are kept unchanged below as a closed record and are not reopened. Slices 4.4-4.8 are not designed here.
+
+## Phase Goal
+The service worker keeps a versioned cache of immutable public build assets only: everything under `/_next/static/` (code, styles and the bundled Heebo fonts) and the four app icons. It never caches HTML, API responses, RSC payloads, signed media URLs, `/art/*` or any per-account response. Caches of earlier worker versions are purged on activate. The new worker reaches existing installations only through the 4.2 mechanism (version bump, then the owner's tap on "לעדכן עכשיו"). The P4-1 offline fallback (`woffiz-offline-v1`, `/offline.html`) keeps working exactly as today. 4.3 makes no performance claim; measurement belongs to slice 4.7.
+
+## Source References
+- `team-Yuri/arch-phase4.md`, slice 4.3 contract: decisions S1-S10, expected files, testing expectations, handoff notes. Owner decision 2026-11-12: `/art/*` excluded (S2 unchanged).
+- `team-Yuri/plan.md` (APPROVED), slice 4.3; `PRD.md` §8 and §10 (public static assets only, never private content in shared caches); `docs/DECISIONS.md` P4-1 and P4-2; `README.md` "Installation and updates".
+- Code baseline `origin/main` `7bc45f8`: `public/sw.js` (`// sw-version: 4.2.0`), `e2e/offline.spec.ts`, `e2e/pwa.spec.ts`, `e2e/demo-video.spec.ts`, `src/components/pwa/ServiceWorkerRegistration.tsx` (registers the worker in production builds only), `vitest.config.ts` (unit tests are `src/**/*.test.ts`).
+- Official documentation checked by the Manager on 2026-11-12 (MDN `Cache.put`, `Cache.keys`, `FetchEvent.respondWith`; W3C Service Workers, Batch Cache Operations): see "Verified platform semantics".
+- Measurements by the Manager on 2026-11-12 (read-only): see M1.
+
+## Architecture Summary
+Service-worker-only change (S10). One file, `public/sw.js`, stays dependency-free and unsplit. Positive allowlist (S2), storable-response rule (S3), cache-first for `/_next/static/*` and stale-while-revalidate for the icons (S4), one `SW_VERSION` constant that names the shell cache `woffiz-shell-<SW_VERSION>` (S5), purge on activate (S6), oldest-first entry cap (S7), navigation, offline cache and message handler unchanged (S8), rollout through the 4.2 update flow (S9).
+
+## Verified platform semantics
+Checked against current official documentation; the Developer must not rely on anything weaker.
+- `Cache.put(request, response)` stores any request/response pair, including non-200 and opaque ones, and overwrites an existing entry that matches the request (MDN). It throws `TypeError` for a URL scheme other than http or https, a non-GET request and a null response (W3C Batch Cache Operations). Therefore S3 is the only gate against bad entries; `cache.add`/`addAll` must not be used for runtime caching (they refetch and reject non-2xx).
+- In the specification's batch `put`, a matching entry is **removed and the new pair appended to the end** of the cache's list. `Cache.keys()` returns requests in insertion order (MDN). So `keys()[0]` is the oldest entry, and a refreshed icon moves to the newest position.
+- A 206 rejection and the `Vary: *` rule were not confirmed from the text read. Neither matters here: S3 never stores a 206, and every `put` is inside a `try`/`catch` that ignores failure (S3).
+- `respondWith()` must be called during the event dispatch (otherwise `InvalidStateError`), takes a `Response` or a promise of one, and anything else becomes a network error; a rejected promise also becomes a network error. Therefore the allowlist decision must be **synchronous**, and a request that fails it must return from the handler **without** calling `respondWith` (the browser then handles it as today).
+- `event.waitUntil(promise)` keeps the worker alive for background work after the response is returned. Cache writes and the stale-while-revalidate refresh must be passed to `waitUntil` before the response promise settles.
+- A same-origin response has `Response.type === 'basic'` even for a CORS-mode request. Font requests made by CSS use CORS mode, so the predicate must not reject `request.mode === 'cors'` (only `navigate` is rejected).
+
+## Ordered Milestones
+
+| Order | Milestone | Description | Acceptance Signal |
+|---:|---|---|---|
+| 0 | Branch, worktree, baseline | Work in a **separate git worktree** on `feature/phase-4-shell-cache` created from `origin/main` `7bc45f8` (see Detailed Plan). `npm ci` inside the worktree, local `prisma generate`, baseline `npm run check` and the existing `offline.spec.ts` and `pwa.spec.ts` | Baseline green on the untouched base; base hash recorded |
+| 1 | Measure and fix the S7 cap | Production build in the worktree; count files and bytes of `/_next/static/*` and the icons; apply the cap rule | Count, bytes and chosen cap recorded |
+| 2 | Service worker | `public/sw.js`: S2 predicate, S3 rule, S4 strategies, S5 constant and cache name, S6 purge, S7 trim; header comment updated | All pre-existing `offline.spec.ts` cases still green; unit cases (M3) green |
+| 3 | Unit tests | `src/lib/sw.test.ts`: `node:vm` harness over the real `public/sw.js` | Every case listed in the Detailed Plan green |
+| 4 | E2E | Privacy proof (redefined test), offline behavior, purge and update path, media variant | Full `npm run test:e2e` green at 360/768/1280 |
+| 5 | Documentation | `README.md` "Installation and updates", `docs/DECISIONS.md` `P4-3`, reference from `P4-2` | Docs match the shipped behavior |
+| 6 | Evidence | `team-Yuri/dev-phase4.md`, 4.3 section on top, 4.2 record kept below | Manager review checklist satisfiable |
+
+## Detailed Development Plan
+
+### M0. Branch, worktree and baseline
+- **Shared folder rule.** The Woffiz folder is shared with other sessions and sits on the merged branch `feature/phase-4-install-update`. Do not switch its branch and do not touch its `node_modules`. Create a worktree outside the repository tree, for example `git worktree add ../Woffiz-4.3 -b feature/phase-4-shell-cache origin/main` (adapt the path; it must not be inside the repository). Run every command of this slice from that worktree.
+- Base is `origin/main` `7bc45f8` (S1). If `main` has moved when work starts, base on current `main` and record the hash; do not merge or rebase later without telling the owner.
+- `npm ci` inside the worktree; run `node_modules/.bin/prisma generate` (never a bare `npx <tool>`). The e2e tests need the local test database: reuse the existing local `TEST_DATABASE_URL` setup by copying the untracked `.env` into the worktree. It is never committed, and no command may touch the Supabase database or any non-test database. If the Developer cannot start the local test database, stop and report.
+- Port `3100` is fixed in `playwright.config.ts` with `reuseExistingServer: false`; if another session is running e2e, wait instead of changing the config.
+- **Artifacts.** The Architect's `arch-phase4.md` (4.3 revision) and this file are uncommitted in the shared folder. Copy `team-Yuri/arch-phase4.md` and `team-Yuri/manager-phase4.md` byte for byte into the worktree and commit them first, as one commit "Team Yuri artifacts for slice 4.3", before any code. Do not edit them.
+- Baseline: `npm run check` and `npm run test:e2e -- e2e/offline.spec.ts e2e/pwa.spec.ts` on the untouched base. Record the results.
+
+### M1. Measure the production build and fix the S7 cap (S7)
+Manager's starting measurement (read-only, 2026-11-12), **to be replaced by the Developer's own measurement of the 4.3 build**:
+- Local build in the shared folder (`.next/BUILD_ID` `LoRpoEXFPNcPoLxiuEsNL`, 2026-11-11, commit not recorded): `.next/static` holds **67 files, 1,229,393 bytes**: 24 in `chunks/` (871,798 B), 40 in `media/` (357,200 B: 20 `.woff` and 20 `.woff2`) and 3 tiny build manifests (395 B). The four icons are 365,841 bytes. A browser fetches one format per font face, so one real session loads fewer files, but the cap uses the full directory.
+- Production landing page (`https://woffiz.vercel.app/`) references 11 static files (674,379 bytes). Their URLs are under `/_next/static/immutable/chunks/…`, which differs from the local directory layout above. **The predicate and the tests must therefore match the prefix `/_next/static/` and never hard-code `/_next/static/chunks/`**, and the Developer must record which layout the 4.3 build produces.
+- Proposed cap: **160 entries** (shell cache). Basis: two full builds are 2 × (67 + 4) = 142 entries, plus margin. Byte estimate: about 18 KB average per static file, so exactly two full builds are about 2.8 MB and the cache at its cap is about 3.2 MB worst case (the 4 icons are about 0.37 MB of that). These are raw file sizes, as stored responses are not compressed.
+- **Rule for the Developer.** Build with `npm run build` in the worktree. Let N be the number of files under `.next/static` (all files, as served under `/_next/static/`). If 2 × (N + 4) ≤ 160 the cap stays 160; otherwise the cap is 2 × (N + 4) rounded up to the next multiple of 10. Record N, the byte total, the layout (`chunks`/`media`/`immutable`), the cap and the byte estimate in `dev-phase4.md` and in `P4-3`. The cap is a named constant in `public/sw.js` with a comment giving this derivation.
+
+### M2. `public/sw.js` (S2-S9)
+Design details that the contract leaves to the Manager. The contract's decisions are not changed.
+1. **Constants at the top:** `SW_VERSION = '4.3.0'`; `OFFLINE_CACHE = 'woffiz-offline-v1'` (value unchanged); `SHELL_CACHE = 'woffiz-shell-' + SW_VERSION`; `SHELL_CACHE_MAX_ENTRIES` (M1); the four icon paths in a `Set`. The `// sw-version:` comment line is removed; `SW_VERSION` is the one place to bump (S5). Before removing it, `git grep` for the marker string and update every reference (README, DECISIONS and the comment in `e2e/pwa.spec.ts` that mentions it are the known ones; the e2e comment may stay if it is only history, but then it must not claim the marker still exists).
+2. **Predicate `isShellRequest(request)`, synchronous and pure.** True only if all of: method GET; `new URL(request.url).origin === self.location.origin`; `request.mode !== 'navigate'`; no `Range` header; no `RSC` header (case-insensitive) and no `_rsc` search parameter; and either the pathname starts with `/_next/static/` (any query string, because the platform may append a deployment query), or the pathname is exactly one of the four icon paths **and the query string is empty** (stricter than S2: it admits only the four URLs themselves, so a crafted query cannot create unbounded variants). Everything in S2's exclusion list falls out of the allowlist; do not add exclusion code paths that could drift from it.
+3. **Predicate `isStorable(response)`:** `response.ok`, `status === 200`, `type === 'basic'`, `redirected === false`, and no `Cache-Control` containing `no-store` or `private` (case-insensitive).
+4. **Cache key:** the request URL string for both `match` and `put`, so request headers never decide a hit.
+5. **`fetch` handler.** The first lines are the existing navigation branch, unchanged in behavior (network first, `/offline.html` from `OFFLINE_CACHE` when the network request itself fails, HTTP errors pass through). A request that is neither a navigation nor `isShellRequest` returns without `respondWith`.
+   - `/_next/static/*`: cache-first. A hit is returned without any network request. A miss fetches; if `isStorable`, `event.waitUntil` receives "put a clone, then trim"; the original response is returned. A rejected fetch stays rejected: no synthetic response (S4).
+   - Icons: stale-while-revalidate. With a cached copy, return it at once and pass the background refresh (fetch, `isStorable`, put, trim, all errors swallowed) to `event.waitUntil`. Without one, fetch, store if storable, return.
+   - Every cache operation (open, put, trim) is wrapped so that a rejection (quota, `TypeError`) is ignored and never changes the response the page gets (S3).
+6. **`activate` (S6):** delete every cache whose name starts with `woffiz-` and is neither `OFFLINE_CACHE` nor `SHELL_CACHE`; never touch other names; then `clients.claim()` as today.
+7. **`install`:** unchanged. It precaches only `/offline.html` into `OFFLINE_CACHE` and does not call `skipWaiting()`. The `message` handler (same-origin `{ type: 'SKIP_WAITING' }` only) is unchanged. The only `skipWaiting()` in the file stays in that handler.
+8. **Trim (S7):** after each successful `put`, read `cache.keys()` and delete entries from the front until the count is at most the cap. Concurrent trims are harmless. The trim never runs on `OFFLINE_CACHE`.
+9. **Header comment** rewritten to describe 4.3 (what is cached and why, the allowlist, the version constant, the purge, the rollback worker that calls `skipWaiting()` itself, deletes the `woffiz-*` caches and unregisters).
+10. **Dev machines.** The worker is registered only in production builds (`ServiceWorkerRegistration.tsx`), so `next dev` does not use it. A developer who ran `npm start` and later `next dev` on the **same origin** may still have the production worker registered and serve cached chunks. `README.md` gets one line telling developers to unregister the worker or clear site data when switching (M5).
+
+### M3. Unit tests: `src/lib/sw.test.ts`
+- **Location (Manager decision).** `src/lib/sw.test.ts`, because `vitest.config.ts` only includes `src/**/*.test.ts`, `vitest.config.ts` is not in the contract's expected files, and the contract lists `src/lib/pwa/*` as not touched. No config change is allowed.
+- **Harness (Manager decision).** Read `public/sw.js` as text and execute it with `node:vm` (`runInNewContext`) in a sandbox that provides: `self` (with `location`, `addEventListener` collecting handlers by event name, `skipWaiting`, `clients.claim`, `registration`), an in-memory `caches` fake, a stubbed `fetch`, and Node's real `Request`, `Response`, `Headers`, `URL`. Tests drive the collected handlers with fake events (`request`, `respondWith`, `waitUntil`, `data`, `origin`) and await what was handed over. `public/sw.js` gets no export, no test hook and no conditional code. The fake `Cache` must implement the verified semantics: `put` removes any matching entry and appends the new one; `keys()` returns insertion order; `match`, `delete`, `open`, `keys` on the storage. Node's `Response.type` is `'default'`, so a "basic" response is made by overriding `type` (for example with `Object.defineProperty`) in a small helper.
+- **Cases (all required):**
+  - S2 allowed: a chunk, a CSS file and a font under `/_next/static/` (including the `immutable/` layout, a query string, and a font request with `mode: 'cors'`), and each of the four icons.
+  - S2 rejected: `/`, `/home`, a navigation request; `/map?_rsc=…` and any request with an `RSC` header; `/api/auth/get-session`, `/api/attempts`, `/api/mastery`, `/api/media/playback`, `/api/media/local?…`, `/api/media/versions/<id>/captions`; `/_next/image?url=…`, `/_next/data/…`; `/art/map-painted.webp`, `/manifest.webmanifest`, `/sw.js`, `/offline.html`, `/icons/other.png`, an icon URL with a query string; a cross-origin storage URL; POST; a request with `Range`. A rejected request leaves `respondWith` uncalled.
+  - S3: 200 basic is stored; 206, 404, 500, opaque, redirected, `Cache-Control: no-store` and `private` are returned to the page but not stored.
+  - S4: a cached static asset is returned without calling `fetch`; a miss fetches, stores and returns; a miss with a rejected `fetch` rejects (no synthetic response); the icon returns the cached copy first and the refresh updates the entry; a rejecting `cache.put` still returns the network response.
+  - S5/S7: the shell cache name is `woffiz-shell-` plus `SW_VERSION`; after more writes than the cap, the cache holds exactly the cap and the oldest entries are gone; a refreshed icon is not the first to go.
+  - S6: `activate` keeps exactly `woffiz-offline-v1` and the current shell cache, deletes other `woffiz-*` caches (including an older shell version), leaves non-`woffiz-` caches alone, and calls `clients.claim()`.
+  - S8 unchanged behavior: `install` adds only `/offline.html` to `woffiz-offline-v1` and never calls `skipWaiting`; the `message` handler ignores a wrong origin and any type except `SKIP_WAITING`, and calls `skipWaiting` once for a valid message; a navigation whose `fetch` rejects returns the cached offline page; a navigation that gets HTTP 500 passes the 500 through.
+- A negative check recorded in the evidence: temporarily add `/art/` to the allowlist and see the S2 test fail, then revert (as the 4.2 static test did).
+
+### M4. End-to-end tests (Playwright)
+General: runs against the local production build as today. Cache writes happen after the response (`waitUntil`), so assertions use `expect.poll` on the cache contents, never a fixed sleep. No change to `playwright.config.ts`.
+1. **Privacy proof, `e2e/offline.spec.ts`: only the test "only the public offline page is ever cached" is redefined** (no other case in the file changes). After a signed-in session that loads `/home`, `/map`, `/review`, `/puppy` and a current exercise (`/exercise/<level>`, as `loop.spec.ts` does), and calls `/api/auth/get-session`:
+   - `caches.keys()` equals exactly `['woffiz-offline-v1', 'woffiz-shell-4.3.0']` (order-insensitive);
+   - `woffiz-offline-v1` holds exactly `/offline.html`;
+   - the shell cache is not empty and every key matches the S2 allowlist;
+   - no key is a navigation URL, `/api/*`, an `_rsc` URL, `/_next/image` or `/art/*`.
+   Runs at the three viewports.
+2. **Media variant, `e2e/demo-video.spec.ts` (desktop-1280 project): one new test, no existing test changed (Manager decision).** The same assertions after a session that resolves a fixture clip with the file's existing setup (tap-to-play, signed link requested). Reason: that file already owns the technique-wide shared clip state and runs serially in the desktop project; putting this test in a file that runs in parallel could race with it. This extends the contract's file list by one test in an existing file; it is flagged for the Architect's acknowledgment at final review. If the Developer shows a safe way to do it from `pwa.spec.ts`, either place is acceptable if the choice is recorded.
+3. **Offline behavior, `e2e/pwa.spec.ts`, new case.** The page is controlled by the worker and has cached at least one `/_next/static/` asset. With the network offline: fetching that cached asset from the page returns 200 from the worker; `fetch('/api/auth/get-session')` fails; a navigation shows the unchanged Hebrew offline fallback. Then back online.
+4. **Update and purge, `e2e/pwa.spec.ts`, new case**, built on the existing 4.2 pattern (`publishNewWorker`, which registers the same `public/sw.js` under a second script URL because Playwright cannot serve a changed worker body). Seed `woffiz-shell-0.0.0` (with one entry) **after** the page is controlled, because the first worker's own activation would otherwise purge it. Then publish a new worker; assert the banner shows and the waiting worker has not activated, so the stale cache **still exists, unchanged** and `woffiz-offline-v1` is intact. After "לעדכן עכשיו" and the single reload, assert that `woffiz-shell-0.0.0` is gone, `woffiz-offline-v1` still holds exactly `/offline.html`, and the cache set is again exactly the two allowed names.
+   - **Interpretation of the contract (flagged).** The contract says the waiting worker "caches nothing until the tap". Because the active worker in this test runs the same file and keeps writing allowlisted assets, a black-box check of "the waiting worker writes nothing" is not separable in e2e. It is proved at unit level (M3, S8: `install` only adds `/offline.html`) and in e2e by the stale cache surviving until the tap. If the Developer finds this reading unachievable, stop and report.
+5. All pre-existing cases stay green and unchanged: every other case in `offline.spec.ts`, `pwa.spec.ts`, `shell.spec.ts`, `auth.spec.ts`, and the Phase 3 suites.
+
+### M5. Documentation (`.claude/rules/30-docs.md`)
+- `README.md`, "Installation and updates" only: replace the `// sw-version:` instruction with `SW_VERSION` in `public/sw.js`; add a short list of what the worker caches (the `/_next/static/` assets and four icons), what it never caches and why (HTML, API, RSC, media and signed URLs, `/art/*`, all private content), that old shell caches are purged when a new worker activates, and the dev-machine note from M2.10. State honestly that 4.3 makes no performance claim.
+- `docs/DECISIONS.md`: a new `P4-3` row after `P4-2`: decision, the S2 allowlist, the owner decision on `/art/*`, the measured cap (M1), the `SW_VERSION` constant replacing the marker, status "Confirmed (owner, slice 4.3 plan; `/art/*` excluded 2026-11-12)", and that it supersedes the "only `/offline.html` is ever cached" part of P4-1. Do not edit the `P4-2` row except to add a reference to `P4-3`. No edit to any other row.
+- `DESIGN_SYSTEM.md`: no change (no UI change). State this in the evidence.
+
+### M6. Evidence in `team-Yuri/dev-phase4.md`
+The Developer owns the file. Mirror the layout of the other two Phase 4 artifacts: the 4.3 evidence on top with the standard sections, the existing 4.2 record kept unchanged below it under a heading "Slice 4.2 record (closed)", the two status lines of the 4.2 record labelled "(slice 4.2)". Do not alter the 4.2 evidence.
+
+### Verification rules
+- `npm run check` passes (typecheck, lint, unit, build), run on a clean worktree.
+- Full `npm run test:e2e` at 360/768/1280. The local PGlite database is known to be unstable under load (4.2 evidence); a failed test may be rerun after restarting the test database, and every rerun is reported as a rerun, never as a first-run pass. No test may fail twice.
+- No local integration run is required: 4.3 changes no server, database or test-database code. CI on standard PostgreSQL must still show the 28 required PostgreSQL tests executed and passed.
+- Push, draft PR and CI: the Developer prepares everything locally and **does not push, open a PR, merge or deploy** until the owner approves it. After approval: push once, open the draft PR, and CI (push and pull_request, both jobs) must be green on the final head in a single attempt. Record the run ids.
+
+## Acceptance / Gating Criteria
+1. Branch `feature/phase-4-shell-cache` is based on `origin/main` `7bc45f8` (or recorded newer `main`), worked in a separate worktree; the shared folder's branch and `node_modules` were not touched; the Team Yuri artifacts are the first commit.
+2. `public/sw.js` is one dependency-free file with `SW_VERSION = '4.3.0'`, the shell cache `woffiz-shell-4.3.0`, the exact S2 allowlist (`/art/*` excluded), the S3 rule, S4 strategies, S6 purge and the S7 cap derived by the M1 rule.
+3. `install` precaches only `/offline.html` and never calls `skipWaiting()`; the only `skipWaiting()` is in the `SKIP_WAITING` handler; the navigation branch, `woffiz-offline-v1` and the `message` handler behave as before.
+4. `npm run check` passes; every unit case of M3 passes, with the negative check recorded.
+5. Full e2e passes at the three viewports; the redefined privacy proof passes; the offline-behavior and update/purge cases pass; the media variant passes in the desktop project; every other pre-existing case is unchanged and passes.
+6. No private data in any cache: after a signed-in session, the caches are exactly `woffiz-offline-v1` (only `/offline.html`) and `woffiz-shell-4.3.0` (only allowlisted URLs).
+7. The update reaches an existing installation only through the 4.2 flow (banner, owner's tap, one reload); the stale shell cache is purged on activation.
+8. The diff against `origin/main` contains only: `public/sw.js`, `src/lib/sw.test.ts`, `e2e/offline.spec.ts` (the one test), `e2e/pwa.spec.ts`, `e2e/demo-video.spec.ts` (one new test), `README.md` ("Installation and updates" only), `docs/DECISIONS.md` (`P4-3` and a reference from `P4-2`), and the Team Yuri artifacts. Not in the diff: `next.config.ts`, `public/offline.html`, `src/app/manifest.ts`, `public/icons/*`, `public/art/*`, `src/app/layout.tsx`, `src/components/pwa/*`, `src/lib/pwa/*`, `playwright.config.ts`, `.env.example`, `vitest.config.ts`, `prisma/`, `package.json`, `package-lock.json`, anything under `src/server/`.
+9. Docs match the shipped behavior; `P4-3` records the cap and the owner's `/art/*` decision.
+10. `MEDIA_REQUIRED` stays off, video production stays paused, techniques stay DRAFT, no media code changed. Nothing pushed, merged or deployed without the owner's approval; no paid resource, no production data or environment change.
+11. After owner-approved push: CI green on the final head in a single attempt for both runs (push and pull_request), including "All 28 required PostgreSQL tests executed and passed" and e2e.
+12. Real-device and deployed-build items recorded as PENDING with the arch list; they do not block this merge.
+
+## Functional Testability Criteria
+
+- Page/screen the user can open: any app page; the new state is visible in DevTools, Application, Cache Storage.
+- User-visible behavior: none intended beyond the existing update banner for 4.2 installations. The app and the offline fallback behave as before.
+- Command-line flow: `npm run check`; `npm run test:e2e` (and `npm run test:unit` for `src/lib/sw.test.ts`).
+- API endpoint / request: none.
+- Minimal end-to-end flow: sign in on the local production build; browse home, map, an exercise, review and puppy; inspect Cache Storage (only the offline page and allowlisted static assets); go offline (a cached asset loads from the worker, a page shows the offline fallback).
+- Expected observable result: as above, asserted by the e2e privacy proof and the offline-behavior case.
+
+## Required Developer Evidence
+`team-Yuri/dev-phase4.md` (4.3 section) must contain, per `.claude/rules/20-testing.md` §80 and `30-docs.md` §50:
+1. Phase identifier `PHASE=4`, slice 4.3, branch, worktree path, base hash, `git merge-base HEAD origin/main`, and confirmation that the shared folder was not touched.
+2. Implementation summary per milestone M0-M6.
+3. Final diff against `origin/main`: `git diff --stat` plus the full diff, showing the not-touched list of criterion 8 absent.
+4. Dependencies: "none added"; `npm ci` result; `node_modules/.bin/prisma --version` and `prisma generate`; the database host of every database command (local test database only).
+5. S7 measurement: N, byte total, layout, the cap and the byte estimate.
+6. Unit tests: command, counts, the new file and every case of M3; the recorded negative check.
+7. Lint and typecheck: commands and results.
+8. E2E: command, per-project pass counts; the redefined test, the offline-behavior case, the update/purge case and the media variant named with results; confirmation that all other pre-existing cases passed unchanged; every rerun reported as a rerun.
+9. The actual Cache Storage contents at the end of the privacy proof (names and entry counts), as text.
+10. Functional testability: how the minimal flow was exercised.
+11. Documentation: which sections of README.md and docs/DECISIONS.md changed; `DESIGN_SYSTEM.md` unchanged and why.
+12. Real-device and deployed-build checklist from the arch (iPhone and Android installed app after the 4.3 update; DevTools Cache Storage on the deployed build), every item PENDING (owner).
+13. Known issues, scope compliance (including `MEDIA_REQUIRED` off and video paused, nothing pushed or deployed), declaration. After owner approval of the push: PR link, run ids, attempts, per-job results, integration counts, the required-tests line and the e2e count.
+
+## Out of Scope
+- Caching pages, RSC payloads, API responses or any per-account response; offline training or offline report submission; `/art/*` (owner decision); precaching a build manifest; `/_next/image` caching; Background Sync; push.
+- Performance measurement and claims (slice 4.7); account deletion (4.4); allowlist (4.5); metrics and alerts (4.6); device matrix and usability (4.8).
+- Any change to the completed 4.2 reviews, to `next.config.ts` headers, to the manifest, icons, layout or UI, and any server, database, environment variable or dependency change.
+
+## Risks / Open Questions
+- **Open owner decisions: none block 4.3.** The six items in `plan.md` (alert channel, backups, retention, sending domain, pilot recruitment, performance profile) belong to 4.4-4.8. The only 4.3 decision, `/art/*`, is resolved (excluded).
+- **Layout mismatch.** The deployed build serves static files under `/_next/static/immutable/…` while the local `.next` directory examined by the Manager does not use that layout. Mitigation: prefix match on `/_next/static/`, M1 re-measurement on the 4.3 build, tests using the real layout.
+- **Asynchronous cache writes** make e2e assertions flaky if they read too early. Mitigation: `expect.poll`, never sleeps.
+- **Dev machine on the same origin** as a registered production worker can serve cached chunks to `next dev` (documented in README, M2.10).
+- **Shared folder and port 3100.** Worktree isolation (M0) avoids branch and `node_modules` conflicts; two sessions running e2e at once collide on the fixed port. Wait; do not change the config.
+- **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0). The shared folder keeps showing them as modified on the old branch; owner housekeeping, not a defect.
+- **Release consequence (for the later owner approval).** Merging to `main` starts the automatic production deployment. Existing 4.2 installations see the update banner once and keep the 4.2 worker until the owner taps. The rollback target is then the production deployment of the 4.2 release `7bc45f8`, and a worker defect is handled by the documented rollback worker (P4-2/D6), which also removes every `woffiz-*` cache.
+- **Interpretations flagged for the Architect's final review (none changes a decision S1-S10):** the unit test file location `src/lib/sw.test.ts`; icons admitted only with an empty query string; the media-variant e2e placed in `demo-video.spec.ts`; the reading of "caches nothing until the tap" given in M4.4.
+
+## Manager Review
+MANAGER_REVIEW_STATUS: APPROVED
+
+Review of slice 4.3 (revision 1 of this design), 2026-11-12. Reviewed: branch `feature/phase-4-shell-cache`, HEAD `cd94c50`, base `origin/main` `7bc45f8`, worktree `C:\Users\אוהד\Documents\Woffiz-4.3`, evidence in the 4.3 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed.
+
+### Review Notes
+
+**Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are all present and consistent. No reject condition applies.
+
+**Independent verification by the Manager (not copied from the evidence):**
+- `public/sw.js` read in full against S2-S9. The allowlist is synchronous; a request off the allowlist returns without `respondWith`; `isStorable` requires `ok`, status 200, type `basic`, not redirected, no `no-store` or `private`; the cache key is the URL string; `/_next/static/*` is cache first, icons are stale-while-revalidate with an exact URL and no query; every cache operation is inside `try`/`catch` and writes go through `event.waitUntil`; the trim deletes from the front; `activate` deletes every `woffiz-*` cache except the offline cache and the current shell cache; `install` precaches only `/offline.html`; the navigation branch and the `message` handler are behaviorally unchanged; the only `skipWaiting()` is in the `SKIP_WAITING` handler. `SW_VERSION = '4.3.0'`, cap 160 by the M1 rule (2 x (67 + 4) = 142 <= 160).
+- `git diff 7bc45f8 HEAD --name-only` outside `team-Yuri/` lists exactly `README.md`, `docs/DECISIONS.md`, `e2e/demo-video.spec.ts`, `e2e/offline.spec.ts`, `e2e/pwa.spec.ts`, `public/sw.js` and `src/lib/sw.test.ts` (criterion 8). The path-filtered diff over `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.ts`, `playwright.config.ts`, `.env.example`, `public/offline.html`, `src/server`, `src/components/pwa` and `src/lib/pwa` is empty. The two Team Yuri documents in the first commit are byte-identical to the shared folder (`cmp`).
+- `node_modules/.bin/vitest run src/lib/sw.test.ts`: 69 passed. `tsc --noEmit`: exit 0. `eslint e2e src/lib/sw.test.ts public/sw.js`: clean.
+- **S2/S3 matrix and negative check.** The matrix covers every S2 inclusion and exclusion named in the contract; each rejected case asserts no `respondWith`, no `fetch` and no cache created, and each S3 case asserts that the page receives the network response object. The recorded negative check was re-proved without editing the Developer's files: on a scratch copy of `public/sw.js`, admitting `/art/` makes `/art/map-painted.webp` handled; dropping the `Range` guard makes a Range request handled; dropping the `redirected` check or the `type !== 'basic'` check makes a redirected or CORS-typed response stored. Each of those four behaviors is asserted by a case in the matrix, so each mutation is caught.
+- **Privacy proof, offline case, update/purge case, media variant (read).** The redefined test asserts the cache names are exactly `woffiz-offline-v1` (only `/offline.html`) and `woffiz-shell-4.3.0`, that every shell key is an allowlisted static path or one of the four icons without a query, and that no key matches page, API, RSC, `/_next/image|data`, artwork, offline, worker or manifest paths. The media variant additionally plays a fixture clip and fetches captions and a playback link through the worker. The offline case uses `cache: 'no-store'`, so a 200 can only come from the worker; it proves an uncached static path fails with no synthetic response, the API fails, and a page shows the fallback. The update case seeds `woffiz-shell-0.0.0` after the page is controlled, shows it survives while the new worker waits, and shows that after the owner's tap the cache set is exactly the offline cache and the current shell cache. Writes are awaited with `expect.poll`, never with sleeps.
+- **Independent e2e rerun by the Manager** (local production build, local test database only, `--workers=1`): the `auth`, `ai-plan`, `offline` and `pwa` specs, 93 tests: 92 passed, 1 failed (see below). All 4.3 cases (redefined privacy proof, offline case, update/purge case) passed in all three projects in this run.
+
+**The e2e results and the pre-existing failure (review focus 3).** The Developer reported 217 of 217 with 23 passing only on a rerun after a local PGlite restart, and 3 failures inside pre-existing test bodies without a proven cause. The one failure in the Manager's run is the same pre-existing test as two of those three (`auth.spec.ts`, "register, onboard, refresh, sign out and sign back in…": the page stays on `/onboarding` instead of reaching `/home` within 5 s). To settle causation, the Manager ran that single test, 4 repetitions per project (12 runs), on a clean detached worktree of `main` `7bc45f8` (no 4.3 code) and on the 4.3 branch, with the same local database and one worker: **`main`: 6 failed, 6 passed; 4.3: 5 failed, 7 passed**, with the same assertion and the same received URL in every failure. The failure is therefore independent of 4.3: it occurs on `main` at the same rate on this local PGlite database. The temporary worktree was removed. This turns the Developer's "no proven causal link" into a demonstrated non-link to 4.3. CI on standard PostgreSQL is the gate (criterion 11), and this test passed in CI for 4.2. The 13 setup failures (fixture and seed) were in code outside the 4.3 diff and passed on the rerun; `ai-plan` passed in all three projects in the Manager's run.
+
+**Cache privacy.** No concrete defect. The admission path is the allowlist plus the storable rule only; no page, API, RSC, media, artwork or cross-origin response can be written; a signed-in session leaves exactly the two caches with allowlisted keys (text proof in the evidence: 1 offline entry, 23 shell entries under `/_next/static/chunks` and `/_next/static/media`).
+
+**Update and offline behavior.** The 4.2 owner-activated flow and the offline fallback are unchanged and their pre-existing cases passed. A worker defect is covered by the unchanged rollback worker (P4-2/D6), which also deletes the shell cache.
+
+**Flagged interpretations: Manager position.** None changes S1-S10; the Architect acknowledges them in the final review.
+1. `src/lib/sw.test.ts` with the `node:vm` harness: a Manager decision within the contract; accepted.
+2. Icons admitted only with an empty query: stricter than S2, harmless (such a URL simply goes to the network) and consistent with an exact URL list; accepted.
+3. The media variant in `demo-video.spec.ts`: accepted.
+4. "Caches nothing until the tap": proved by the install-handler unit case and by the stale cache surviving while the new worker waits; accepted.
+5. Renamed test title ("only the public offline page and public build assets are ever cached"): required, because the old title would now be false. The contract line that names the old title (`arch-phase4.md`, Testing) is the redefinition itself, and the old title appears nowhere else in the repository (no CI list, no required-test list); accepted.
+6. One `pwa.spec.ts` comment now says `SW_VERSION`: comment only; accepted.
+7. `caches.match(url, { cacheName })` for lookup (does not create a cache on read): accepted.
+
+**Non-blocking observations (recorded, not corrections).**
+- The deployed `/_next/static/immutable/…` layout is covered by a unit case but not by a local e2e run, because the local build does not produce it; the deployed-build Cache Storage check stays with the owner (criterion 12).
+- The icons enter the cache only when something requests them; documented.
+- `Vary: *` and 206 handling were not confirmed against a normative source in the design phase; both are covered by behavior (206 is rejected by the status rule, and the URL-string key ignores request headers).
+- The e2e update path registers the same worker under a second URL (the 4.2 pattern); a real `SW_VERSION` bump was not re-run for 4.3, as the evidence states.
+
+**Criteria status.** 1-10: met. 11: pending the owner-approved push (CI on the final head, single attempt, both runs, "All 28 required PostgreSQL tests executed and passed", e2e). 12: PENDING for the owner by design (4.8 matrix).
+
+### Required Corrections
+None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, so the final head already contains all review documents; (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no further documentation-only commit; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval.
+
+---
+
+## Slice 4.2 record (APPROVED, merged in `7bc45f8`; closed, not reopened)
+STATUS (slice 4.2): APPROVED. MANAGER_REVIEW_STATUS (slice 4.2): APPROVED. Kept unchanged below; only the heading levels and these two status labels were adapted when slice 4.3 was added.
+
+### Phase Identifier
+PHASE=4
+
+### Status
+STATUS (slice 4.2): APPROVED
+
 Scope of this revision: **slice 4.2 only** (install guidance, owner-activated update, production gate for `?state=` previews). Slices 4.3-4.8 are not designed here.
 
 Revision 2 (2026-11-11): Phase 3 (PR #3) is merged and deployed on `main` at `505e2db` with green CI. By owner instruction, the 4.2 branch merges `origin/main` at a safe checkpoint (new milestone M0b), keeping all 4.2 work. This applies D1's rule that whichever branch merges second aligns with `main`. The base, the PR #3 overlap section, acceptance criteria 1, 3, 10 and 11, the evidence list and the risks are updated. The exercise practice-bar marker found during implementation is now part of the design (M5).
 
-## Phase Goal
+### Phase Goal
 An owner can (1) find clear, honest, browser-appropriate Hebrew instructions for installing Woffiz on `/puppy`, (2) activate an available app update only by their own tap, with exactly one reload, and (3) never reach the `?state=` demo views in production. Previews stay available under `next dev`, unit tests and the local Playwright production build. The P4-1 offline fallback keeps working unchanged.
 
-## Source References
+### Source References
 - `team-Yuri/PHASE.md` (`PHASE=4`), `team-Yuri/plan.md` (APPROVED, slice 4.2), `team-Yuri/arch-phase4.md` (READY_FOR_MANAGER, decisions D1-D11).
 - PRD.md §10 (contextual install guidance, no identical-prompt promise, public static caching only); ROADMAP.md Phase 4.
 - DESIGN_SYSTEM.md §5, §8 "Puppy and settings", §9, §10, §11, §12, §14.
@@ -27,7 +245,7 @@ An owner can (1) find clear, honest, browser-appropriate Hebrew instructions for
   - MDN `beforeinstallprompt`: WICG incubation, limited availability (Chromium). `preventDefault()` defers the browser UI; the saved event's `prompt()` is single-use; `appinstalled` fires after installation.
   - Apple's iPhone User Guide page on Home Screen web apps could not be retrieved in text form at design time. The iOS copy below is therefore **proposed** and stays PENDING until the real-iPhone check (arch, real-device item 1).
 
-## Architecture Summary
+### Architecture Summary
 - D1: branch from `origin/main` `d8add95`; PR #3 is neither assumed merged nor used. PR #3 has since merged first, so under D1 the 4.2 branch is the one that aligns with `main` (M0b: merge `505e2db`, keeping both sides of the documentation overlaps).
 - D2/D3: `devPreviewsEnabled(env)` in `src/server/local-mode.ts` (development, test, or `isLocalMachine`). `parseDevState(value, enabled)` is the single choke point. In production `?state=` is silently ignored.
 - D4/D6: a new worker that finds an active worker **waits**. It is activated only by the page message `{ type: 'SKIP_WAITING' }` sent after the owner taps. The page reloads exactly once after a requested `controllerchange`. First install activates immediately. Rollback workers call `skipWaiting()` themselves.
@@ -37,7 +255,7 @@ An owner can (1) find clear, honest, browser-appropriate Hebrew instructions for
 - D10: global non-modal update banner (`role="status"`, polite, no focus steal), with "לעדכן עכשיו" (primary) and "אחר כך" (ghost).
 - D11: no server API, database, environment variable or dependency changes.
 
-## Ordered Milestones
+### Ordered Milestones
 
 | Order | Milestone | Description | Acceptance Signal |
 |---:|---|---|---|
@@ -54,16 +272,16 @@ An owner can (1) find clear, honest, browser-appropriate Hebrew instructions for
 | 9 | Documentation | DESIGN_SYSTEM.md, docs/DECISIONS.md (`P4-2`), README.md, all in the regions below | Docs reviewed; no edit inside PR #3's regions |
 | 10 | Evidence | `team-Yuri/dev-phase4.md` with all required evidence | Manager review checklist satisfied |
 
-## Detailed Development Plan
+### Detailed Development Plan
 
-### M0. Branch and baseline
+#### M0. Branch and baseline
 Done before revision 2 (the branch exists on `d8add95`). Kept for the record; the current alignment step is M0b.
 1. `git fetch origin`, then confirm `git rev-parse --short origin/main` prints `d8add95`. If it differs, **stop and ask the owner** (D1 names this base explicitly). The local `main` is stale (`379315a`), so do not branch from it.
 2. `git switch -c feature/phase-4-install-update d8add95`.
 3. The working tree carries changes that belong to other work: modified `.claude/launch.json`, untracked `pilot/…`, `scripts/*illustrated-preview*.mjs`, `.claude/rules/`, `.claude/skills/`, `team-Yuri/`. **None of them goes into 4.2 commits.** Commit only the files listed in this design (plus `dev-phase4.md` if the owner wants Team Yuri artifacts committed; ask at commit time).
 4. `npm ci` (or `npm install` if the lockfile requires it), then `npm run check`. Record the result as the baseline.
 
-### M0b. Merge `main` 505e2db (revision 2)
+#### M0b. Merge `main` 505e2db (revision 2)
 Run this only from the Developer session that owns this folder. Several sessions share the Woffiz folder, so no other session switches its branch or touches its `node_modules`.
 1. **Safe checkpoint:** stop at a point where the 4.2 files compile. Commit only the 4.2 files (the M0 exclusions still apply: `.claude/launch.json`, `pilot/`, `.media-local/`, `e2e/.media/`, the `*illustrated-preview*` scripts). Record the checkpoint hash. Do not use `git stash`: a commit is recoverable and reviewable.
 2. `git fetch origin` and confirm `git rev-parse --short origin/main` prints `505e2db`. If it differs, stop and ask.
@@ -83,7 +301,7 @@ Run this only from the Developer session that owns this folder. Several sessions
 6. Checks after the merge: `npm run check`; `npm run test:integration` (local test database); `npm run test:e2e` (all projects, including the Phase 3 suites); `npm run build && npm run test:previews-gate`.
 7. Media stays off: no change to `MEDIA_REQUIRED` (unset/off), no technique status change, no media ingest or publication. If the previews-gate server needs media variables to start, set them explicitly to their off values inside the script, never from `.env`.
 
-### M1. Previews gate (D2, D3)
+#### M1. Previews gate (D2, D3)
 `src/server/local-mode.ts`, added next to `isLocalMachine` with no other change:
 ```ts
 /** `?state=` previews (decision 9, P4-2): development, tests, or this developer's machine only. Never on Vercel. */
@@ -103,7 +321,7 @@ Unit tests:
   - parser: each `DEV_STATES` value is accepted when enabled; unknown value, `undefined` and an array (first element used) behave as today; **every** value returns `null` when disabled.
   - static choke point: read every `.ts`/`.tsx` file under `src/` except `*.test.ts`. Assert that (a) each `parseDevState(` call passes exactly `devPreviewsEnabled()` as its second argument (no literal `true`, no variable); (b) every read of the `state` search parameter (`(await searchParams).state`, `searchParams.state`, `.get('state')`, `['state']`) occurs only as the first argument of such a call; (c) the set of files that call `parseDevState` equals the known list (map, review, onboarding), so a new preview page fails until it is reviewed. Use the same `readFileSync` style as `src/lib/offline-page.test.ts`.
 
-### M2. Production gate check (arch "Production previews")
+#### M2. Production gate check (arch "Production previews")
 New `scripts/verify-previews-gate.mjs` and `package.json` script `"test:previews-gate": "node scripts/verify-previews-gate.mjs"`. It is **not** added to `check`, because it needs a build.
 - Preconditions: a `.next` production build exists (otherwise print "run `npm run build` first" and exit 1). `TEST_DATABASE_URL` is set and differs from `DATABASE_URL`, the same guards as `scripts/test-e2e.mjs`. The server gets `DATABASE_URL=$TEST_DATABASE_URL`, so it never runs against Supabase.
 - For each case it starts `npx next start -p 3101` with an **explicit** environment, waits for the port, sends unauthenticated `fetch` requests with `redirect: 'manual'`, then stops the server (also on failure). Every gate variable is set explicitly per case (`NODE_ENV=production`, `APP_ENV`, `BETTER_AUTH_URL`, a dummy `BETTER_AUTH_SECRET`), because `next start` loads the developer's `.env` for any variable that is missing and could otherwise reopen the gate.
@@ -118,7 +336,7 @@ New `scripts/verify-previews-gate.mjs` and `package.json` script `"test:previews
 
 - Output: one PASS/FAIL line per case. Exit code 0 only if all four pass. If Next.js turns out to keep `.env` values over explicit process values, the Developer documents it and adjusts the cases, keeping A, B and C as the blocking proofs.
 
-### M3. Service worker update model (D4, D6, D7)
+#### M3. Service worker update model (D4, D6, D7)
 `public/sw.js` changes only the following; `activate`, `fetch`, `CACHE` and `OFFLINE_URL` stay byte-for-byte the same:
 - Add a version marker line near the top, `// sw-version: 4.2.0`. Changing this line is how a deployment publishes a new worker (D5).
 - `install`: keep the precache of `/offline.html` exactly. **Remove** `.then(() => self.skipWaiting())`. Per the service-worker lifecycle, a first install with no active worker activates immediately; when an active worker exists, the new one waits.
@@ -136,7 +354,7 @@ self.addEventListener('message', (event) => {
 - No new cache, no change to `public/offline.html` or `next.config.ts`.
 - `e2e/offline.spec.ts` is **not** modified. Its helper already handles first-install control. If a case fails because of D4, the Developer stops and reports the failure instead of editing that file beyond the minimal change arch D7 allows, and justifies the change in `dev-phase4.md`.
 
-### M4. Update controller (D4, D5)
+#### M4. Update controller (D4, D5)
 New `src/lib/pwa/update.ts`, framework-free and DOM-free, so it runs under the existing node Vitest config:
 ```ts
 export type UpdateStatus = 'idle' | 'available' | 'activating' | 'dismissed'
@@ -159,7 +377,7 @@ Rules:
 
 `src/lib/pwa/update.test.ts` (fakes + fake clock/timer) must cover: first install with no controller → never `available`; an existing controller + waiting worker at creation → `available`; `updatefound` → `installed` with a controller → `available`; tap → exactly one `SKIP_WAITING` message → `controllerchange` → exactly one reload; a double tap → one message; an unrequested `controllerchange` → no reload; the 10 s fallback reloads once and a late `controllerchange` adds no second reload; dismiss → no message, stays dismissed; `maybeCheckForUpdate` throttled (none before 60 min, one after, a rejection swallowed).
 
-### M5. Update banner (D10)
+#### M5. Update banner (D10)
 `src/components/pwa/ServiceWorkerRegistration.tsx`:
 - Keeps the production-only registration with the same options. After `register()` resolves, it creates the controller with `{ registration, container: navigator.serviceWorker, reload: () => window.location.reload() }` and renders `<UpdatePrompt controller={…} />`. It renders nothing until then, and nothing in development.
 - Wiring for `maybeCheckForUpdate`: `visibilitychange` → `visible`, plus a 60-minute `setInterval` that calls it only when `document.visibilityState === 'visible'`. Listeners and the interval are cleaned up on unmount.
@@ -179,7 +397,7 @@ Rules:
 - **No animation** (no transition is needed), which also satisfies reduced motion.
 - `/offline.html` is static and never shows the banner.
 
-### M6. Install detection (D8)
+#### M6. Install detection (D8)
 New `src/lib/pwa/install.ts`, pure with no `window` access:
 ```ts
 export type InstallCase = 'installed' | 'prompt' | 'ios' | 'other'
@@ -196,7 +414,7 @@ New client store `src/components/pwa/install-prompt.ts`. This is a small helper 
 - `subscribe`, `getSnapshot()` → `{ promptAvailable, installedNow }` (a stable object per change), and `promptInstall()`, which calls `prompt()` once, then drops the event (single-use) and notifies. A dismissed prompt therefore falls back to the `other` case.
 - A local TypeScript type for `BeforeInstallPromptEvent` (it is not in the DOM lib). No storage, no network.
 
-### M7. Install card on `/puppy` (D8, D9)
+#### M7. Install card on `/puppy` (D8, D9)
 `src/components/pwa/InstallGuide.tsx` (+ `InstallGuide.module.css`), a client component:
 - Inputs: the store snapshot; `matchMedia('(display-mode: standalone)')` (with a change subscription) or `navigator.standalone === true`; `navigator.userAgent`; `navigator.maxTouchPoints`. All are read through `useSyncExternalStore`, with a server snapshot of "not yet detected".
 - Before detection (SSR and first paint) it renders only the always-present intro, so there is no hydration mismatch and no loading text.
@@ -210,7 +428,7 @@ New client store `src/components/pwa/install-prompt.ts`. This is a small helper 
 
 `src/app/(main)/puppy/page.tsx`: add `<Card id="install" aria-labelledby="install-title" className={styles.sectionStack}>` with `<h2 id="install-title" className={styles.cardTitle}>התקנה במסך הבית</h2>` and `<InstallGuide />`. Place it **after** the "המסלול" card and **before** "חשבון". The card is always present. Nothing else on the page changes. `/home` is not touched.
 
-### M8. E2E `e2e/pwa.spec.ts`
+#### M8. E2E `e2e/pwa.spec.ts`
 It runs in the existing three projects (do **not** edit `playwright.config.ts`), uses `expectHealthyPage` (axe, RTL, overflow) and the `owner` fixture. Since `505e2db` the 360/768 projects skip tests tagged `@desktop-only`; `pwa.spec.ts` uses no such tag, so every case runs at all three widths.
 - **Block genuine install events:** an init script on every install test registers a capture-phase `beforeinstallprompt` listener that calls `stopImmediatePropagation()` unless the event carries a test marker. Headless Chromium may otherwise fire a real event on the installable localhost app and turn the iOS/other cases into `prompt`.
 - Install cases on `/puppy#install` (each asserts the heading "התקנה במסך הבית" and the case text):
@@ -231,7 +449,7 @@ It runs in the existing three projects (do **not** edit `playwright.config.ts`),
   If the spike fails, follow the arch fallback: document the exact limitation in `dev-phase4.md`, rely on the M4 controller tests, keep an e2e that asserts **no** banner after the first install, and record a manual check performed locally (two builds with different `sw-version`, steps and observed result).
 - Previews on the local server: `/map?state=error` shows "לא הצלחנו לטעון את המפה" (positive proof that the gate stays open locally). The existing `shell.spec.ts` preview cases stay unchanged and green.
 
-### M9. Documentation (arch "Expected files"; PR #3 overlap rules)
+#### M9. Documentation (arch "Expected files"; PR #3 overlap rules)
 - **DESIGN_SYSTEM.md**
   - §8: new subsection `### Install guidance and app update`, appended after `### Puppy and settings` (end of §8). It covers the four install cases and their copy, the `/puppy` placement and `#install` anchor, no home hint and no dismissal, the honest "some browsers don't support installation" rule, and the banner copy and behavior (owner-activated, one reload, "אחר כך" until the next page load, non-modal, no focus steal).
   - §9: one line for the update banner and one for the install card, placed **after** "Do not rely on tooltips for essential mobile instructions." Do **not** touch the "Video" line (PR #3 rewrites it).
@@ -240,7 +458,7 @@ It runs in the existing three projects (do **not** edit `playwright.config.ts`),
 - **README.md**: new self-contained section `## Installation and updates (Phase 4, slice 2)` placed immediately **before** `## Checks`. It covers where the install card is; how a deployment triggers the prompt (bump `// sw-version:` in `public/sw.js`); that the owner taps to update and the page reloads once; the hourly check while visible; the one-time prompt for existing installs on the first 4.2 deployment; the rollback worker calling `skipWaiting()` itself; the previews rule (development, tests and local machine only); and `npm run test:previews-gate`. Nothing is appended at the end of the file (PR #3 appends its media sections there), and the `## Checks` block is not edited.
 - `.env.example`, `playwright.config.ts`, `next.config.ts`, `public/offline.html`, `src/app/manifest.ts`, icons: **not modified**.
 
-### Documentation overlap with draft PR #3 (re-verified 2026-11-11)
+#### Documentation overlap with draft PR #3 (re-verified 2026-11-11)
 PR #3 head `3ddd5ba`, merge-base `d8add95`, 101 files. No 4.2 code file is changed by PR #3 (checked: `sw.js`, `ServiceWorkerRegistration`, `devState`, `local-mode`, the three preview pages, `puppy/page.tsx`, `layout.tsx`, `e2e/offline|shell`, `lib/pwa`, `components/pwa`, `next.config.ts`). PR #3 still reads `parseDevState` in the same three pages, so after either merge the gated signature applies to them unchanged.
 
 | File | PR #3 hunks | 4.2 region | Resolution when merging second |
@@ -254,7 +472,7 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 
 **Revision 2 status:** PR #3 merged first (`505e2db`), so 4.2 is the branch that aligns. The owner chose a merge of `origin/main` (M0b) rather than a rebase. The table above stays the rule for the documentation conflicts; M0b adds `package.json` and `ExerciseScreen.tsx`. The DECISIONS provider-table correction is no longer blocked by PR #3, but it stays out of 4.2 scope (arch "Out of Scope") until the Architect assigns it.
 
-## Acceptance / Gating Criteria
+### Acceptance / Gating Criteria
 1. Branch `feature/phase-4-install-update` started from `d8add95` and contains `origin/main` `505e2db` through one merge commit made after a 4.2 checkpoint commit (M0b). No rebase or force push. Every 4.2 change from the checkpoint is still present after the merge.
 2. `npm run check` passes (typecheck, lint, unit, build).
 3. `npm run test:e2e` passes in full at 360/768/1280, including every pre-existing `offline.spec.ts` and `shell.spec.ts` case with those files unchanged (or a justified minimal `offline.spec.ts` change per D7), and the Phase 3 suites from `main` (`admin-media.spec.ts`, `demo-video.spec.ts`). `npm run test:integration` passes on the local test database.
@@ -268,7 +486,7 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 11. Docs updated only in the regions above; `playwright.config.ts` and `.env.example` untouched by 4.2. `git diff --stat origin/main...HEAD` (the 4.2 diff against `505e2db`) shows neither, and in `ExerciseScreen.tsx` only the marker line.
 12. Real-device and deployed-build items recorded as PENDING with the arch list. They do not block the 4.2 merge.
 
-## Functional Testability Criteria
+### Functional Testability Criteria
 
 - Page/screen the user can open: `/puppy` (card "התקנה במסך הבית", `#install`); any page (update banner).
 - User-visible behavior: browser-appropriate Hebrew install guidance or "כבר מותקנת"; a non-blocking "גרסה חדשה" banner that acts only on the owner's tap; production ignores `?state=`.
@@ -277,7 +495,7 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 - Minimal end-to-end flow: local production build → `/puppy` shows guidance → a changed `sw-version` is served → the banner appears → "לעדכן עכשיו" → one reload under the new worker → offline → the fallback still appears.
 - Expected observable result: as above; previews visible on the local machine and invisible in cases A-C.
 
-## Required Developer Evidence
+### Required Developer Evidence
 `team-Yuri/dev-phase4.md` must contain (per `.claude/rules/20-testing.md` §80 and `30-docs.md` §50):
 1. Phase identifier `PHASE=4`, slice 4.2, branch name, original base `d8add95`, checkpoint commit hash, merge commit hash, and `git merge-base HEAD origin/main` = `505e2db…`.
 2. Implementation summary per milestone M1-M9, plus M0b: conflicts met, how each was resolved, and confirmation that no 4.2 change was lost (checkpoint vs. post-merge comparison of the 4.2 files).
@@ -295,7 +513,7 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 14. Known issues, scope compliance statement (including `MEDIA_REQUIRED` off and video production paused), declaration.
 15. Integration tests: `npm run test:integration` command and result on the local test database, with skipped PostgreSQL-only tests reported as skipped.
 
-## Out of Scope
+### Out of Scope
 - Slices 4.3-4.8: asset caching, account deletion, pilot allowlist, metrics and alerts, drills and measurements, device matrix and usability.
 - Push, background or periodic sync, manifest screenshots or shortcuts, a custom iOS install UI beyond instructions, build-version polling, a home-screen install hint, dismissal persistence.
 - Any change to `public/offline.html`, `src/app/manifest.ts`, icons, `next.config.ts`, `playwright.config.ts`, `.env.example`, CI workflow (except the runner pin approved in revision 3), server APIs, database schema or environment variables.
@@ -303,7 +521,7 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 - Deployment, merge to `main`, production changes or real-device runs (the owner does these after approval). The M0b merge of `main` into the 4.2 branch is in scope.
 - Video production, media ingest or publication, technique status changes and the `MEDIA_REQUIRED` switch.
 
-## Risks / Open Questions
+### Risks / Open Questions
 
 | Risk / question | Impact | Handling |
 |---|---|---|
@@ -323,10 +541,10 @@ Whichever PR merges second rebases onto `main` and resolves these three document
 
 No blocking open question remains for implementation.
 
-## Manager Review
-MANAGER_REVIEW_STATUS: APPROVED
+### Manager Review
+MANAGER_REVIEW_STATUS (slice 4.2): APPROVED
 
-### Review Notes
+#### Review Notes
 Reviewed 2026-11-11: `team-Yuri/dev-phase4.md` on `feature/phase-4-install-update` (HEAD `05b9dc9`, code HEAD `6a028f5`, merge `d5218af`). The Developer review checklist passes on every item. The claims below were re-checked independently with git (read-only); test runs were not repeated.
 
 1. **M0b merge and final diff.**
@@ -352,10 +570,10 @@ Reviewed 2026-11-11: `team-Yuri/dev-phase4.md` on `feature/phase-4-install-updat
 - C2. Commit `05b9dc9` commits the Team Yuri artifacts (`PHASE.md`, `plan.md`, `arch-phase4.md`, `manager-phase4.md`, `dev-phase4.md`). M0 left that to the owner, and `dev-phase4.md` records no decision. The owner decides whether that commit stays in the PR. This manager document has changed since `05b9dc9` (this review), so if the commit stays, it needs updating. **Resolved 2026-11-11: the owner decided to keep the artifacts in the PR. This reviewed manager document is committed on top as its own commit.**
 - C3. Real-device and deployed-build items stay PENDING. They block the pilot release (4.8), not this merge.
 
-### Required Corrections
+#### Required Corrections
 None.
 
-### Scope amendment (revision 3, 2026-11-11): CI runner pin for PR #5
+#### Scope amendment (revision 3, 2026-11-11): CI runner pin for PR #5
 Approved by the owner and the Manager. This is a narrowly scoped CI fix so that merge condition C1 can be evaluated. It is not a product change.
 
 **Facts (CI runs `43054638786` push and `43054685522` pull_request, both on `f24da02`):** job "Typecheck, lint, unit tests, build" passed. In job "Integration and e2e on standard PostgreSQL", `npm ci`, the integration tests and `assert-required-tests` (the PostgreSQL-only tests) **passed**. Then `npx playwright install --with-deps chromium` **failed** and "End-to-end tests" was **skipped**. The job uses `runs-on: ubuntu-latest`, which resolved to Ubuntu 26.04 (`resolute`). `apt` repeatedly failed with "Temporary failure resolving" for `azure.archive.ubuntu.com`, `archive.ubuntu.com` and `security.ubuntu.com`, while `packages.microsoft.com` resolved. The failure is in runner infrastructure, before any 4.2 e2e code runs.
@@ -376,7 +594,7 @@ Approved by the owner and the Manager. This is a narrowly scoped CI fix so that 
 
 **C1 status:** integration and the PostgreSQL-only tests on standard PostgreSQL passed on `f24da02`. The e2e job is not yet evaluated (skipped because of the runner failure). C1 stays **open** until e2e passes in CI.
 
-### C1 closure and final owner approval readiness (2026-11-11)
+#### C1 closure and final owner approval readiness (2026-11-11)
 Verified independently with `gh` (run metadata, job and step conclusions, logs) and `git` (read-only).
 
 **Runner pin commit `0ce5973`:** only `.github/workflows/ci.yml` (`postgres` job: `runs-on: ubuntu-24.04` plus a one-line reason comment) and one sentence in README `## Checks`. The `quality` job stays on `ubuntu-latest`. No step, test, assertion or dependency install changed, and there is no `continue-on-error`, retry or skip. The Playwright compatibility check is recorded in `dev-phase4.md` (System requirements list Ubuntu 24.04; `playwright-core` 1.64.1 has `ubuntu24.04-x64`). **Within revision 3.**
@@ -401,7 +619,7 @@ In every PostgreSQL job, every step succeeded; the only skipped step is "Upload 
 - This closure note is committed locally on top of `49ea7d3` and is **not pushed**. If it is pushed, the new head is documentation-only, and its CI must also be green before merging, consistent with C1.
 - Remaining owner actions, none of them performed here: mark PR #5 ready for review, approve, and merge; then any deployment as a separate approved step. No merge or deployment was done.
 
-### C1 reopened: intermittent Phase 3 test on head `9b5e973` (revision 4, 2026-11-11)
+#### C1 reopened: intermittent Phase 3 test on head `9b5e973` (revision 4, 2026-11-11)
 `9b5e973` (this document's C1 closure, documentation only) was pushed with the owner's approval. On that head, pull_request run `43101062711` passed and push run `43101057240` **failed** in "Integration tests (includes concurrency / row locking)": 178 passed, 1 failed, 1 skipped. Because the integration step failed, the required-tests check and e2e did not run in that run.
 
 **Failing test:** `test/integration/media-generation.test.ts:300`, "media generation on standard PostgreSQL > a withdrawal waits for a generation commit that holds the technique row, so the committed binding predates it". `AssertionError: expected 1794431690092 to be less than or equal to 1794431690030`: the job's `finishedAt` is 62 ms later than the clip's `withdrawnAt`.
@@ -438,7 +656,7 @@ Rules:
 
 **Status:** slice 4.2 approval stands (no 4.2 file is involved). **C1 is open** until both CI runs on the PR head pass in a single attempt with the corrected test. A rerun of `43101057240` without the correction does not close C1. No merge or deployment.
 
-### C1 closed again: media-generation test correction reviewed (2026-11-12)
+#### C1 closed again: media-generation test correction reviewed (2026-11-12)
 Evidence reviewed: `dev-phase4.md`, section "Media-generation test correction", and the diff of `f38ed53` read directly.
 
 **Review of the correction (accepted):**

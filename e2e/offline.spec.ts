@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test'
-import { ANSWERS, expect, expectHealthyPage, test } from './fixtures'
+import { ANSWERS, currentLevelId, expect, expectHealthyPage, test } from './fixtures'
 
 // Offline recovery (Phase 4, slice 1): public/sw.js serves the static public/offline.html only when a page
 // navigation fails for lack of network. Runs against the local production build (scripts/test-e2e.mjs).
@@ -98,20 +98,44 @@ test('HTTP error responses pass through the service worker unchanged', async ({ 
   await expect(offlineHeading(page)).toHaveCount(0)
 })
 
-test('only the public offline page is ever cached', async ({ page, owner }) => {
-  void owner
-  await page.goto('/home')
-  await controlledByServiceWorker(page)
-  for (const route of ['/map', '/review', '/puppy']) await page.goto(route)
-  expect(await page.evaluate(() => fetch('/api/auth/get-session').then((r) => r.status))).toBe(200)
+// Slice 4.3 redefines this privacy proof: the worker now also caches public build assets, and nothing else.
+const OFFLINE_CACHE = 'woffiz-offline-v1'
+const SHELL_CACHE = 'woffiz-shell-4.3.0'
+const ICONS = ['/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-180.png']
 
-  const cached = await page.evaluate(async () => {
+/** Every Cache Storage entry as pathname + search, by cache name. */
+const cacheContents = (page: Page) =>
+  page.evaluate(async () => {
     const result: Record<string, string[]> = {}
     for (const name of await caches.keys()) {
       const cache = await caches.open(name)
-      result[name] = (await cache.keys()).map((request) => new URL(request.url).pathname)
+      result[name] = (await cache.keys()).map((request) => {
+        const url = new URL(request.url)
+        return url.pathname + url.search
+      })
     }
     return result
   })
-  expect(cached).toEqual({ 'woffiz-offline-v1': ['/offline.html'] })
+
+test('only the public offline page and public build assets are ever cached', async ({ page, owner }) => {
+  void owner
+  await page.goto('/home')
+  await controlledByServiceWorker(page)
+  const levelId = await currentLevelId(page)
+  for (const route of ['/map', '/review', '/puppy', `/exercise/${levelId}`]) await page.goto(route)
+  expect(await page.evaluate(() => fetch('/api/auth/get-session').then((r) => r.status))).toBe(200)
+  // Cache writes happen after the response (waitUntil), so wait for the first build asset instead of sleeping.
+  await expect.poll(async () => (await cacheContents(page))[SHELL_CACHE]?.length ?? 0).toBeGreaterThan(0)
+
+  const cached = await cacheContents(page)
+  expect(Object.keys(cached).sort()).toEqual([OFFLINE_CACHE, SHELL_CACHE])
+  expect(cached[OFFLINE_CACHE]).toEqual(['/offline.html'])
+
+  const shell = cached[SHELL_CACHE]!
+  expect(shell.length).toBeGreaterThan(0)
+  // Every key is on the allowlist: a /_next/static/ file or one of the four icons with no query string.
+  expect(shell.filter((entry) => !(entry.startsWith('/_next/static/') || ICONS.includes(entry)))).toEqual([])
+  // And none is a page, an API call, an RSC payload, an optimized image or artwork.
+  const forbidden = /^\/(api|art|home|map|review|puppy|exercise|onboarding)(\/|\?|$)|_rsc|\/_next\/(image|data)|^\/(offline\.html|sw\.js|manifest\.webmanifest)/
+  expect(shell.filter((entry) => forbidden.test(entry))).toEqual([])
 })
