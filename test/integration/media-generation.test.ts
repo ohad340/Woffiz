@@ -286,20 +286,187 @@ describe.skipIf(!REAL_POSTGRES)('media generation on standard PostgreSQL', () =>
     )
   })
 
+  // ----- Withdrawal against a generation commit -----
+
+  const STANDARD_SLOT = 'slot:mouthing-redirect-toy@1:STANDARD'
+
+  /** The outcome of a generation, decided by what it SAVED: a successful plan may be technique-bound or free-form. */
+  async function savedPlanOf(ownerId: string) {
+    const rows = await exercisesOf(ownerId)
+    return { rows, bound: rows.filter((r) => r.techniqueKey !== null) }
+  }
+
+  type Waiting = { pid: number; query: string; blockedBy: number[] }
+
+  /** Backends of this database that are waiting for a lock right now, with the backends that block them. */
+  const waitingBackends = () =>
+    prisma.$queryRaw<Waiting[]>`
+      SELECT a.pid, a.query, pg_blocking_pids(a.pid) AS "blockedBy"
+      FROM pg_stat_activity a
+      WHERE a.datname = current_database() AND a.wait_event_type = 'Lock'`
+
+  /** Polls the database until a waiting backend matches. The pause only spaces the polls; it orders nothing. */
+  async function observeWaiting(what: string, match: (backend: Waiting) => boolean): Promise<Waiting> {
+    for (let i = 0; i < 400; i++) {
+      const found = (await waitingBackends()).find(match)
+      if (found) return found
+      await sleep(25)
+    }
+    throw new Error(`never observed in the database: ${what}`)
+  }
+
+  /**
+   * Test-only gate on the generation commit. A SHARE lock on "Plan" lets every read through but makes the commit's
+   * first plan INSERT wait. In the commit that INSERT comes after recheckBoundTechniques, so a commit that waits here
+   * already holds the technique row FOR SHARE. Production code is not involved: the lock is taken by this test.
+   */
+  async function blockPlanInserts() {
+    let open!: () => void
+    const gate = new Promise<void>((resolve) => (open = resolve))
+    let report!: (pid: number) => void
+    const locked = new Promise<number>((resolve) => (report = resolve))
+    const held = prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe('LOCK TABLE "Plan" IN SHARE MODE')
+        const rows = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`
+        report(rows[0]!.pid)
+        await gate
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    const pid = await Promise.race([
+      locked,
+      held.then(() => {
+        throw new Error('the Plan lock was released before it was reported')
+      }),
+    ])
+    return {
+      pid,
+      async release() {
+        open()
+        await held
+      },
+    }
+  }
+
   it('a withdrawal waits for a generation commit that holds the technique row, so the committed binding predates it', async () => {
     const a = await admin()
     const versionId = await published(a.id)
     const owner = await createUser()
     await draftAnswers(owner.id)
+    const settled: string[] = []
+    const mediaVersion = () => prisma.mediaVersion.findUniqueOrThrow({ where: { id: versionId } })
+
+    const blocker = await blockPlanInserts()
+    let generation: Promise<unknown> | undefined
+    let withdrawal: Promise<unknown> | undefined
+    try {
+      // 1. Generation reads the offer while the clip is published and runs into its commit. The commit takes the
+      //    technique row FOR SHARE (recheck) and then stops at the plan INSERT, behind this test's lock.
+      generation = completeOnboarding(owner.id, options).finally(() => settled.push('generation'))
+      generation.catch(() => {})
+      const committing = await observeWaiting('the generation commit waiting at its plan INSERT', (b) => b.blockedBy.includes(blocker.pid) && /INSERT INTO\s+("public"\.)?"Plan"/.test(b.query))
+      expect(await mediaVersion()).toMatchObject({ status: 'PUBLISHED', withdrawnAt: null })
+      expect(await prisma.plan.count({ where: { puppy: { ownerId: owner.id } } })).toBe(0)
+
+      // 2. Only now does the withdrawal start. The database shows it waiting for the technique row, blocked by the
+      //    backend of the generation commit.
+      withdrawal = withdraw(a.id, versionId, { reason: 'TECHNICAL', note: 'parallel' }, deps).finally(() => settled.push('withdrawal'))
+      withdrawal.catch(() => {})
+      const waiting = await observeWaiting('the withdrawal waiting for the technique row held by the generation commit', (b) => b.blockedBy.includes(committing.pid) && /"TechniqueVersionState"[\s\S]*FOR UPDATE/.test(b.query))
+      expect(waiting.pid).not.toBe(committing.pid)
+      expect(settled).toEqual([])
+      expect(await mediaVersion()).toMatchObject({ status: 'PUBLISHED', withdrawnAt: null })
+    } finally {
+      // 3. Let the commit finish (also on a failed expectation, so nothing stays locked).
+      await blocker.release()
+      await Promise.allSettled([generation, withdrawal])
+    }
+
+    await expect(generation).resolves.toMatchObject({ created: true })
+    await expect(withdrawal).resolves.toMatchObject({ status: 'WITHDRAWN', suspended: false })
+    // The withdrawal got the row only after the generation commit released it.
+    expect(settled).toEqual(['generation', 'withdrawal'])
+
+    const job = await prisma.generationJob.findFirstOrThrow({ where: { ownerId: owner.id } })
+    expect(job.status).toBe('SUCCEEDED')
+
+    // The saved plan carries the binding that was offered while the clip was published.
+    const { rows, bound } = await savedPlanOf(owner.id)
+    expect(rows.length).toBeGreaterThanOrEqual(12)
+    expect(bound).toHaveLength(1)
+    expect(bound[0]).toMatchObject({
+      techniqueKey: KEY,
+      techniqueVersion: 1,
+      techniqueVariant: 'STANDARD',
+      mediaId: STANDARD_SLOT,
+      criterionVersion: 1,
+      level: { topic: 'BITING' },
+    })
+    expect(bound[0]!.techniqueParamsJson).toEqual({ params: defaultParams(MOUTHING.variants.STANDARD!), tipIds: ['rotate-toys'] })
+    expect(bound[0]!.contentJson).toEqual(renderTechniqueContent(MOUTHING, 'STANDARD', defaultParams(MOUTHING.variants.STANDARD!), ['rotate-toys']))
+
+    // The withdrawal took effect afterwards and is fully recorded.
+    const withdrawn = await mediaVersion()
+    expect(withdrawn).toMatchObject({ status: 'WITHDRAWN', withdrawnById: a.id, withdrawReason: 'TECHNICAL', withdrawNote: 'parallel' })
+    expect(withdrawn.withdrawnAt).toBeInstanceOf(Date)
+    expect(job.finishedAt!.getTime()).toBeLessThanOrEqual(withdrawn.withdrawnAt!.getTime())
+
+    // History is not rewritten: the withdrawal changed media rows only, the stored exercises are exactly as committed.
+    expect(await exercisesOf(owner.id)).toEqual(rows)
+  })
+
+  it('a withdrawal racing a generation leaves a refused candidate, a binding that predates it, or a free-form plan', async () => {
+    const a = await admin()
+    const versionId = await published(a.id)
+    const owner = await createUser()
+    await draftAnswers(owner.id)
+    // No synchronization on purpose: every ordering the scheduler produces must end in one of three valid states.
     const results = await Promise.allSettled([completeOnboarding(owner.id, options), withdraw(a.id, versionId, { reason: 'TECHNICAL', note: 'parallel' }, deps)])
     expect(results[1]!.status).toBe('fulfilled')
+    const withdrawn = await prisma.mediaVersion.findUniqueOrThrow({ where: { id: versionId } })
+    expect(withdrawn).toMatchObject({ status: 'WITHDRAWN', withdrawnById: a.id, withdrawReason: 'TECHNICAL' })
     const job = await prisma.generationJob.findFirstOrThrow({ where: { ownerId: owner.id } })
-    if (results[0]!.status === 'fulfilled') {
-      // Committed first: the binding was made while the clip was still published (withdrawal came after).
-      expect(job.status).toBe('SUCCEEDED')
-      expect(job.finishedAt!.getTime()).toBeLessThanOrEqual((await prisma.mediaVersion.findUniqueOrThrow({ where: { id: versionId } })).withdrawnAt!.getTime())
-    } else {
+    const { rows, bound } = await savedPlanOf(owner.id)
+
+    if (results[0]!.status === 'rejected') {
+      // The offer was read while published, the withdrawal committed before the commit's recheck: nothing is stored.
+      expect(results[0]!.reason).toMatchObject({ code: 'GENERATION_FAILED' })
       expect(job).toMatchObject({ status: 'REJECTED', errorCode: 'media-unavailable' })
+      expect(rows).toHaveLength(0)
+      expect(await usageCount('ai-request', owner.id)).toBe(0)
+    } else if (bound.length > 0) {
+      // Bound and committed: the commit held the technique row first, so the withdrawal is the later event.
+      expect(job.status).toBe('SUCCEEDED')
+      expect(bound).toHaveLength(1)
+      expect(bound[0]).toMatchObject({ techniqueKey: KEY, techniqueVersion: 1, techniqueVariant: 'STANDARD', mediaId: STANDARD_SLOT })
+      expect(job.finishedAt!.getTime()).toBeLessThanOrEqual(withdrawn.withdrawnAt!.getTime())
+    } else {
+      // The withdrawal committed before generation read the offer: nothing was offered, so the plan is free-form.
+      // It may commit after the withdrawal; there is no binding and therefore no timestamp to compare.
+      expect(job.status).toBe('SUCCEEDED')
+      expect(rows.length).toBeGreaterThanOrEqual(12)
+      expect(rows.every((r) => r.techniqueKey === null && r.techniqueVersion === null && r.techniqueVariant === null && r.techniqueParamsJson === null)).toBe(true)
+      expect(rows.every((r) => !r.mediaId?.startsWith('slot:'))).toBe(true)
     }
+  })
+
+  it('a generation that starts after the withdrawal committed saves a free-form plan with no binding', async () => {
+    const a = await admin()
+    const versionId = await published(a.id)
+    const owner = await createUser()
+    await draftAnswers(owner.id)
+    await withdraw(a.id, versionId, { reason: 'TECHNICAL', note: 'before generation' }, deps)
+    const withdrawn = await prisma.mediaVersion.findUniqueOrThrow({ where: { id: versionId } })
+
+    await expect(completeOnboarding(owner.id, options)).resolves.toMatchObject({ created: true })
+    const job = await prisma.generationJob.findFirstOrThrow({ where: { ownerId: owner.id } })
+    expect(job.status).toBe('SUCCEEDED')
+    // This is the ordering the old timestamp assertion mistook for a failure: a successful commit AFTER the withdrawal.
+    expect(job.finishedAt!.getTime()).toBeGreaterThanOrEqual(withdrawn.withdrawnAt!.getTime())
+    const { rows, bound } = await savedPlanOf(owner.id)
+    expect(rows.length).toBeGreaterThanOrEqual(12)
+    expect(bound).toHaveLength(0)
+    expect(rows.every((r) => !r.mediaId?.startsWith('slot:'))).toBe(true)
   })
 })

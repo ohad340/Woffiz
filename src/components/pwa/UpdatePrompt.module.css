@@ -1,0 +1,52 @@
+/* Fixed, non-modal update banner (P4-2). No transition or animation: it simply appears. */
+.banner {
+  position: fixed;
+  inset-inline: var(--gutter);
+  inset-block-end: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-3));
+  z-index: 30; /* above the bottom nav (20); modal sheets use the top layer and stay above it */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-inline-size: var(--width-form);
+  margin-inline: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+  color: var(--color-text);
+}
+
+.text {
+  font: var(--text-body);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.actions > * {
+  flex: 1 1 auto;
+}
+
+/* While the banner shows, the page can scroll its last content and focused controls clear of it. */
+:global(body):has(.banner) {
+  padding-block-end: calc(var(--update-banner-block-size, 0px) + var(--space-3));
+}
+
+/*
+ * Below 1024px the exercise screen keeps its report action in a fixed bar above the bottom nav
+ * (ExerciseScreen .practiceBar: --space-3 padding around a --cta-height button). The banner sits above that bar.
+ */
+@media (max-width: 1023px) {
+  :global(body):has([data-practice-bar]) .banner {
+    inset-block-end: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--cta-height) + 3 * var(--space-3));
+  }
+}
+
+@media (min-width: 1024px) {
+  .banner {
+    inset-block-end: calc(env(safe-area-inset-bottom) + var(--space-6));
+  }
+}

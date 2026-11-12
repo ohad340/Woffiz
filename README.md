@@ -63,6 +63,15 @@ Hosting is Vercel (project `woffiz`, region `cdg1`, Node 24) and the database is
 - **Never run the integration or e2e suites against Supabase**: they truncate tables. Keep `TEST_DATABASE_URL` on the local `woffiz-test` database or CI PostgreSQL.
 - Registration stays limited to `TESTER_EMAIL` while Resend is configured, and the sender is the shared `onboarding@resend.dev` (messages may land in spam). A verified sending domain is needed before anyone else can register.
 
+## Installation and updates (Phase 4, slice 2)
+
+- **Install guidance** is the “התקנה במסך הבית” card on `/puppy` (`/puppy#install`). It shows one case for the current browser: already installed, an “התקנה” button (Chromium's native prompt), Share-sheet steps on iPhone/iPad, or browser-menu instructions elsewhere. Home has no install hint.
+- **Publishing an update**: change the `// sw-version:` line at the top of `public/sw.js` in the deployment. Browsers that already run the app install the new worker and keep it waiting; a banner offers “לעדכן עכשיו”. Only that tap activates it, and the page reloads once. “אחר כך” hides the banner until the next page load. While the app is visible it checks for a new worker at most once per hour; navigations also check.
+- **First 4.2 deployment**: existing installations see the update banner once, because the 4.2 worker is new to them.
+- **Rollback**: publish a `sw.js` that calls `self.skipWaiting()` itself (a rollback never waits for a tap), deletes the `woffiz-*` caches and calls `self.registration.unregister()`.
+- **`?state=` previews** (`/map?state=error`, …) work only under `next dev`, unit tests and a production build on this machine (`APP_ENV=local` with a localhost `BETTER_AUTH_URL`, as in the e2e server). Everywhere else, including Vercel, `?state=` is ignored.
+- **`npm run test:previews-gate`** (after `npm run build`, needs `TEST_DATABASE_URL`) starts the production build four times on port 3101 and proves that the previews stay off for the Vercel shape, `APP_ENV=local` with a public URL, and `APP_ENV=preview` on localhost, and stay on for this machine. It is not part of `npm run check` because it needs a build.
+
 ## Checks
 
 ```bash
@@ -76,7 +85,7 @@ npm run test:e2e                  # Playwright at 360/768/1280: registration + e
 
 Locally, if PGlite drops connections under parallel load (`ConnectionClosed`, `P2028`), restart it (`npm run db:test:stop && npm run db:test:dev`) and use `npm run test:e2e -- --workers=2`. No test ever sends real email.
 
-**Concurrency and row-locking tests run only on standard PostgreSQL.** PGlite serves one connection, so locally they are skipped and reported as skipped, not passed. The GitHub Actions workflow (`.github/workflows/ci.yml`) runs them against a `postgres:17` service with `TEST_DB_KIND=postgres`.
+**Concurrency and row-locking tests run only on standard PostgreSQL.** PGlite serves one connection, so locally they are skipped and reported as skipped, not passed. The GitHub Actions workflow (`.github/workflows/ci.yml`) runs them against a `postgres:17` service with `TEST_DB_KIND=postgres`. That job runs on `ubuntu-24.04` rather than `ubuntu-latest`, because on the Ubuntu 26.04 runner apt could not resolve the Ubuntu package hosts while installing the Playwright browser dependencies.
 
 ## Layout
 

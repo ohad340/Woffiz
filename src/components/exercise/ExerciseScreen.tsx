@@ -162,7 +162,8 @@ export function ExerciseScreen({ view }: { view: ExerciseView }) {
             </p>
           )}
 
-          <div className={styles.practiceBar}>
+          {/* data-practice-bar: the update banner (pwa/UpdatePrompt) sits above this fixed bar instead of covering it. */}
+          <div className={styles.practiceBar} data-practice-bar="">
             <Button size="cta" fullWidth onClick={() => setReportOpen(true)}>
               תרגלנו
             </Button>

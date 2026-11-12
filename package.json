@@ -25,7 +25,8 @@
     "db:test:dev": "prisma dev --name woffiz-test --detach --port 51223 --db-port 51224 --shadow-db-port 51225",
     "db:test:stop": "prisma dev stop woffiz-test",
     "ai:eval": "tsx scripts/ai-eval.ts",
-    "ai:ping": "tsx scripts/ai-ping.ts"
+    "ai:ping": "tsx scripts/ai-ping.ts",
+    "test:previews-gate": "node scripts/verify-previews-gate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.3.0",

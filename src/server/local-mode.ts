@@ -26,6 +26,11 @@ export function isLocalMachine(env: Env = process.env): boolean {
   return env.APP_ENV === 'local' && isLocalUrl(env.BETTER_AUTH_URL)
 }
 
+/** `?state=` previews (decision 9, P4-2): development, tests, or this developer's machine only. Never on Vercel. */
+export function devPreviewsEnabled(env: Env = process.env): boolean {
+  return env.NODE_ENV === 'development' || env.NODE_ENV === 'test' || isLocalMachine(env)
+}
+
 export function signUpEnabled(env: Env = process.env): boolean {
   return env.LOCAL_SIGNUP === 'true' && isLocalMachine(env)
 }

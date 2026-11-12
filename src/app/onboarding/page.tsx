@@ -4,6 +4,7 @@ import { OnboardingFlow } from '@/components/onboarding/OnboardingFlow'
 import { FixtureBanner } from '@/components/shell/FixtureBanner'
 import { SignOutBar } from '@/components/shell/SignOutBar'
 import { parseDevState } from '@/lib/devState'
+import { devPreviewsEnabled } from '@/server/local-mode'
 import { getOnboardingState } from '@/server/onboarding'
 import { requireUserOrRedirect } from '@/server/session'
 
@@ -19,7 +20,7 @@ export default async function OnboardingPage({
   const state = await getOnboardingState(user.id)
   if (state.onboarded) redirect('/home')
 
-  const preview = parseDevState((await searchParams).state)
+  const preview = parseDevState((await searchParams).state, devPreviewsEnabled())
   return (
     <>
       <FixtureBanner />
