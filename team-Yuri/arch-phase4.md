@@ -199,5 +199,63 @@ Final review of slice 4.2, 2026-11-11.
 - Its design starts only after 4.2 is merged to `main`, because both change `public/sw.js`.
 - Slices 4.4 (account deletion) and 4.5 (allowlist) follow. Neither is needed sooner, because opening the pilot is already gated by the verified sender domain and by 4.8.
 
+### Final review addendum (2026-11-12)
+Scope: everything after the 2026-11-11 approval.
+- Manager revision 3: CI runner pin, commit `0ce5973`.
+- Manager revision 4: deterministic concurrency-test fix, commit `f38ed53`.
+- C1 closure, reopening and re-closure: commits `49ea7d3`, `9b5e973`, `5830cb9`, `afbb030`, `a93d12a`, `3e4a8ba`.
+
+Checked read-only with git and `gh` against `origin/main` `505e2db`. Tests were not re-run by the Architect.
+
+**No application change after the approved code.** `git diff --name-only 6a028f5 3e4a8ba` over `src/`, `public/`, `next.config.ts`, `playwright.config.ts`, `.env.example`, `prisma/`, `package.json` and `package-lock.json` is empty. The D1-D11 verdicts above stand unchanged.
+
+**`0ce5973`, CI runner pin (accepted).**
+- Only `runs-on: ubuntu-latest` → `ubuntu-24.04` for the PostgreSQL job, plus one README line.
+- Every step, test and assertion is unchanged.
+- It is an infrastructure workaround for an apt DNS failure on the runner image, not a D11 dependency change.
+- Follow-up: revisit the pin once `ubuntu-latest` is stable; the comment in `ci.yml` records this.
+
+**`f38ed53`, deterministic withdrawal-vs-generation test (accepted).**
+- Test-only: `test/integration/media-generation.test.ts` and `scripts/required-pg-tests.json`; `src/` unchanged.
+- Fixing a Phase 3 test inside the 4.2 PR is a justified scope exception: the flaky test blocked C1, Manager revision 4 scoped it, and no 4.2 file is involved.
+- Architecturally it strengthens the proof of decision 76 (commit-time recheck holds the technique row `FOR SHARE`, so a withdrawal must wait):
+  - the synchronized test forces the bound ordering with a test-held `SHARE` lock on `"Plan"`;
+  - it observes both waits in `pg_stat_activity` / `pg_blocking_pids`;
+  - it asserts the saved binding, the final media state and unchanged exercises;
+  - the unsynchronized race now accepts exactly the three valid outcomes (refused candidate, earlier binding, free-form plan);
+  - the free-form ordering that the old assertion misread has its own test.
+- No assertion was loosened. The lock is released in `finally`. There is no production hook.
+- Accepted coupling: the synchronized test relies on the commit taking the technique row before its first `Plan` INSERT (`src/server/onboarding.ts`). If that order ever changes, the test fails loudly (`never observed in the database`) instead of passing falsely.
+- Required PostgreSQL tests: 26 → 28 titles.
+
+**C1, re-closure (confirmed independently).**
+- PR #5 (https://github.com/ohad340/Woffiz/pull/5): open, draft, mergeable, head `a93d12a` on the remote.
+- CI on `a93d12a`: push run `43112478218` and pull_request run `43112486608`, both green with both jobs.
+- In run `43112486608`, every step of the job "Integration and e2e on standard PostgreSQL" succeeded:
+  - integration: 181 passed, 1 skipped (live model);
+  - "All 28 required PostgreSQL tests executed and passed (182 tests in the report)";
+  - e2e: 210 passed.
+- Job "Typecheck, lint, unit tests, build": 216 unit tests passed.
+- Earlier green runs on `afbb030`: `43110046263` and `43110054197`.
+- `git diff f38ed53 a93d12a` is `team-Yuri/dev-phase4.md` only.
+- Local commit `3e4a8ba` (Manager re-closure note, documentation only) and this addendum are **not pushed**. The final head therefore still needs one green CI run before merging, as Ben's note states.
+
+**Release consequences the owner must approve explicitly.**
+- `vercel.json` disables deployments only for `feature/*`. Merging PR #5 into `main` therefore starts the automatic Vercel **production** deployment, and the merge approval is also the deployment approval.
+- 4.2 has no migration and no environment variable, so no database step precedes the merge.
+- Before the merge, record the current production deployment as the rollback target.
+- After the deployment, check:
+  - sign-in;
+  - an existing training plan and the map;
+  - `/puppy` install card;
+  - `?state=error` on `/map` shows the real map;
+  - the offline fallback;
+  - existing P4-1 installs see the update banner once (D4, observation 3).
+- A service-worker problem is rolled back with the P4-1/D6 rollback worker, not only by redeploying an older build, because installed workers persist.
+
+**Final status of slice 4.2:**
+- Merge conditions: **C1 closed on `a93d12a`, reconfirmation required on the final pushed head**; C2 resolved; C3 PENDING (blocks 4.8, not this merge).
+- Next slice unchanged: **4.3**, designed after 4.2 is merged.
+
 ### Required Corrections
 None.
