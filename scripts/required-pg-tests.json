@@ -28,7 +28,13 @@
     "media generation on standard PostgreSQL a generation that starts after the withdrawal committed saves a free-form plan with no binding",
     "suspension guard on standard PostgreSQL an attempt waits for an in-flight suspension and is then refused",
     "suspension guard on standard PostgreSQL a mastery confirmation waits for an in-flight suspension and is then refused",
-    "suspension guard on standard PostgreSQL a suspension racing mastery confirmations either lets one land first or refuses them, never deadlocks"
+    "suspension guard on standard PostgreSQL a suspension racing mastery confirmations either lets one land first or refuses them, never deadlocks",
+    "account deletion on standard PostgreSQL a deletion waits for a generation commit that holds the job row, then removes the committed plan too",
+    "account deletion on standard PostgreSQL a generation and an adaptation whose commit starts after the deletion stop at the fence: no row, no refund, never a 500",
+    "account deletion on standard PostgreSQL a deletion queued behind the plan lock holds no puppy lock, so progression and deletion never deadlock (both orders)",
+    "account deletion on standard PostgreSQL onboarding racing the deletion never leaves a puppy for the deleted user",
+    "account deletion on standard PostgreSQL two concurrent deletions of the same account: one succeeds, the other answers UNAUTHENTICATED, no deadlock",
+    "account deletion on standard PostgreSQL a job created after the first lock pass cannot deadlock the deletion: the NOWAIT re-lock rolls back and the retry succeeds"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"
