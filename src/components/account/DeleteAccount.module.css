@@ -1,0 +1,10 @@
+/* Scope statement of the deletion dialog (P4-4): short blocks, readable at 360px, tokens only. */
+.scope {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.scope p {
+  font: var(--text-body);
+}

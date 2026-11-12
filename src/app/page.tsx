@@ -18,7 +18,9 @@ const POINTS = [
 
 export const dynamic = 'force-dynamic'
 
-export default async function WelcomePage() {
+export default async function WelcomePage({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
+  // A constant marker set by the account-deletion flow (no personal data in the URL).
+  const deleted = (await searchParams).deleted === '1'
   const user = await getSessionUser()
   if (user && !user.emailVerified) redirect('/verify-email')
   if (user) redirect((await getOverview(user.id)) ? '/home' : '/onboarding')
@@ -33,6 +35,14 @@ export default async function WelcomePage() {
           </h1>
           <p>תוכנית אימון אישית לגור שלכם, שלב אחרי שלב</p>
         </HeroScene>
+
+        {deleted && (
+          <div className={styles.card}>
+            <p role="status" className={styles.lead}>
+              החשבון נמחק.
+            </p>
+          </div>
+        )}
 
         <div className={styles.card}>
           <p className={styles.lead}>

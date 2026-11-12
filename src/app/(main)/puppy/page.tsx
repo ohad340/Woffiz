@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { DeleteAccount } from '@/components/account/DeleteAccount'
 import { Mascot } from '@/components/art/Mascot'
 import { AiAdjust } from '@/components/exercise/AiAdjust'
 import { SignOutButton } from '@/components/auth/SignOutButton'
 import { InstallGuide } from '@/components/pwa/InstallGuide'
 import { Card } from '@/components/ui/Card'
+import { hasMediaAuditRecords } from '@/server/account-deletion'
 import { getRecentAttempts, requireOverview } from '@/server/queries'
 import { requireUserOrRedirect } from '@/server/session'
 import styles from '../page.module.css'
@@ -15,7 +17,7 @@ const dateFormat = new Intl.DateTimeFormat('he-IL', { dateStyle: 'medium', timeS
 
 export default async function PuppyPage() {
   const user = await requireUserOrRedirect()
-  const [overview, attempts] = await Promise.all([requireOverview(user.id), getRecentAttempts(user.id)])
+  const [overview, attempts, hasAuditRecords] = await Promise.all([requireOverview(user.id), getRecentAttempts(user.id), hasMediaAuditRecords(user.id)])
   const puppy = overview.puppy
 
   return (
@@ -88,7 +90,7 @@ export default async function PuppyPage() {
           מחוברים בתור <span className="ltr-value">{user.email}</span>
         </p>
         <SignOutButton />
-        <p className={styles.muted}>עריכת פרטים ומחיקת חשבון יתווספו בהמשך.</p>
+        <DeleteAccount isAdmin={user.role === 'ADMIN'} hasAuditRecords={hasAuditRecords} />
       </Card>
     </div>
   )
