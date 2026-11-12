@@ -4,7 +4,7 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_DEVELOPER
+STATUS: APPROVED
 
 Scope of this revision: **slice 4.3 only** (public shell asset caching), revision 1, 2026-11-12. Input: the completed 4.3 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions S1-S10) and the owner decision of 2026-11-12 that `/art/*.webp` stays outside the cache. Slice 4.2 is merged (`7bc45f8`) and deployed; its design and reviews are kept unchanged below as a closed record and are not reopened. Slices 4.4-4.8 are not designed here.
 
@@ -171,12 +171,47 @@ The Developer owns the file. Mirror the layout of the other two Phase 4 artifact
 - **Interpretations flagged for the Architect's final review (none changes a decision S1-S10):** the unit test file location `src/lib/sw.test.ts`; icons admitted only with an empty query string; the media-variant e2e placed in `demo-video.spec.ts`; the reading of "caches nothing until the tap" given in M4.4.
 
 ## Manager Review
-MANAGER_REVIEW_STATUS: NOT_REVIEWED
+MANAGER_REVIEW_STATUS: APPROVED
+
+Review of slice 4.3 (revision 1 of this design), 2026-11-12. Reviewed: branch `feature/phase-4-shell-cache`, HEAD `cd94c50`, base `origin/main` `7bc45f8`, worktree `C:\Users\אוהד\Documents\Woffiz-4.3`, evidence in the 4.3 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed.
 
 ### Review Notes
-Not reviewed yet: no Developer evidence exists for slice 4.3.
+
+**Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are all present and consistent. No reject condition applies.
+
+**Independent verification by the Manager (not copied from the evidence):**
+- `public/sw.js` read in full against S2-S9. The allowlist is synchronous; a request off the allowlist returns without `respondWith`; `isStorable` requires `ok`, status 200, type `basic`, not redirected, no `no-store` or `private`; the cache key is the URL string; `/_next/static/*` is cache first, icons are stale-while-revalidate with an exact URL and no query; every cache operation is inside `try`/`catch` and writes go through `event.waitUntil`; the trim deletes from the front; `activate` deletes every `woffiz-*` cache except the offline cache and the current shell cache; `install` precaches only `/offline.html`; the navigation branch and the `message` handler are behaviorally unchanged; the only `skipWaiting()` is in the `SKIP_WAITING` handler. `SW_VERSION = '4.3.0'`, cap 160 by the M1 rule (2 x (67 + 4) = 142 <= 160).
+- `git diff 7bc45f8 HEAD --name-only` outside `team-Yuri/` lists exactly `README.md`, `docs/DECISIONS.md`, `e2e/demo-video.spec.ts`, `e2e/offline.spec.ts`, `e2e/pwa.spec.ts`, `public/sw.js` and `src/lib/sw.test.ts` (criterion 8). The path-filtered diff over `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.ts`, `playwright.config.ts`, `.env.example`, `public/offline.html`, `src/server`, `src/components/pwa` and `src/lib/pwa` is empty. The two Team Yuri documents in the first commit are byte-identical to the shared folder (`cmp`).
+- `node_modules/.bin/vitest run src/lib/sw.test.ts`: 69 passed. `tsc --noEmit`: exit 0. `eslint e2e src/lib/sw.test.ts public/sw.js`: clean.
+- **S2/S3 matrix and negative check.** The matrix covers every S2 inclusion and exclusion named in the contract; each rejected case asserts no `respondWith`, no `fetch` and no cache created, and each S3 case asserts that the page receives the network response object. The recorded negative check was re-proved without editing the Developer's files: on a scratch copy of `public/sw.js`, admitting `/art/` makes `/art/map-painted.webp` handled; dropping the `Range` guard makes a Range request handled; dropping the `redirected` check or the `type !== 'basic'` check makes a redirected or CORS-typed response stored. Each of those four behaviors is asserted by a case in the matrix, so each mutation is caught.
+- **Privacy proof, offline case, update/purge case, media variant (read).** The redefined test asserts the cache names are exactly `woffiz-offline-v1` (only `/offline.html`) and `woffiz-shell-4.3.0`, that every shell key is an allowlisted static path or one of the four icons without a query, and that no key matches page, API, RSC, `/_next/image|data`, artwork, offline, worker or manifest paths. The media variant additionally plays a fixture clip and fetches captions and a playback link through the worker. The offline case uses `cache: 'no-store'`, so a 200 can only come from the worker; it proves an uncached static path fails with no synthetic response, the API fails, and a page shows the fallback. The update case seeds `woffiz-shell-0.0.0` after the page is controlled, shows it survives while the new worker waits, and shows that after the owner's tap the cache set is exactly the offline cache and the current shell cache. Writes are awaited with `expect.poll`, never with sleeps.
+- **Independent e2e rerun by the Manager** (local production build, local test database only, `--workers=1`): the `auth`, `ai-plan`, `offline` and `pwa` specs, 93 tests: 92 passed, 1 failed (see below). All 4.3 cases (redefined privacy proof, offline case, update/purge case) passed in all three projects in this run.
+
+**The e2e results and the pre-existing failure (review focus 3).** The Developer reported 217 of 217 with 23 passing only on a rerun after a local PGlite restart, and 3 failures inside pre-existing test bodies without a proven cause. The one failure in the Manager's run is the same pre-existing test as two of those three (`auth.spec.ts`, "register, onboard, refresh, sign out and sign back in…": the page stays on `/onboarding` instead of reaching `/home` within 5 s). To settle causation, the Manager ran that single test, 4 repetitions per project (12 runs), on a clean detached worktree of `main` `7bc45f8` (no 4.3 code) and on the 4.3 branch, with the same local database and one worker: **`main`: 6 failed, 6 passed; 4.3: 5 failed, 7 passed**, with the same assertion and the same received URL in every failure. The failure is therefore independent of 4.3: it occurs on `main` at the same rate on this local PGlite database. The temporary worktree was removed. This turns the Developer's "no proven causal link" into a demonstrated non-link to 4.3. CI on standard PostgreSQL is the gate (criterion 11), and this test passed in CI for 4.2. The 13 setup failures (fixture and seed) were in code outside the 4.3 diff and passed on the rerun; `ai-plan` passed in all three projects in the Manager's run.
+
+**Cache privacy.** No concrete defect. The admission path is the allowlist plus the storable rule only; no page, API, RSC, media, artwork or cross-origin response can be written; a signed-in session leaves exactly the two caches with allowlisted keys (text proof in the evidence: 1 offline entry, 23 shell entries under `/_next/static/chunks` and `/_next/static/media`).
+
+**Update and offline behavior.** The 4.2 owner-activated flow and the offline fallback are unchanged and their pre-existing cases passed. A worker defect is covered by the unchanged rollback worker (P4-2/D6), which also deletes the shell cache.
+
+**Flagged interpretations: Manager position.** None changes S1-S10; the Architect acknowledges them in the final review.
+1. `src/lib/sw.test.ts` with the `node:vm` harness: a Manager decision within the contract; accepted.
+2. Icons admitted only with an empty query: stricter than S2, harmless (such a URL simply goes to the network) and consistent with an exact URL list; accepted.
+3. The media variant in `demo-video.spec.ts`: accepted.
+4. "Caches nothing until the tap": proved by the install-handler unit case and by the stale cache surviving while the new worker waits; accepted.
+5. Renamed test title ("only the public offline page and public build assets are ever cached"): required, because the old title would now be false. The contract line that names the old title (`arch-phase4.md`, Testing) is the redefinition itself, and the old title appears nowhere else in the repository (no CI list, no required-test list); accepted.
+6. One `pwa.spec.ts` comment now says `SW_VERSION`: comment only; accepted.
+7. `caches.match(url, { cacheName })` for lookup (does not create a cache on read): accepted.
+
+**Non-blocking observations (recorded, not corrections).**
+- The deployed `/_next/static/immutable/…` layout is covered by a unit case but not by a local e2e run, because the local build does not produce it; the deployed-build Cache Storage check stays with the owner (criterion 12).
+- The icons enter the cache only when something requests them; documented.
+- `Vary: *` and 206 handling were not confirmed against a normative source in the design phase; both are covered by behavior (206 is rejected by the status rule, and the URL-string key ignores request headers).
+- The e2e update path registers the same worker under a second URL (the 4.2 pattern); a real `SW_VERSION` bump was not re-run for 4.3, as the evidence states.
+
+**Criteria status.** 1-10: met. 11: pending the owner-approved push (CI on the final head, single attempt, both runs, "All 28 required PostgreSQL tests executed and passed", e2e). 12: PENDING for the owner by design (4.8 matrix).
 
 ### Required Corrections
+None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, so the final head already contains all review documents; (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no further documentation-only commit; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval.
 
 ---
 
