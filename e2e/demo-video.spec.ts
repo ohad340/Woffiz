@@ -273,3 +273,49 @@ test('a suspended technique pauses the guidance: no instructions, no report, pro
   expect(report.status()).toBe(409)
   expect((await report.json()).error).toBe('GUIDANCE_PAUSED')
 })
+
+// Slice 4.3: media is never cached. Same invariant as the privacy proof in offline.spec.ts, after a session that plays a
+// fixture clip. Lives here because this file owns the technique-wide clip state and runs serially in the desktop project.
+test('media is never cached: after playing a clip, the caches hold only the offline page and build assets', async ({ page }) => {
+  const { levelId, exerciseVersionId } = await ownerWithDemo(page, 'ready')
+  await page.goto('/home')
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+  if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 10_000 }).toBe(true)
+
+  await page.goto(`/exercise/${levelId}`)
+  const video = page.getByLabel(/^סרטון הדגמה: /).first()
+  await expect(video).toBeVisible()
+  await pressPlay(page, video)
+  await expect.poll(async () => (await playback(video)).currentTime, { timeout: 8_000 }).toBeGreaterThan(0.5)
+  // The page itself asks for the captions and a fresh signed playback link, through the worker.
+  const captionsUrl = (await video.locator('track').getAttribute('src'))!
+  const statuses = await page.evaluate(
+    async ([captions, id]) => [(await fetch(captions)).status, (await fetch(`/api/media/playback?exerciseVersionId=${id}&variant=STANDARD`)).status],
+    [captionsUrl, exerciseVersionId] as const,
+  )
+  expect(statuses).toEqual([200, 200])
+
+  const contents = () =>
+    page.evaluate(async () => {
+      const result: Record<string, string[]> = {}
+      for (const name of await caches.keys()) {
+        const cache = await caches.open(name)
+        result[name] = (await cache.keys()).map((request) => {
+          const url = new URL(request.url)
+          return url.pathname + url.search
+        })
+      }
+      return result
+    })
+  await expect.poll(async () => (await contents())['woffiz-shell-4.3.0']?.length ?? 0).toBeGreaterThan(0)
+  const cached = await contents()
+  expect(Object.keys(cached).sort()).toEqual(['woffiz-offline-v1', 'woffiz-shell-4.3.0'])
+  expect(cached['woffiz-offline-v1']).toEqual(['/offline.html'])
+  const icons = ['/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-180.png']
+  const shell = cached['woffiz-shell-4.3.0']!
+  expect(shell.filter((entry) => !(entry.startsWith('/_next/static/') || icons.includes(entry)))).toEqual([])
+  expect(shell.filter((entry) => /\/api\/|\.(mp4|vtt|m4s|webm)|token=|\/art\//.test(entry))).toEqual([])
+})

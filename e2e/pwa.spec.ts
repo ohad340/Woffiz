@@ -171,7 +171,7 @@ async function controlledByServiceWorker(page: Page) {
  * Publishes a "new worker version" from inside the browser. Playwright cannot serve a changed sw.js body to the
  * browser's worker update fetch (spike in team-Yuri/dev-phase4.md: neither context.route nor CDP Fetch sees it), so
  * the same public/sw.js is registered under a second URL. The browser treats a changed script URL as a new version:
- * it installs and, finding an active worker, WAITS, exactly as after a sw-version bump. The real bump is covered by
+ * it installs and, finding an active worker, WAITS, exactly as after a SW_VERSION bump. The real bump is covered by
  * the recorded manual two-build check.
  */
 async function publishNewWorker(page: Page) {
@@ -292,4 +292,77 @@ test('previews stay available on the local machine', async ({ page, owner }) => 
   void owner
   await page.goto('/map?state=error')
   await expect(page.getByRole('heading', { level: 1, name: 'לא הצלחנו לטעון את המפה' })).toBeVisible()
+})
+
+// ----- Slice 4.3: public build assets in the shell cache -----
+
+const OFFLINE_CACHE = 'woffiz-offline-v1'
+const SHELL_CACHE = 'woffiz-shell-4.3.0'
+
+/** Every Cache Storage entry as pathname + search, by cache name. */
+const cacheContents = (page: Page) =>
+  page.evaluate(async () => {
+    const result: Record<string, string[]> = {}
+    for (const name of await caches.keys()) {
+      const cache = await caches.open(name)
+      result[name] = (await cache.keys()).map((request) => {
+        const url = new URL(request.url)
+        return url.pathname + url.search
+      })
+    }
+    return result
+  })
+
+test('offline: a cached build asset still loads from the worker, the API fails and a page shows the fallback', async ({ page, owner }) => {
+  void owner
+  await page.goto('/home')
+  await controlledByServiceWorker(page)
+  await page.goto('/map')
+  const staticEntry = async () => (await cacheContents(page))[SHELL_CACHE]?.find((entry) => entry.startsWith('/_next/static/')) ?? null
+  await expect.poll(staticEntry).not.toBeNull()
+  const asset = (await staticEntry())!
+
+  await page.context().setOffline(true)
+  // cache: 'no-store' skips the browser's HTTP cache, so a 200 here can only come from the worker's cache.
+  const result = await page.evaluate(async (path) => {
+    const outcome = (url: string) => fetch(url, { cache: 'no-store' }).then((response) => response.status, () => 'failed')
+    return {
+      cached: await outcome(path),
+      uncached: await outcome(`/_next/static/chunks/never-cached-${Date.now()}.js`), // no synthetic response (S4)
+      api: await outcome('/api/auth/get-session'),
+    }
+  }, asset)
+  expect(result).toEqual({ cached: 200, uncached: 'failed', api: 'failed' })
+
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1, name: 'אין חיבור לאינטרנט' })).toBeVisible()
+  await page.context().setOffline(false)
+})
+
+test('the 4.3 update path: a stale shell cache survives until the owner taps, then it is purged', async ({ page, owner }) => {
+  void owner
+  await page.goto('/home')
+  await controlledByServiceWorker(page)
+  // Seeded only now: the first worker's own activation would otherwise have purged it already.
+  await page.evaluate(async () => {
+    const cache = await caches.open('woffiz-shell-0.0.0')
+    await cache.put('/_next/static/chunks/stale.js', new Response('stale'))
+  })
+
+  await publishNewWorker(page)
+  await expect(page.getByText(BANNER_TEXT)).toBeVisible()
+  // The new worker is waiting and has not activated, so nothing was purged yet. (That it caches nothing before the tap
+  // is proved by the unit test of its install handler: it only adds /offline.html.)
+  const state = await registrationState(page)
+  expect(state.waiting).toMatch(/e2e-update=1/)
+  expect(state.active).toMatch(/\/sw\.js$/)
+  const waiting = await cacheContents(page)
+  expect(waiting['woffiz-shell-0.0.0']).toEqual(['/_next/static/chunks/stale.js'])
+  expect(waiting[OFFLINE_CACHE]).toEqual(['/offline.html'])
+
+  await Promise.all([page.waitForEvent('load'), banner(page).getByRole('button', { name: 'לעדכן עכשיו' }).click()])
+  await expect.poll(async () => Object.keys(await cacheContents(page)).sort()).toEqual([OFFLINE_CACHE, SHELL_CACHE])
+  const after = await cacheContents(page)
+  expect(after[OFFLINE_CACHE]).toEqual(['/offline.html'])
+  expect(after['woffiz-shell-0.0.0']).toBeUndefined()
 })
