@@ -12,7 +12,7 @@ import { authErrorMessage, looksLikeEmail, NETWORK_ERROR, readErrorCode, remembe
 type Mode = 'sign-in' | 'sign-up'
 
 /** Who may register here (decided on the server; the server enforces it again on every request). */
-export type SignUpMode = 'closed' | 'tester' | 'open'
+export type SignUpMode = 'closed' | 'tester' | 'pilot' | 'open'
 
 /** Email and password sign-in or registration. The session cookie is set by the server, only for verified addresses. */
 export function AuthForm({ signUp }: { signUp: SignUpMode }) {
@@ -88,7 +88,7 @@ export function AuthForm({ signUp }: { signUp: SignUpMode }) {
       ) : (
         <p className={styles.closed}>ההרשמה עדיין לא פתוחה בסביבה הזו. אפשר להיכנס רק עם חשבון קיים.</p>
       )}
-      {signingUp && signUp === 'tester' && <p className={styles.closed}>בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות.</p>}
+      {signingUp && (signUp === 'tester' || signUp === 'pilot') && <p className={styles.closed}>בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות.</p>}
 
       <TextField
         label="אימייל"
