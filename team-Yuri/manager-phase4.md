@@ -4,7 +4,7 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_DEVELOPER
+STATUS: APPROVED
 
 Scope of this revision: **slice 4.4 only** (account deletion), revision 1, 2026-11-12. Input: the 4.4 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions A1-A10, the deletion inventory, owner decisions B1-B3 approved on 2026-11-12). Slices 4.2 (`7bc45f8`) and 4.3 (`ad6b55a`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.5-4.8 are not designed here. **No migration is needed** (confirmed, see "Verified semantics" V7). Nothing in this document authorizes deleting a real account, a migration, a push, a merge or a deployment.
 
@@ -195,7 +195,7 @@ Also required for the evidence: the full PostgreSQL integration suite and these 
 - 4.5-4.8 work.
 
 ## Risks / Open Questions
-- **Open owner items (none blocks starting).** (1) Approval to run a throwaway PostgreSQL 17.11 server from the session scratchpad (the `embedded-postgres` npm package, outside the repository and removed afterwards, as in the 4.2 corrective cycle) for the six required tests and the full integration suite **before the single push**. Without it those tests run for the first time in CI, and a failure there costs a second push. (2) No other decision: B1-B3 are approved; the `plan.md` items (alert channel, backups, retention, sending domain, pilot recruitment, performance profile) affect only README specifics of A9 or later slices.
+- **Owner items.** (1) **Approved by the owner on 2026-11-12:** running a throwaway PostgreSQL 17.11 server from the session scratchpad (the `embedded-postgres` npm package, outside the repository and removed afterwards, as in the 4.2 corrective cycle) for the six required tests and the full integration suite **before the single push** (scope of the approval: that tool, this purpose, this slice; it adds nothing to the project and is removed afterwards). Without it those tests would run for the first time in CI, and a failure there would cost a second push. (2) No other decision: B1-B3 are approved; the `plan.md` items (alert channel, backups, retention, sending domain, pilot recruitment, performance profile) affect only README specifics of A9 or later slices.
 - **Interpretations flagged for the Architect's final review** (none changes the intent of A1-A10): (I1) A5 steps 3 and 4 swapped, plans before the puppy (F1: deadlock against progression); (I2) the `NOWAIT` job re-lock with a bounded retry and the sixth PostgreSQL test (F2); (I3) the deleted-account 500 mapping at the `postRoute` choke point (`src/server/http.ts`) instead of per-path catches; (I4) cookie expiry built from `getCookies(auth.options)` rather than `auth.api.signOut`; (I5) one exported helper in `src/server/ai/quota.ts` because `keyOf` is private; (I6) the `/?deleted=1` marker and the welcome status; (I7) the final Hebrew copy; (I8) the body schema is not strict, so extra fields are ignored as A2 says; (I9) the password check runs inside the transaction before any lock, and the limit outside it.
 - **Production release consequence (for the later owner approval).** The release is code-only, with no migration. Merging to `main` starts the automatic Vercel production deployment. Rollback target: the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`). **A deletion is irreversible: a code rollback does not restore a deleted account**, so post-deploy verification must not delete a real account. Registration in production is limited to the tester address, so there is no disposable production account; the post-deploy checks are public and read-only (the route exists and refuses an unauthenticated or cross-origin request without deleting anything; the `/puppy` dialog is checked only up to the cancel button), and an actual production deletion is left entirely to the owner's decision.
 - **Shared test database and port 3100.** Several sessions use the local test database and the fixed e2e port; wait rather than collide, and do not change `playwright.config.ts`.
@@ -203,12 +203,54 @@ Also required for the evidence: the full PostgreSQL integration suite and these 
 - **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0).
 
 ## Manager Review
-MANAGER_REVIEW_STATUS: NOT_REVIEWED
+MANAGER_REVIEW_STATUS: APPROVED
+
+Review of slice 4.4 (revision 1 of this design), 2026-11-13. Reviewed: branch `feature/phase-4-account-deletion`, HEAD `c92e2a8`, base `origin/main` `ad6b55a` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.4`, evidence in the 4.4 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed, no real account touched.
 
 ### Review Notes
-Not reviewed yet: no Developer evidence exists for slice 4.4.
+
+**Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are present and consistent. No reject condition applies.
+
+**Independent verification by the Manager (not copied from the evidence):**
+- **Scope.** `git diff ad6b55a HEAD --name-only` outside `team-Yuri/` lists exactly the 16 files of criterion 10; the path-filtered diff over `prisma/`, `public/`, `next.config.ts`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, `.env.example` and `src/server/auth.ts` is empty. `arch-phase4.md` and `plan.md` in the first commit are byte-identical to the shared folder.
+- **Implementation read in full:** `src/server/account-deletion.ts`, `src/app/api/account/delete/route.ts`, the `http.ts`, `quota.ts` and `errors.ts` diffs, `DeleteAccount.tsx`, the `/puppy` and welcome changes, the documentation diffs.
+- **Commands run by the Manager in the 4.4 worktree:** `vitest run` (unit) 19 files / 285 tests passed; `tsc --noEmit` exit 0; `eslint src e2e test` clean; `npm run test:integration -- test/integration/account-deletion.test.ts` on the local PGlite database: **18 passed, 6 skipped** (the PostgreSQL-only ones, by design); `npm run test:e2e -- e2e/account-deletion.spec.ts e2e/offline.spec.ts e2e/pwa.spec.ts e2e/shell.spec.ts --workers=1`: **138 passed, first run, no failure and no rerun** (the 18 new tests and the three unchanged PWA specs). The local test database was started for this and stopped afterwards.
+
+**1. Transaction order, `NOWAIT` retry, PostgreSQL tests, F1 negative check.**
+- The code matches the Architect's corrected A5 (C1, C2): identity checks first with no row lock held (scrypt runs while the transaction holds nothing), then jobs, plans, the puppy, a `FOR UPDATE NOWAIT` re-lock of the jobs, deletes in the listed dependency order, `user` last with exactly one row required (zero answers `UNAUTHENTICATED`). `55P03`, `40P01`, `40001` and `P2034` roll back and retry at most 3 times with jitter, then propagate (500, nothing deleted). The rate-limit unit is taken once, outside the retried transaction (Architect condition on I9). The test seams are optional parameters, none read from the environment, none used by the default path (Architect condition on I2). The password is never logged.
+- I read the F1 test (deletion queued behind a plan lock held by a progression transaction that inserts its attempt afterwards, `maxAttempts: 1`, a `FOR NO KEY UPDATE NOWAIT` probe proving the queued deletion holds no puppy lock, then the reverse order through the real `/api/attempts` route) and the F2 test (a new job appears through the hook and is held at the `fenceJob` position; the `NOWAIT` re-lock fails once, the retry waits at the first pass, the puppy is free, the retry succeeds). Both observe lock state through `pg_stat_activity` and `pg_blocking_pids` and order nothing by sleeping. They test the real scenario of the Manager's finding, and the Developer's account of the first F1 test that masked the cycle (interpretation 9) is the right correction.
+- **F1 negative check:** recorded as a failure with `40P01 deadlock detected` when steps 3 and 4 are swapped, then restored and `cmp`-identical. The Developer ran the six tests 10 times (60 executions) and the full integration suite once on a throwaway PostgreSQL 17.11 under the owner's approval; `assert-required-tests` lists only the two `CI=true` cases of `ci-guard` as skipped. **Limit of this review:** the Manager did not re-execute the PostgreSQL-only tests (no standard PostgreSQL was started for the review, so as not to repeat the approved download for a second party). They are judged from the code and the evidence, and CI on standard PostgreSQL (expected line "All 34 required PostgreSQL tests executed and passed": 28 + 6) is the independent execution.
+
+**2. F3 mapping and the F3 table.**
+- `postRoute` answers 401 only in the non-`AppError` branch and only when the session user's row is gone; a failing lookup counts as "not deleted", so an unexpected error stays 500 and is logged as before; `adminRoute` is unchanged; only a code is logged (Architect condition on I3). Tested: the helper's four cases, a handler that deletes the user and then throws (401, no error object logged), the user-present case (500, logged once) and an `AppError` that keeps its status.
+- Per route: `/api/attempts` is proved with a real in-flight request (401); `/api/onboarding/draft` and `/api/onboarding/complete`, and `/api/plan/adapt`, have race tests (never 500). **`/api/mastery` and `/api/plan/revise` have no dedicated race test; accepted.** Both are `postRoute` routes, so the mapping and its decision are the same function; `/api/mastery` has the same failure shape as `/api/attempts` (`lockPlan` returns no row after the deletion committed, the next read throws a Prisma not-found error, which is a non-`AppError`), and `/api/plan/revise` shares `startJob`, the `fenceJob` stop and the choke point with `/api/plan/adapt`. A dedicated case would repeat a proof that already exists for the same code path. Recorded as an observation, not a correction.
+
+**3. Cookie equivalence.** The route expires `session_token`, `session_data` and `dont_remember` from `getCookies(auth.options)`. The tests compare the serialized `Set-Cookie` entries with those of a real `auth.api.signOut`, with an http base URL and again with an https base URL (`__Secure-` prefix and `Secure`). This is the mandatory test of the Architect's ruling on I4. The two normalizations in `expiredAuthCookies` (lower-casing `SameSite`, dropping Better Auth's `prefix` attribute) are required by Next's `ResponseCookies` and are covered by the same comparison.
+
+**4. E2E results.** The Developer reported 235 of 235 with 14 passing only on a rerun after a local PGlite restart, all in specs that 4.4 does not touch, and the 18 new tests passing on the first run; an earlier targeted run had one new test fail inside the `owner` fixture (`P2028` in the server log) and pass in the full run. The Manager's own run of the new spec together with the `offline`, `pwa` and `shell` specs passed 138 of 138 on the first attempt. That the local PGlite database makes unrelated specs fail on first attempts was already demonstrated in the 4.3 cycle (the same pre-existing `auth.spec.ts` test failed about half the time on `main` `7bc45f8`, 6 of 12 against 5 of 12 on the 4.3 branch). Every rerun is reported as a rerun in the evidence. CI on standard PostgreSQL is the gate (criterion 12).
+
+**5. The nine interpretations, Manager position** (none changes A1-A10; the Architect rules on them in the final review):
+1. The F3 helper is tested in the integration file (it imports the database client, and the unit configuration has no database); accepted.
+2. `afterJobLock` runs after the plan locks and before the puppy lock, which is the position the F2 test needs; accepted.
+3. Initial focus on "ביטול" by an effect and a `data-delete-cancel` attribute, because `Sheet` renders its children while closed and `autoFocus` would run on a hidden element; accepted, and verified by the e2e focus assertions.
+4. "מחיקה לצמיתות" is also disabled while the password field is empty; this goes one step beyond "disabled while sending", avoids a pointless 400, and is documented in `DESIGN_SYSTEM.md`; accepted.
+5. The `eslint-disable-next-line` on `window.location.href` is narrowly scoped and justified (the contract requires a full navigation); accepted.
+6. The cookie normalizations (see 3): accepted.
+7. The welcome status reuses `.card` and `.lead`: accepted, no CSS change.
+8. Extra tests beyond M2: accepted.
+9. The rewritten F1 test: accepted (see 1).
+
+**Documentation.** `DESIGN_SYSTEM.md` §8 and §14, `docs/DECISIONS.md` `P4-4` (with the lock graph and the corrected order), the README "Account deletion" section (honest A9 limits, no retention figure invented, the Supabase "backups" decision still open) and `PRD.md` §8 (B3, 30 days owner-approved) match the shipped behavior. The Hebrew copy in the component is the copy of M4.
+
+**Non-blocking observations.**
+- The deployed `/puppy` dialog and the phone, keyboard and VoiceOver reading of the scope text are PENDING for the owner (the 4.8 matrix).
+- A real deletion on production is never part of verification. Registration there is limited to the tester address, and a deletion cannot be undone by a code rollback.
+- Maximum 3 attempts then a 500 `INTERNAL` with nothing deleted is acceptable: each attempt is all-or-nothing and the owner can simply try again.
+
+**Criteria status.** 1-11: met. 12: pending the owner-approved push (CI on the final head, first attempt, both runs, "All 34 required PostgreSQL tests executed and passed", e2e and build). 13: PENDING for the owner by design.
 
 ### Required Corrections
+None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, by copying `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder (the committed copy of `manager-phase4.md` predates this review and one line of the owner-items text, so it must be refreshed); (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no documentation-only commit afterwards; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval; the release is code-only with no migration, the rollback target is the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`), and a code rollback does not restore a deleted account.
 
 ---
 

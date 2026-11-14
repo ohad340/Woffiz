@@ -4,7 +4,9 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_MANAGER
+STATUS: APPROVED
+
+Slice 4.4 approved in final review on 2026-11-13 (see "Architect Review").
 
 Owner decisions B1-B3 approved on 2026-11-12 (see "Owner Decisions"). This approval does not authorize deleting real accounts, any migration, merging or deploying.
 
@@ -252,13 +254,86 @@ Also recorded:
 - None of the other open plan.md decisions (alert channel, sending domain, pilot recruitment, performance profile) affects 4.4.
 
 ## Architect Review
-ARCHITECT_REVIEW_STATUS: NOT_REVIEWED
+ARCHITECT_REVIEW_STATUS: APPROVED
 
 Current revision: slice 4.4. The final reviews of slices 4.3 and 4.2 are in the closed records below.
 
 ### Review Notes
+Final review of slice 4.4, 2026-11-13.
+- Inputs: `team-Yuri/manager-phase4.md` ("Manager Review", MANAGER_REVIEW_STATUS: APPROVED, no corrections; shared folder) and the 4.4 section of `team-Yuri/dev-phase4.md` (STATUS (slice 4.4): COMPLETE; committed in the worktree).
+- Branch `feature/phase-4-account-deletion`, HEAD `c92e2a8`, base `ad6b55a` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.4`. Local only: not on the remote, no PR, no CI run yet.
+- Checked read-only with git: `src/server/account-deletion.ts`, the route, `DeleteAccount.tsx` and the diffs of `http.ts`, `quota.ts`, `errors.ts`, `/puppy`, the welcome page, README and PRD.
+- Tests were not re-run by the Architect.
+
+**Scope.**
+- Outside `team-Yuri/`, the diff touches only the files allowed by the contract.
+- A path-filtered diff over `prisma/`, `public/` (including `sw.js` and `offline.html`), `next.config.ts`, `src/server/auth.ts`, `package.json`, `package-lock.json`, `.env.example`, `playwright.config.ts`, `vitest.config.ts`, `src/server/media` and `src/domain` is empty.
+- No migration, no schema change, no dependency, no environment variable.
+
+**Compliance with A1-A10 and C1-C3:**
+
+| Decision | Verdict | Evidence |
+|---|---|---|
+| A1 Base, no migration | Compliant | Branched from `ad6b55a`; `prisma/` is not in the diff. |
+| A2 Endpoint and identity | Compliant | `POST /api/account/delete`: `assertSameOrigin`, then `requireUserFromRequest`; the body schema reads `password` only (non-strict); `no-store`. Another account's id in the body is proven ignored. |
+| A3 Password and limit (B1) | Compliant | `verifyPassword` from `better-auth/crypto` against the credential `account` row, inside the transaction and before any row lock. `takeRateLimit` (`account-delete`, 5/900 s) is taken once per request, outside the retried transaction and before verification. |
+| A4 ADMIN (B2) | Compliant | The current database role ADMIN is refused with `ADMIN_DELETE_BLOCKED`, and the dialog shows only the explanation. After revocation, deletion succeeds with the audit rows byte-identical. `hasMediaAuditRecords` drives the accurate opaque-id line. |
+| A5 as corrected by C1/C2 | Compliant | Identity checks, then jobs `FOR UPDATE`, then plans `FOR UPDATE`, then the puppy `FOR UPDATE`, then jobs `FOR UPDATE NOWAIT`. Deletes run in RESTRICT-safe order, with `user` last and exactly one row. `55P03`/`40P01`/`40001`/`P2034` roll back and retry at most 3 times, then 500 with nothing deleted. The test seams are optional parameters, unused by the default path. |
+| A6 + C3 In-flight work | Compliant | `postRoute` answers 401 only for a non-`AppError` failure when the session user's row is gone. A failing lookup counts as "not deleted", so the 500 path is unchanged. Only a code is logged. `adminRoute` is unchanged. |
+| A7 Sessions and cookies | Compliant | Session rows are deleted in the transaction. `expiredAuthCookies` uses `getCookies(auth.options)` with `maxAge: 0`, and is equivalent to a real `signOut` (http and https). A full navigation goes to `/?deleted=1`. |
+| A8 Dialog | Compliant | The existing `Sheet` (native `<dialog>`); a destructive opener; initial focus on "ביטול"; a labelled password field with an associated, announced error; sending, wrong-password, rate-limit, network and ADMIN states; the password is cleared after each request that deleted nothing. |
+| A9 Honest copy | Compliant | Deleted, retained and limits exactly as in the contract and B2. No provider named and no removal time in the UI. README states the provider facts without invented figures and keeps the "backups" decision open. |
+| A10 No change elsewhere | Compliant | Service worker, update flow, shell allowlist, media and `MEDIA_REQUIRED` untouched. Only disposable accounts on local and throwaway databases. |
+| B3 | Compliant | Deletion removes the account's job payloads in the transaction. PRD §8 now says 30 days, owner-approved. No retention code changed. |
+
+**Rulings on the Developer's nine interpretations (the Manager accepted all nine); all acknowledged:**
+1. **F3 helper tested in the integration file: acknowledged.** It imports the database client and the unit config has no database. The four decision cases and the route-level 401/500/`AppError` cases are covered.
+2. **`afterJobLock` after the plan locks, before the puppy lock: acknowledged.** That is the position the C2 test needs. It is optional and unused by the default path, which meets the I2 condition.
+3. **Focus on "ביטול" via an effect and `data-delete-cancel`: acknowledged.** `Sheet` renders children while closed, so `autoFocus` would target a hidden element. The e2e asserts the focus. The selector is document-wide, which is safe with one dialog per page.
+4. **"מחיקה לצמיתות" also disabled while the field is empty: acknowledged.** Stricter than the contract, it avoids a pointless 400, and it is documented in DESIGN_SYSTEM.md.
+5. **Scoped `eslint-disable-next-line` for `window.location.href`: acknowledged.** A7 requires a full navigation.
+6. **Cookie normalizations (lower-case `SameSite`, drop `prefix`): acknowledged.** Next's `ResponseCookies` requires them, and the mandatory equivalence test (I4 condition) proves the serialized result equals Better Auth's sign-out.
+7. **Welcome status reuses `.card` and `.lead`: acknowledged.** No new visual variant.
+8. **Extra tests beyond M2: acknowledged.** They strengthen coverage.
+9. **Rewritten F1 test: acknowledged, and required.** The first version masked the cycle. The rewritten test reproduces the real progression scenario, and the recorded negative check now fails with `40P01` under the old order, which is the proof C1 asked for.
+
+**Rulings on the Manager's observations:**
+- **`/api/mastery` and `/api/plan/revise` have no dedicated race test: acknowledged, no correction.** C3 is one route-agnostic decision in `postRoute`, tested directly: user gone gives 401; user present gives 500; `AppError` keeps its status.
+  - `/api/mastery` fails like `/api/attempts`, which has a real in-flight race test: `lockPlan` returns no row, then a non-`AppError` follows.
+  - `/api/plan/revise` shares `startJob`, the `fenceJob` stop and the choke point with `/api/plan/adapt`, which has a race test.
+  - A dedicated case would repeat an existing proof of the same code path.
+- **The six PostgreSQL-only tests were not re-executed by the Manager: acknowledged.**
+  - Existing evidence: the Developer ran them on a throwaway PostgreSQL 17.11 (owner-approved), 10 times each, 60 executions and 0 failures. The full integration suite also passed there (203 passed, 3 skipped by design), the C1 negative check is recorded, and the Manager read the tests and judged them deterministic (lock state observed through `pg_stat_activity`/`pg_blocking_pids`, no sleep-ordering).
+  - The independent execution is CI on standard PostgreSQL. It is therefore part of merge condition C1 below and must show "All 34 required PostgreSQL tests executed and passed" (28 + 6).
+
+**Evidence assessment.**
+- `npm run check` is green in a clean worktree (285 unit tests).
+- Integration: 18 tests on PGlite; 24 on PostgreSQL. The inventory guard has a recorded negative check.
+- E2E: 235 of 235 combined, 14 only on a rerun after a local PGlite restart (all in specs 4.4 does not touch, reported as reruns). The 18 new tests passed on the first run, and the Manager's independent run of the new and PWA specs passed 138/138 on the first attempt.
+- Functional testability is demonstrated with disposable accounts only.
+
+**Non-blocking observations:**
+1. The rate limit is per account only (5 per 15 minutes), as B1 specified. An attacker must already hold a valid session, so this is accepted. Revisit only if pilot telemetry shows abuse.
+2. `hasMediaAuditRecords` runs three small queries on every `/puppy` render, on unindexed string columns of small shared tables. Negligible at pilot scale.
+3. Never-verified accounts cannot use this flow (they cannot sign in). This remains the recorded follow-up for 4.5/4.6.
+4. Accepted residues, as documented: abuse-protection hashes (24 h), a possible late request-counter hash (7 days), the opaque ex-admin id in the audit tables, and provider backups and logs.
+
+**Merge conditions:**
+- **C1 (open):** commit this review and the Manager review in the worktree before the single push, copying `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder (Manager condition a). Then one push and a draft PR. CI on the final head must be green in a single attempt on both runs: the build job, and the PostgreSQL job with "All 34 required PostgreSQL tests executed and passed" and e2e. The result goes in the PR description only. A CI failure reopens this review.
+- **C2 (open, owner):** merging to `main` starts the automatic Vercel production deployment, so the merge approval is also the deployment approval.
+  - Code-only release, no migration. Rollback target: the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`).
+  - **A code rollback does not restore a deleted account.**
+  - Post-deploy checks are public and read-only. The route refuses unauthenticated and cross-origin requests without deleting anything. The `/puppy` dialog is opened and checked up to "ביטול" only. Sign-in, an existing plan, the map and the offline fallback still work.
+  - **No real account may be deleted as verification.**
+- **C3 (open, does not block this merge):** the real-device checks (dialog on a phone, keyboard, VoiceOver/TalkBack reading the scope) stay PENDING for the 4.8 matrix.
+
+**Next slice (Architect decision): 4.5, pilot access allowlist**, per the approved plan.
+- Its contract is designed after 4.4 is merged.
+- The allowlist is built now. Opening the pilot to non-tester addresses stays blocked until the owner's sender domain is verified (owner decision, plan.md).
+- The never-verified-accounts follow-up is re-evaluated there.
 
 ### Required Corrections
+None.
 
 ---
 
