@@ -6,11 +6,348 @@ PHASE=4
 ## Status
 STATUS: APPROVED
 
+Slice 4.4 approved in final review on 2026-11-13 (see "Architect Review").
+
+Owner decisions B1-B3 approved on 2026-11-12 (see "Owner Decisions"). This approval does not authorize deleting real accounts, any migration, merging or deploying.
+
+Revision for **slice 4.4** (account deletion), 2026-11-12. Slices 4.2 (`7bc45f8`) and 4.3 (`ad6b55a`, PR #6) are approved, merged and deployed. Their contracts and final reviews are kept below as closed records and are not reopened.
+
+## Phase Goal
+Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/plan.md`. 4.1-4.3 are done. This revision details **slice 4.4 only**; 4.5-4.8 get their own contract later, each before it starts.
+
+**Slice 4.4 goal:** a signed-in, verified owner can permanently delete their account from `/puppy`.
+- The owner confirms in an accessible Hebrew RTL dialog that says honestly what is deleted, what is retained and that deletion cannot be undone.
+- The owner re-proves their identity (B1).
+- One server transaction removes every owner-scoped row (inventory below).
+- Every session of the account ends, and the authentication cookies are cleared.
+- No in-flight generation, adaptation, revision, onboarding or progression request can commit afterwards or recreate deleted data.
+- Shared media and other accounts are untouched.
+
+## Source References
+- `team-Yuri/plan.md` (APPROVED), slice 4.4.
+- PRD.md §8: "Account deletion deletes personal profiles, plans and attempts and removes linked job payloads. Shared media assets remain. Proposed failed-job payload retention: 30 days; application backups and provider retention must be documented before launch."
+- PRD §5 progression contract; §10 server requirements (authenticated requests, CSRF, transactions, server-only secrets).
+- DESIGN_SYSTEM.md §8 "Puppy and settings": "Account deletion uses a confirmation dialog with an honest scope statement". §9: destructive button, dialogs with named heading, focus trap and Escape. §12: accessibility and RTL.
+- docs/DECISIONS.md:
+  - 48 and 57: generation jobs, leases and fencing;
+  - 64: ADMIN read from the database;
+  - 66 and 76: lock order (job → puppy or plan → technique states);
+  - 68-71: append-only media audit;
+  - P4-1 to P4-3: service worker.
+- Code baseline: `origin/main` `ad6b55a`, inspected 2026-11-12, read-only:
+  - `prisma/schema.prisma` and the 7 migrations: foreign-key actions and triggers;
+  - `src/server/auth.ts`: Better Auth 1.7.14, email and password, `nextCookies()`, no cookie cache, 30-day sessions, `rateLimit` on Better Auth routes only;
+  - `src/server/session.ts`: `requireUserFromRequest` takes the identity from the session cookie;
+  - `src/server/http.ts`: `assertSameOrigin`, `postRoute`;
+  - `src/server/ai/jobs.ts`: `startJob`, `fenceJob`, `finishJob`, `refundJobUnitOnce`, `pruneJobPayloads` (30 days);
+  - `src/server/ai/quota.ts`: hashed `AiUsageDay` keys;
+  - `src/server/onboarding.ts`: `lockPuppy`, puppy creation, commit after `fenceJob`;
+  - `src/server/revision.ts` and `src/server/progress.ts`: `lockPlan`;
+  - `src/server/email/rate-limit.ts`: `takeRateLimit`;
+  - `src/components/ui/Sheet.tsx`: native `<dialog>`; `Button` has a `destructive` variant.
+
+## Current-state findings that shape the design
+1. **Two `ON DELETE RESTRICT` foreign keys block a naive cascade:**
+   - `Attempt.exerciseVersionId → ExerciseVersion`;
+   - `MasteryEvent.attemptId → Attempt`.
+
+   Every other owner chain cascades from `user`. PostgreSQL checks RESTRICT immediately, so `DELETE FROM "user"` can fail for any owner who has attempts or mastery events, depending on cascade order. Deletion must therefore delete **explicitly in dependency order** inside one transaction. No schema change is needed.
+2. **Media audit columns are plain strings, not foreign keys:**
+   - `MediaVersion.createdById`, `publishedById` and `withdrawnById`;
+   - `MediaReview.reviewerId`;
+   - `TechniqueSuspensionEvent.actorId`.
+
+   `MediaReview` and `TechniqueSuspensionEvent` are append-only, and `MediaVersion` content columns are frozen, all by database triggers. They cannot be rewritten without a migration that weakens the audit guarantees. Deleting a user never violates them.
+3. **Sessions are database rows** (no Better Auth cookie cache is configured). Deleting the `session` rows invalidates every device at once; the cookies only need clearing on the device that asked.
+4. **Email-verification links are stateless tokens** (`createEmailVerificationToken`). Password-reset tokens are rows in `verification`; Better Auth 1.7 stores the user id as the value, which the Manager must confirm against the 1.7.14 source.
+5. **Payload retention already exists in code.** `pruneJobPayloads` clears `GenerationJob.payloadJson` older than 30 days, run opportunistically when a job starts. The PRD calls the 30 days "proposed"; it is not owner-approved.
+6. **Everything owner-scoped chains to `user` through a foreign key** (`Puppy.ownerId`, `IdempotencyKey.userId`, `session`, `account`; `Plan`, `Attempt` and `GenerationJob` through `Puppy`). Once the `user` row is gone, no insert can recreate owner data, because the foreign key fails. The exception is `AiUsageDay`, whose keys are hashes with no foreign key.
+
+## Architectural Decisions
+
+| Decision | Rationale | Consequence |
+|---|---|---|
+| A1. **Base:** branch from `main` `ad6b55a` in a new worktree. **No migration** is required: ordered deletes handle the RESTRICT keys, and the audit strings need no schema change. | Avoids a production database step and keeps the media audit triggers intact. | The release is code-only. If the Manager finds a need for a migration, that is a contract change that comes back to the Architect, and production migration is a separate owner approval. |
+| A2. **Endpoint:** `POST /api/account/delete`, a project route, not Better Auth's built-in `deleteUser`. Same-origin JSON (`assertSameOrigin`). Identity only from `requireUserFromRequest` (session cookie, verified email); any id in the body is ignored, and the body schema has none. Response `Cache-Control: private, no-store`. | Better Auth's `deleteUser` deletes through its adapter outside our transaction and lock order, and does not know the owner tables or the RESTRICT keys. | A single code path owns deletion. Better Auth is used only for password verification and cookie names. |
+| A3. **Identity verification (B1, owner-approved):** the request carries the current password. Inside the deletion transaction the server reads the account's credential `account` row and verifies the password with Better Auth's own password verifier (the Manager names the exact 1.7.14 API). A wrong password changes nothing and returns a neutral Hebrew error. Attempts are limited per account with `takeRateLimit` (new scope `account-delete`; 5 per 15 minutes is the default; hashed key, no address stored). The key is taken **before** verification. | A stolen or unattended session alone cannot delete the account. Email confirmation is not available to pilot addresses until the sender domain is verified (4.5). | No new table. The rate-limit table name says "Email", but `takeRateLimit` is generic. |
+| A4. **ADMIN accounts (B2, owner-approved):** the endpoint refuses while the account's **current database role** is ADMIN (`ADMIN_DELETE_BLOCKED`, Hebrew explanation). The dialog shows the explanation instead of the form. An administrator first revokes the role with the existing `scripts/grant-admin.ts --revoke`, an owner-run action. After that, deletion proceeds, and the historical media audit rows keep the former user id as an **opaque identifier**: no foreign key and no email, so it is no longer linked to an email address once the `user` row is gone. If the account has such audit rows (the server checks this when it renders `/puppy`), the A9 scope statement adds one accurate line: review and publication records of demonstration videos are kept, carrying an internal identifier that contains no email address and that, after deletion, is no longer linked to any account in our system. Backups taken before the deletion may still link it until they expire (A9 limits). | Rewriting the append-only audit would need a migration that weakens decisions 62 and 68-71. Blocking accidental self-deletion of the only administrator protects the publishing workflow. | No audit row is changed or deleted. Shared media stays fully intact. |
+| A5. **Deletion transaction (the only write path). Lock order corrected 2026-11-12 (C1, C2 in "Design-stage corrections and rulings"); the original order job → puppy → plan is superseded.** One interactive transaction, with timeouts like the other commits. It runs these steps in this order:<br>(1) verify the password;<br>(2) lock the account's `GenerationJob` rows `FOR UPDATE` in id order;<br>(3) lock the `Plan` rows `FOR UPDATE` in id order;<br>(4) lock the `Puppy` row `FOR UPDATE`, then re-lock the account's `GenerationJob` rows `FOR UPDATE NOWAIT`; on `55P03`, `40P01` or `40001` the whole transaction rolls back and is retried, at most 3 attempts with jitter, then `500 INTERNAL` with nothing deleted;<br>(5) delete, in dependency order: `MasteryEvent` → `Attempt` → `ExerciseVersion` → `Level` → `Plan` → `GenerationJob` (including its payloads) → `Puppy` → `IdempotencyKey` → `verification` (reset tokens of this user) → `AiUsageDay` (this account's `ai-request` keys for the retained days, recomputed with `keyOf`) → `session` → `account` → `user`.<br>Any error rolls everything back. | The real lock graph, including the implicit `FOR KEY SHARE` locks that foreign-key inserts take, orders every write path as **job → plan → puppy → user**. Progression holds the plan lock and then needs key-share on the puppy for its attempt insert. Deletion follows the same order, so there is no cycle. The `NOWAIT` re-lock closes the gap for a job created after step 2: deletion never waits for a job while it holds the puppy. The `user` row is deleted last; inserts that reference it take key-share locks and finish first. Deletion takes no technique lock. | All or nothing: a failure leaves the account fully usable. The Manager confirms the order against every write path and records it in `P4-4`. |
+| A6. **In-flight work after deletion (500 mapping at the `postRoute` choke point, C3).** A request that started earlier either finishes before deletion takes its locks, and its result is then deleted with everything else, or it fails safely afterwards:<br>- `fenceJob` matches no job row, so the commit stops;<br>- `lockPuppy` and `lockPlan` find no row;<br>- every insert hits a missing foreign key.<br>Those paths answer with the existing neutral errors, never recreate rows, never refund into a recreated job, and never log personal data. One residue is accepted and documented: a request already past its quota check may re-insert an `ai-request` counter row. It holds a hash of the deleted id and is pruned within 7 days. | Proven on standard PostgreSQL (Testing). There is no "deleted" tombstone table, which would itself be personal data. | No change to the generation lifecycle beyond mapping these failures to clean errors where they currently surface as 500. |
+| A7. **Sessions and cookies.** Deleting the `session` rows ends every device immediately: `getSession` reads the database. The success response also expires the Better Auth cookies on the requesting device, using Better Auth's own cookie names and attributes, including the `__Secure-` prefix on HTTPS (the Manager verifies the 1.7.14 helper or names). Afterwards the client goes to the welcome page `/` and shows a short "החשבון נמחק" status. No personal data goes in the URL. | Server-side invalidation is authoritative; clearing the cookie avoids a stale cookie on the device. | A second signed-in device lands on `/` at its next request. Its API calls get `UNAUTHENTICATED`. |
+| A8. **Dialog on `/puppy`.** The "חשבון" card replaces the "will be added later" line with a destructive "מחיקת החשבון" button. It opens the existing `Sheet` (native `<dialog>`: named heading, focus containment, Escape, focus restoration) containing:<br>- the scope statement (A9);<br>- a password field with a visible label;<br>- "ביטול" (cancel, the default focus);<br>- "מחיקה לצמיתות" (destructive, disabled while sending).<br>States: sending (no duplicate submit), wrong password (inline error, input kept), rate-limited (explained), offline or network failure ("לא נמחק דבר", retry), ADMIN blocked (A4). | DESIGN_SYSTEM §8, §9 and §12. Reuses existing components; no new visual language. | DESIGN_SYSTEM.md gains the dialog row in §14 and the copy in §8. |
+| A9. **Honest scope copy (Hebrew; final wording by the Manager within this meaning):**<br>- **Deleted now, irreversibly:** the account, email address and password, all sessions, the puppy profile and onboarding answers, all training plans and exercises, practice reports and mastery confirmations, and AI generation records including their stored outputs.<br>- **Retained:** shared demonstration media, which never contained the owner's data; for a former administrator, also the A4 line on the opaque identifier in video review records.<br>- **Limits:** recovery is not possible; copies may remain for a limited time in the hosting and email providers' backups and logs under their own retention, and in any generation request that was already being processed.<br>The copy must not promise a removal time we do not control, and it names no providers. | PRD §8 requires backups and provider retention to be documented. The copy must match actual behavior exactly. | README documents the same limits with specifics: Supabase backups depend on the plan (open owner decision "backups"); Resend keeps delivery logs; Vercel runtime logs; AI provider request retention. |
+| A10. **No change elsewhere.** No change to the service worker (P4-1 to P4-3 unchanged: `/api/*` is never cached and pages are network-first), the update flow, progression rules, generation prompts, media or `MEDIA_REQUIRED` (off). No deletion of real accounts in any environment except disposable test accounts on local or CI databases. | Scope discipline. | Deleting any real account in production, including the owner's own test account, happens only through the shipped UI by that account's owner. |
+
+## Owner-scoped deletion inventory (complete, from `prisma/schema.prisma` at `ad6b55a`)
+
+| Table | Scope key | Action in 4.4 | Note |
+|---|---|---|---|
+| `user` | `id` = session user | **Delete** (last) | Email, name, role, verification flag |
+| `session` | `userId` | **Delete** | All devices |
+| `account` (Better Auth credential) | `userId` | **Delete** | Password hash |
+| `verification` | reset-token rows whose value is the user id | **Delete** | Email-verification tokens are stateless and become useless once the user is gone |
+| `Puppy` | `ownerId` | **Delete** | Profile and onboarding answers (`profileJson`, `onboardingStep`) |
+| `Plan` | `puppyId` | **Delete** | |
+| `Level` | `planId` | **Delete** | |
+| `ExerciseVersion` | `levelId` | **Delete** (after `Attempt`) | RESTRICT target |
+| `Attempt` | `puppyId` | **Delete** (after `MasteryEvent`) | RESTRICT target |
+| `MasteryEvent` | `levelId` | **Delete** (first) | |
+| `GenerationJob` | `puppyId` | **Delete**, including `payloadJson` | Personal failed-job payloads are removed by the deletion itself |
+| `IdempotencyKey` | `userId` | **Delete** | Stored responses can echo owner content |
+| `AiUsageDay` | hashed `ai-request` key of this user, per retained day | **Delete** | The system-wide `ai-calls` counter is not personal and stays |
+| `EmailRateLimit` | hashed scope + address or IP | **Retain** (documented) | Short fixed windows, pruned after 24 h; abuse protection; contains no address |
+| `MediaVersion`, `MediaReview`, `TechniqueSuspensionEvent` | opaque actor ids (strings) | **Retain unchanged** | Shared audit; append-only (A4) |
+| `MediaAsset`, `TechniqueVersionState` | — | **Retain** | Shared catalog |
+| Other accounts' rows in every table | — | **Untouched** | Proven by tests |
+
+A guard test lists every table from `information_schema` and fails if a table is not classified in this inventory, so a future table cannot silently escape deletion.
+
+## Constraints / Non-Negotiables
+- The identity comes only from the session. No caller-supplied owner, user or puppy id is accepted anywhere in 4.4.
+- One transaction: all or nothing. No partial deletion is observable.
+- Progression invariants untouched. Deletion is the only new write path, and it only deletes.
+- Shared media, catalog and audit rows are never modified or deleted.
+- No secrets, passwords or email addresses in logs, errors or responses.
+- The service worker, offline fallback, owner-activated update and shell allowlist are unchanged. Video production stays paused, `MEDIA_REQUIRED` stays off and techniques stay DRAFT.
+- Pilot scope stays as agreed: no videos; approved emails only once the sender domain is verified (4.5); first-party analytics (4.6).
+- No production migration, merge, deployment or deletion of real accounts without explicit owner approval. Merging to `main` is the production deployment.
+
+## Technical Boundaries / Out of Scope
+- Profile editing; data export; delayed or soft deletion ("grace period"); admin-initiated deletion of other accounts; support tooling.
+- Purging never-verified accounts. They cannot sign in, so they cannot use this flow. This is recorded as a follow-up for 4.5/4.6, not built here.
+- Changing the payload retention for remaining accounts. B3 is approved at the 30 days already implemented, so 4.4 changes no retention code; it only records the decision in `P4-4` and the README.
+- Rewriting media audit rows; any migration.
+- 4.5-4.8 work.
+
+## Dependencies and Interfaces
+
+### Expected files (slice 4.4)
+New:
+- `src/server/account-deletion.ts`: the A5 transaction and A6 error mapping, with injectable dependencies for the rollback test.
+- `src/app/api/account/delete/route.ts`: A2/A3/A7.
+- `src/components/account/DeleteAccount.tsx` (+ `.module.css`): A8 dialog.
+- Integration tests under `test/integration/` (deletion, inventory guard, concurrency) and unit tests for any pure helpers.
+- `e2e/account-deletion.spec.ts`.
+
+Modified:
+- `src/app/(main)/puppy/page.tsx`: the account card.
+- `src/app/page.tsx` (welcome): the "deleted" status, only if needed.
+- `src/server/http.ts`: the C3 mapping in `postRoute` only (replaces per-path changes to the generation, progression and onboarding error paths); `src/server/ai/quota.ts`: one exported helper (I5).
+- `src/server/errors.ts`: new codes with Hebrew text.
+- `scripts/required-pg-tests.json`: the new PostgreSQL-only tests.
+- `DESIGN_SYSTEM.md` §8/§14; `docs/DECISIONS.md` `P4-4`; `README.md` ("Account deletion": behavior and the A9 limits); `PRD.md` §8 (B3: the 30-day payload retention is owner-approved, no longer "proposed").
+
+Not touched: `public/sw.js`, `public/offline.html`, `next.config.ts`, `src/server/auth.ts` (unless the Manager shows a required configuration change, which is a contract change), `prisma/schema.prisma` and `prisma/migrations/`, media code, `playwright.config.ts`, `.env.example`, `package.json`, `package-lock.json`.
+
+### Interfaces
+- `POST /api/account/delete`. Body: `{ password: string }` (bounded length). Same-origin JSON. Possible responses:
+  - `200 { deleted: true }`, with expired auth cookies;
+  - `401 UNAUTHENTICATED`;
+  - `403 EMAIL_NOT_VERIFIED`, `ADMIN_DELETE_BLOCKED` or `FORBIDDEN_ORIGIN`;
+  - `400 VALIDATION`;
+  - `422`-class `PASSWORD_INCORRECT`, neutral;
+  - `429 RATE_LIMITED`;
+  - `500 INTERNAL`, with nothing deleted.
+- No other API, no schema change, no environment variable.
+
+## Data / State Considerations
+- After success, no row in any owner-scoped table references the account (inventory).
+- Retained pseudonymous residues are documented: email rate-limit hashes (24 h), a possible late `ai-request` counter hash (7 days) and media audit actor ids (permanent, ADMIN history only).
+- **B3, remaining accounts' failed-job payloads (owner-approved 2026-11-12):** a maximum of 30 days, as `pruneJobPayloads` already implements. Account deletion removes the deleted account's job payloads immediately, inside the A5 transaction. Record the decision in `P4-4`, and update the PRD §8 wording ("proposed") in the same change.
+
+## Security / Privacy Considerations
+- Defenses: CSRF via same-origin JSON; session-only identity; password re-entry with a per-account limit; constant, neutral error text; no enumeration (the account is already the session's).
+- ADMIN self-deletion blocked (A4); `assertAdmin` reads the database, so a deleted or revoked admin can never act.
+- No personal data in logs. The route logs only error codes. In-flight AI requests already sent to the provider are outside our control; A9 says so.
+- Responses are `no-store`, and the service worker never caches `/api/*` (S2).
+
+## Testing and Lint Expectations
+Automated (Developer, recorded in `dev-phase4.md`):
+- `npm run check` passes.
+- Integration tests (PGlite locally, and standard PostgreSQL in CI):
+  - **Full clearance:** a fully populated account is deleted: profile, plan with completed, current and locked levels, several exercise versions, attempts (current and review), mastery events, idempotency keys, a failed job with `payloadJson`, a reset token, today's `ai-request` counter and two sessions. Every inventory table holds zero rows for it, including an account with mastery events, which proves the RESTRICT order.
+  - **Isolation:** a second populated account is byte-for-byte unchanged, compared by snapshot. Shared media (`MediaAsset`, `MediaVersion`, `MediaReview`, `TechniqueVersionState`, `TechniqueSuspensionEvent`) is unchanged by snapshot.
+  - **Not by another account:** a request authenticated as account B deletes only B and never A. A body carrying A's id is ignored. Unauthenticated, unverified, cross-origin and non-JSON requests delete nothing.
+  - **Password:** a wrong password deletes nothing. The rate limit refuses after the cap, and the key is taken before verification.
+  - **ADMIN:** an account whose current role is ADMIN is refused. After revocation, deletion succeeds and the audit rows referencing the former id are unchanged.
+  - **Sessions:** after success, both sessions fail `getSession`. The response expires the session cookie with Better Auth's names and attributes.
+  - **Rollback:** an injected failure after some deletes leaves every row and session intact.
+  - **Inventory guard:** an unclassified table fails the test.
+- PostgreSQL-only concurrency tests, added to `scripts/required-pg-tests.json`. They use the deterministic lock-observation pattern (`pg_blocking_pids`; test-held locks, no sleeps for ordering):
+  1. A deletion that starts while a generation commit holds its job row waits, then removes the committed plan as well. Nothing remains.
+  2. A generation or adaptation whose commit starts after the deletion committed stops at `fenceJob` (or the missing puppy or plan). It recreates nothing, refunds nothing and gives a clean error.
+  3. A mastery confirmation holding the plan lock: either it lands first and is then deleted, or it runs after and fails cleanly. There is never a deadlock and never an orphan row.
+  4. An onboarding draft save or puppy creation racing the deletion never recreates a `Puppy` row.
+  5. Two concurrent deletions of the same account: one succeeds, the other answers `UNAUTHENTICATED` or deletes nothing. No deadlock.
+  6. The C2 gap: a job created after the first job-lock pass and held at the `fenceJob` position makes the `NOWAIT` re-lock fail; the deletion rolls back, releases the puppy and succeeds on retry. No `40P01`, nothing remains. Also required: the C1 negative check (with the original order, test 3 fails with `40P01`).
+- E2E (Playwright, three viewports, disposable accounts from the existing `owner` fixture only):
+  - opening the dialog: focus on "ביטול", Escape closes and restores focus, axe clean, RTL, no overflow at 360 px, reduced motion;
+  - cancel deletes nothing (the account still works);
+  - a wrong password shows an inline error and keeps the dialog;
+  - successful deletion lands on `/` with the "deleted" status, `/home` redirects to `/`, and signing in again with the old credentials fails;
+  - a second browser context signed in to the same account is signed out at its next navigation;
+  - the existing `offline.spec.ts`, `pwa.spec.ts` and `shell.spec.ts` stay green.
+- CI on standard PostgreSQL green on the final head, single attempt, all required tests.
+
+Manual or owner (PENDING, not a merge blocker): deletion on a real phone (dialog, keyboard, VoiceOver reading the scope text). It belongs to the 4.8 matrix.
+
+## Functional Testability
+- Page/screen: `/puppy`, "חשבון" card, "מחיקת החשבון" dialog; welcome page `/` after deletion.
+- User-visible behavior:
+  1. Open the dialog, read the scope, cancel: nothing changes.
+  2. Wrong password: error, nothing deleted.
+  3. Correct password: the account is gone, the user is signed out everywhere and cannot sign in again.
+- API: `POST /api/account/delete` as specified.
+- Minimal end-to-end flow:
+  1. Register a disposable account locally and onboard.
+  2. Practice and confirm mastery.
+  3. Delete it from `/puppy`.
+  4. Database check: zero owner rows, other accounts and media unchanged.
+- Expected result: as above, asserted by integration and e2e tests.
+
+## Handoff Notes for Manager
+- Detail slice 4.4 only. Base `main` `ad6b55a`, new branch and worktree.
+- Apply the owner decisions B1-B3 below (approved; no further approval round). They do not authorize deleting real accounts, any migration, merging or deploying.
+- Verify against Better Auth 1.7.14 (source or official docs): the password verifier API, the reset-token storage in `verification`, the session cookie names and attributes, and a supported way to expire them from a route handler.
+- Confirm the A5 lock order against `startJob`, `fenceJob`, `lockPuppy`, `lockPlan`, `saveOnboardingDraft` and the idempotency writes, and record it in `P4-4`. Done by the Manager: the order is corrected as C1/C2.
+- List every path where a deleted account would surface as a 500 today, and map only those (A6).
+- No migration. If one becomes necessary, stop and return to the Architect.
+
+## Design-stage corrections and rulings (2026-11-12)
+Input: `team-Yuri/manager-phase4.md` slice 4.4 revision 1 (STATUS: READY_FOR_DEVELOPER), sections "Lock-order check", "Deleted-account responses today" and "Risks / Open Questions". I checked the lock graph against `src/server/progress.ts` (`recordAttempt`/`confirmMastery`: `lockPlan`, then `attempt.create`), `src/server/onboarding.ts`, `src/server/revision.ts` and `src/server/ai/jobs.ts` at `ad6b55a`, read-only.
+
+**Corrections to the contract (accepted; the Architect's A5 was wrong):**
+- **C1, lock order (Manager F1).** My A5 locked the puppy before the plans. Progression holds `Plan FOR UPDATE` and then inserts an `Attempt`, which takes `FOR KEY SHARE` on `Puppy`. A deletion holding `Puppy FOR UPDATE` while waiting for that plan lock closes a cycle (`40P01`). **Corrected order: jobs → plans → puppy → (deletes) → user.** The corrected A5 row is the contract.
+- **C2, job gap (Manager F2).** A job inserted after the first job-lock pass, whose worker then reaches `fenceJob` and waits for the puppy, would deadlock with a deletion that holds the puppy and waits for the job row. **Fix: after the puppy lock, re-lock the jobs `FOR UPDATE NOWAIT`.** On `55P03`, `40P01` or `40001` the whole transaction rolls back, with a bounded retry of 3 attempts with jitter; then `500 INTERNAL`, nothing deleted. A bounded retry is acceptable because every attempt is all-or-nothing, and the owner can simply try again.
+- **C3, 500 mapping at one choke point (Manager F3).** In `postRoute`'s non-`AppError` branch, if the session user's row no longer exists, answer `401 UNAUTHENTICATED` and log only the code. Otherwise behave exactly as today. This covers every in-flight path of a deleted account (A6) without touching domain code. The clean fence answers (409/404) stay as they are.
+
+**Rulings on the Manager's interpretations I1-I9:**
+
+| # | Interpretation | Ruling |
+|---|---|---|
+| I1 | A5 steps 3 and 4 swapped (plans before puppy) | **Acknowledged.** Recorded as C1. The required negative check (swap back, observe `40P01`, restore with `cmp`) must be in the evidence. |
+| I2 | `NOWAIT` job re-lock, bounded retry, sixth PostgreSQL test | **Acknowledged.** Recorded as C2. The F2 test must use the injectable hook between the first job pass and the puppy lock; that hook must not change the default path. |
+| I3 | 500 mapping at the `postRoute` choke point | **Acknowledged.** Recorded as C3. Condition: the mapping applies only when the session user's row is absent. With the user present, an unexpected error still answers 500 and is logged as today. `adminRoute` is unchanged. |
+| I4 | Cookie expiry from `getCookies(auth.options)` instead of `auth.api.signOut` | **Acknowledged.** It does not depend on the session row the deletion just removed, and it works outside a Next request scope. The equivalence test against a real `signOut` is mandatory. A mismatch is a defect, not an interpretation. |
+| I5 | One exported, transaction-aware helper in `src/server/ai/quota.ts` (ten UTC days) | **Acknowledged.** It is the minimal way to recompute the private `keyOf` that A5 requires. No other change to that file, and the system-wide `ai-calls` counter is untouched. |
+| I6 | `/?deleted=1` marker and the welcome status line | **Acknowledged.** A constant marker with no personal data, as A7 requires. Anyone can open that URL and see the line; it is cosmetic and reveals nothing. A full navigation drops client state. The service worker is unaffected (network-first navigation). |
+| I7 | Final Hebrew copy (M4) | **Acknowledged.** It matches A9 and the B2 wording: what is deleted now and irreversibly, what stays (shared videos), the A4 audit line only for accounts with audit records, and the limits for backups, provider logs and in-flight requests. It names no provider and promises no removal time. |
+| I8 | Non-strict body schema; extra fields ignored | **Acknowledged.** Exactly A2: the schema reads only `password`, so any id in the body is never read. A test sends another account's id and proves it is ignored. |
+| I9 | Password verified inside the transaction before any lock; rate limit outside, before verification | **Acknowledged.** No row lock is held while scrypt runs, and the limit cannot be bypassed by a failing transaction. Condition: a C2 retry must not take another rate-limit unit (the limit is taken once per request, outside the retried transaction). |
+
+**Not an Architect decision (owner):** the Manager's open item to run a throwaway PostgreSQL server outside the repository before the single push. Architecturally recommended, because the six concurrency tests carry the main risk of this slice; the owner decides.
+
+Contract status: still READY_FOR_MANAGER, now with C1-C3. No migration and no change to A1-A4 or A7-A10.
+
+## Owner Decisions (slice 4.4)
+
+All approved by the owner on 2026-11-12:
+
+| # | Decision | Owner decision |
+|---|---|---|
+| B1 | How the owner proves identity before deletion | **Approved:** re-enter the current password, with per-account rate limiting (A3) |
+| B2 | ADMIN accounts | **Approved:** in-app deletion is blocked while the role is ADMIN; revoke it first. Shared media audit records are preserved unchanged, and the retained opaque identifier is explained accurately (A4, A9) |
+| B3 | Failed-job payload retention for remaining accounts | **Approved:** at most 30 days; account deletion removes that account's payloads immediately |
+
+Also recorded:
+- The open plan.md decision "backups" affects only the README specifics of A9, not the UI wording.
+- None of the other open plan.md decisions (alert channel, sending domain, pilot recruitment, performance profile) affects 4.4.
+
+## Architect Review
+ARCHITECT_REVIEW_STATUS: APPROVED
+
+Current revision: slice 4.4. The final reviews of slices 4.3 and 4.2 are in the closed records below.
+
+### Review Notes
+Final review of slice 4.4, 2026-11-13.
+- Inputs: `team-Yuri/manager-phase4.md` ("Manager Review", MANAGER_REVIEW_STATUS: APPROVED, no corrections; shared folder) and the 4.4 section of `team-Yuri/dev-phase4.md` (STATUS (slice 4.4): COMPLETE; committed in the worktree).
+- Branch `feature/phase-4-account-deletion`, HEAD `c92e2a8`, base `ad6b55a` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.4`. Local only: not on the remote, no PR, no CI run yet.
+- Checked read-only with git: `src/server/account-deletion.ts`, the route, `DeleteAccount.tsx` and the diffs of `http.ts`, `quota.ts`, `errors.ts`, `/puppy`, the welcome page, README and PRD.
+- Tests were not re-run by the Architect.
+
+**Scope.**
+- Outside `team-Yuri/`, the diff touches only the files allowed by the contract.
+- A path-filtered diff over `prisma/`, `public/` (including `sw.js` and `offline.html`), `next.config.ts`, `src/server/auth.ts`, `package.json`, `package-lock.json`, `.env.example`, `playwright.config.ts`, `vitest.config.ts`, `src/server/media` and `src/domain` is empty.
+- No migration, no schema change, no dependency, no environment variable.
+
+**Compliance with A1-A10 and C1-C3:**
+
+| Decision | Verdict | Evidence |
+|---|---|---|
+| A1 Base, no migration | Compliant | Branched from `ad6b55a`; `prisma/` is not in the diff. |
+| A2 Endpoint and identity | Compliant | `POST /api/account/delete`: `assertSameOrigin`, then `requireUserFromRequest`; the body schema reads `password` only (non-strict); `no-store`. Another account's id in the body is proven ignored. |
+| A3 Password and limit (B1) | Compliant | `verifyPassword` from `better-auth/crypto` against the credential `account` row, inside the transaction and before any row lock. `takeRateLimit` (`account-delete`, 5/900 s) is taken once per request, outside the retried transaction and before verification. |
+| A4 ADMIN (B2) | Compliant | The current database role ADMIN is refused with `ADMIN_DELETE_BLOCKED`, and the dialog shows only the explanation. After revocation, deletion succeeds with the audit rows byte-identical. `hasMediaAuditRecords` drives the accurate opaque-id line. |
+| A5 as corrected by C1/C2 | Compliant | Identity checks, then jobs `FOR UPDATE`, then plans `FOR UPDATE`, then the puppy `FOR UPDATE`, then jobs `FOR UPDATE NOWAIT`. Deletes run in RESTRICT-safe order, with `user` last and exactly one row. `55P03`/`40P01`/`40001`/`P2034` roll back and retry at most 3 times, then 500 with nothing deleted. The test seams are optional parameters, unused by the default path. |
+| A6 + C3 In-flight work | Compliant | `postRoute` answers 401 only for a non-`AppError` failure when the session user's row is gone. A failing lookup counts as "not deleted", so the 500 path is unchanged. Only a code is logged. `adminRoute` is unchanged. |
+| A7 Sessions and cookies | Compliant | Session rows are deleted in the transaction. `expiredAuthCookies` uses `getCookies(auth.options)` with `maxAge: 0`, and is equivalent to a real `signOut` (http and https). A full navigation goes to `/?deleted=1`. |
+| A8 Dialog | Compliant | The existing `Sheet` (native `<dialog>`); a destructive opener; initial focus on "ביטול"; a labelled password field with an associated, announced error; sending, wrong-password, rate-limit, network and ADMIN states; the password is cleared after each request that deleted nothing. |
+| A9 Honest copy | Compliant | Deleted, retained and limits exactly as in the contract and B2. No provider named and no removal time in the UI. README states the provider facts without invented figures and keeps the "backups" decision open. |
+| A10 No change elsewhere | Compliant | Service worker, update flow, shell allowlist, media and `MEDIA_REQUIRED` untouched. Only disposable accounts on local and throwaway databases. |
+| B3 | Compliant | Deletion removes the account's job payloads in the transaction. PRD §8 now says 30 days, owner-approved. No retention code changed. |
+
+**Rulings on the Developer's nine interpretations (the Manager accepted all nine); all acknowledged:**
+1. **F3 helper tested in the integration file: acknowledged.** It imports the database client and the unit config has no database. The four decision cases and the route-level 401/500/`AppError` cases are covered.
+2. **`afterJobLock` after the plan locks, before the puppy lock: acknowledged.** That is the position the C2 test needs. It is optional and unused by the default path, which meets the I2 condition.
+3. **Focus on "ביטול" via an effect and `data-delete-cancel`: acknowledged.** `Sheet` renders children while closed, so `autoFocus` would target a hidden element. The e2e asserts the focus. The selector is document-wide, which is safe with one dialog per page.
+4. **"מחיקה לצמיתות" also disabled while the field is empty: acknowledged.** Stricter than the contract, it avoids a pointless 400, and it is documented in DESIGN_SYSTEM.md.
+5. **Scoped `eslint-disable-next-line` for `window.location.href`: acknowledged.** A7 requires a full navigation.
+6. **Cookie normalizations (lower-case `SameSite`, drop `prefix`): acknowledged.** Next's `ResponseCookies` requires them, and the mandatory equivalence test (I4 condition) proves the serialized result equals Better Auth's sign-out.
+7. **Welcome status reuses `.card` and `.lead`: acknowledged.** No new visual variant.
+8. **Extra tests beyond M2: acknowledged.** They strengthen coverage.
+9. **Rewritten F1 test: acknowledged, and required.** The first version masked the cycle. The rewritten test reproduces the real progression scenario, and the recorded negative check now fails with `40P01` under the old order, which is the proof C1 asked for.
+
+**Rulings on the Manager's observations:**
+- **`/api/mastery` and `/api/plan/revise` have no dedicated race test: acknowledged, no correction.** C3 is one route-agnostic decision in `postRoute`, tested directly: user gone gives 401; user present gives 500; `AppError` keeps its status.
+  - `/api/mastery` fails like `/api/attempts`, which has a real in-flight race test: `lockPlan` returns no row, then a non-`AppError` follows.
+  - `/api/plan/revise` shares `startJob`, the `fenceJob` stop and the choke point with `/api/plan/adapt`, which has a race test.
+  - A dedicated case would repeat an existing proof of the same code path.
+- **The six PostgreSQL-only tests were not re-executed by the Manager: acknowledged.**
+  - Existing evidence: the Developer ran them on a throwaway PostgreSQL 17.11 (owner-approved), 10 times each, 60 executions and 0 failures. The full integration suite also passed there (203 passed, 3 skipped by design), the C1 negative check is recorded, and the Manager read the tests and judged them deterministic (lock state observed through `pg_stat_activity`/`pg_blocking_pids`, no sleep-ordering).
+  - The independent execution is CI on standard PostgreSQL. It is therefore part of merge condition C1 below and must show "All 34 required PostgreSQL tests executed and passed" (28 + 6).
+
+**Evidence assessment.**
+- `npm run check` is green in a clean worktree (285 unit tests).
+- Integration: 18 tests on PGlite; 24 on PostgreSQL. The inventory guard has a recorded negative check.
+- E2E: 235 of 235 combined, 14 only on a rerun after a local PGlite restart (all in specs 4.4 does not touch, reported as reruns). The 18 new tests passed on the first run, and the Manager's independent run of the new and PWA specs passed 138/138 on the first attempt.
+- Functional testability is demonstrated with disposable accounts only.
+
+**Non-blocking observations:**
+1. The rate limit is per account only (5 per 15 minutes), as B1 specified. An attacker must already hold a valid session, so this is accepted. Revisit only if pilot telemetry shows abuse.
+2. `hasMediaAuditRecords` runs three small queries on every `/puppy` render, on unindexed string columns of small shared tables. Negligible at pilot scale.
+3. Never-verified accounts cannot use this flow (they cannot sign in). This remains the recorded follow-up for 4.5/4.6.
+4. Accepted residues, as documented: abuse-protection hashes (24 h), a possible late request-counter hash (7 days), the opaque ex-admin id in the audit tables, and provider backups and logs.
+
+**Merge conditions:**
+- **C1 (open):** commit this review and the Manager review in the worktree before the single push, copying `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder (Manager condition a). Then one push and a draft PR. CI on the final head must be green in a single attempt on both runs: the build job, and the PostgreSQL job with "All 34 required PostgreSQL tests executed and passed" and e2e. The result goes in the PR description only. A CI failure reopens this review.
+- **C2 (open, owner):** merging to `main` starts the automatic Vercel production deployment, so the merge approval is also the deployment approval.
+  - Code-only release, no migration. Rollback target: the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`).
+  - **A code rollback does not restore a deleted account.**
+  - Post-deploy checks are public and read-only. The route refuses unauthenticated and cross-origin requests without deleting anything. The `/puppy` dialog is opened and checked up to "ביטול" only. Sign-in, an existing plan, the map and the offline fallback still work.
+  - **No real account may be deleted as verification.**
+- **C3 (open, does not block this merge):** the real-device checks (dialog on a phone, keyboard, VoiceOver/TalkBack reading the scope) stay PENDING for the 4.8 matrix.
+
+**Next slice (Architect decision): 4.5, pilot access allowlist**, per the approved plan.
+- Its contract is designed after 4.4 is merged.
+- The allowlist is built now. Opening the pilot to non-tester addresses stays blocked until the owner's sender domain is verified (owner decision, plan.md).
+- The never-verified-accounts follow-up is re-evaluated there.
+
+### Required Corrections
+None.
+
+---
+
+## Slice 4.3 record (APPROVED, merged in `ad6b55a`; closed, not reopened)
+The text below is the slice 4.3 contract and its final Architect review exactly as approved, with headings demoted one level and its status lines qualified as slice 4.3.
+
+### Status
+STATUS (slice 4.3): APPROVED
+
 Slice 4.3 approved in final review on 2026-11-12 (see "Architect Review").
 
 Revision for **slice 4.3** (public shell asset caching), 2026-11-12. Slice 4.2 is approved, merged (`7bc45f8`) and deployed. Its contract and final reviews are kept unchanged as a closed record in "Slice 4.2 record" below and are not reopened.
 
-## Phase Goal
+### Phase Goal
 Deliver the remaining ROADMAP Phase 4 work (PWA quality and private pilot) as the ordered slices of `team-Yuri/plan.md`: 4.1 and 4.2 are done; this revision details **slice 4.3 only**; 4.4-4.8 keep their plan.md scope and get their own contract later, each before it starts.
 
 **Slice 4.3 goal:** the service worker keeps a versioned cache of **immutable public build assets only**:
@@ -27,7 +364,7 @@ Nothing else may be cached: never HTML, API responses, RSC payloads, signed medi
   - a strictly allowlisted cache, which slice 4.7 can measure.
 - 4.3 claims no performance improvement. Measurement belongs to 4.7.
 
-## Source References
+### Source References
 - `team-Yuri/plan.md` (APPROVED), slice 4.3: "Cache immutable public build assets (`/_next/static/*`, icons, fonts) in a versioned cache. Never cache HTML, API, RSC, signed media URLs or user data. Purge old caches on activate."
 - ROADMAP.md Phase 4: "Cache public shell assets only; show honest offline states". PRD.md §10: "Cache public static assets only in MVP. Full offline training and offline progress submission are excluded"; §8: "Never expose private content through shared caches".
 - docs/DECISIONS.md P4-1 (offline worker, `woffiz-offline-v1`, rollback) and P4-2 (owner-activated update, `sw-version`, rollback worker activates itself).
@@ -35,7 +372,7 @@ Nothing else may be cached: never HTML, API responses, RSC payloads, signed medi
 - Observed on the deployed app (2026-11-12, public files only): `/icons/*.png` and `/art/*.webp` are served `Cache-Control: public, max-age=0, must-revalidate`. Fonts are bundled by Next.js into `/_next/static/media/heebo-*.woff2`.
 - Next.js guide `node_modules/next/dist/docs/01-app/02-guides/progressive-web-apps.md` (service worker headers).
 
-## Architectural Decisions
+### Architectural Decisions
 
 | Decision | Rationale | Consequence |
 |---|---|---|
@@ -50,7 +387,7 @@ Nothing else may be cached: never HTML, API responses, RSC payloads, signed medi
 | S9. **Rollout through 4.2.** The 4.3 worker is published by the S5 bump (`4.2.0` to `4.3.0`). Existing 4.2 installations keep the 4.2 worker, which caches nothing new, until the owner taps "לעדכן עכשיו". After the tap and the single reload, the 4.3 worker activates, purges any non-current `woffiz-shell-*` cache and starts filling its own. First-time visitors get 4.3 at once. | No silent activation (D4). | Until the tap, behavior is exactly 4.2. |
 | S10. **No other change:** no server, database, API, environment variable, dependency, `next.config.ts` header, `public/offline.html`, manifest, icon file, layout or UI change. | 4.3 is service-worker behavior only. | No migration and no Vercel configuration. Merging to `main` still triggers the automatic production deployment, which the owner approves explicitly. |
 
-## Constraints / Non-Negotiables
+### Constraints / Non-Negotiables
 - Progression invariants untouched. No change to attempts, mastery, plans, generation, media, ownership or admin code.
 - No private data in any cache. The allowlist (S2) and the storable-response rule (S3) are the only admission path.
 - The P4-1 offline fallback and the P4-2 owner-activated update keep working unchanged (S8, S9).
@@ -58,16 +395,16 @@ Nothing else may be cached: never HTML, API responses, RSC payloads, signed medi
 - Pilot scope stays as agreed: no videos; approved emails only once the sender domain is verified (4.5); first-party analytics in 4.6.
 - No deployment, merge or production change without explicit owner approval. Merging to `main` is the production deployment.
 
-## Technical Boundaries / Out of Scope
+### Technical Boundaries / Out of Scope
 - Caching pages, RSC payloads, API responses or any per-account response. Offline training or offline report submission.
 - `/art/*` artwork (owner decision 2026-11-12: excluded).
 - Precaching a build manifest (needs a build-time step); `/_next/image` optimization caching; Background Sync; push.
 - Performance measurement and claims (slice 4.7). Account deletion (4.4), allowlist (4.5), metrics and alerts (4.6), device matrix and usability (4.8).
 - Any change to the completed 4.2 reviews.
 
-## Dependencies and Interfaces
+### Dependencies and Interfaces
 
-### Expected files (slice 4.3)
+#### Expected files (slice 4.3)
 Modified:
 - `public/sw.js`: the S2 predicate, S3 storable rule, S4 strategies, S5 constant and cache name, S6 purge, S7 trim. The navigation branch and the `message` handler are unchanged.
 - `e2e/offline.spec.ts`: only the test "only the public offline page is ever cached" is redefined to the 4.3 invariant (see Testing). No other case changes.
@@ -80,23 +417,23 @@ New:
 
 Not touched: `next.config.ts`, `public/offline.html`, `src/app/manifest.ts`, `public/icons/*`, `public/art/*`, `src/app/layout.tsx`, `src/components/pwa/*`, `src/lib/pwa/*`, `playwright.config.ts`, `.env.example`, `prisma/`, `package.json`, `package-lock.json`, all of `src/server/`.
 
-### Interfaces
+#### Interfaces
 - Cache names: `woffiz-offline-v1` (unchanged) and `woffiz-shell-<SW_VERSION>` (new).
 - The page-to-worker message protocol is unchanged (`{ type: 'SKIP_WAITING' }` only).
 - No HTTP API, schema or environment variable.
 
-## Data / State Considerations
+### Data / State Considerations
 - The only new stored data is public build assets and icons, identical for every visitor. They hold no personal data, so retention rules for personal data do not apply.
 - Storage is bounded by S6 (one shell cache per version) and S7 (entry cap within a version).
 - No `localStorage`, `sessionStorage`, IndexedDB or server state.
 
-## Security / Privacy Considerations
+### Security / Privacy Considerations
 - The admission rule is a positive allowlist of public paths (S2) plus a public-response check (S3). The cache key never involves cookies or accounts.
 - Signed media URLs (`/api/media/*`, Supabase storage) are excluded by path and by origin. So are auth and progression APIs.
 - A shared device after sign-out: cached entries are public assets only, so nothing account-specific remains.
 - The rollback worker removes every `woffiz-*` cache.
 
-## Testing and Lint Expectations
+### Testing and Lint Expectations
 Automated (Developer, recorded in `dev-phase4.md`):
 - `npm run check` passes.
 - **Unit, S2 matrix.**
@@ -137,7 +474,7 @@ Real device (owner, PENDING until done; part of the 4.8 matrix, not a merge bloc
 - Android Chrome, installed app: same checks.
 - Deployed build, after an owner-approved merge: in DevTools Application, Cache Storage shows only `woffiz-offline-v1` and `woffiz-shell-4.3.0`, with allowlisted entries.
 
-## Functional Testability
+### Functional Testability
 - Page/screen the user can open: any app page. The new state is visible in DevTools, Application, Cache Storage.
 - User-visible behavior: none intended beyond the existing update banner for 4.2 installations. The app and the offline fallback behave as before.
 - Command-line flow: `npm run check`, `npm run test:e2e`.
@@ -149,7 +486,7 @@ Real device (owner, PENDING until done; part of the 4.8 matrix, not a merge bloc
   4. Go offline: a cached asset loads from the worker, and a page shows the offline fallback.
 - Expected observable result: as above, asserted by the e2e privacy proof.
 
-## Handoff Notes for Manager
+### Handoff Notes for Manager
 - Detail slice 4.3 only. Base `main` `7bc45f8`.
 - Owner decision (2026-11-12): `/art/*` stays **out** of the allowlist (S2 unchanged).
 - Choose the S7 entry cap from the measured production build, and record the count and bytes.
@@ -157,7 +494,7 @@ Real device (owner, PENDING until done; part of the 4.8 matrix, not a merge bloc
 - Record `P4-3` in docs/DECISIONS.md. Do not edit the 4.2 rows (`P4-2`) except to reference `P4-3`.
 - Verify the Cache Storage and service-worker fetch semantics used (`cache.put` restrictions, `Response.type`, `respondWith` with stale-while-revalidate and `event.waitUntil`) against current official documentation.
 
-## Open Questions (slice 4.3)
+### Open Questions (slice 4.3)
 
 | Question | Why It Matters | Required Decision |
 |---|---|---|
@@ -168,12 +505,12 @@ Of the six open owner decisions in plan.md (alert channel, backups, retention, s
 - 4.3 makes no performance claim, so the performance profile belongs to 4.7;
 - the other four concern 4.4-4.8.
 
-## Architect Review
-ARCHITECT_REVIEW_STATUS: APPROVED
+### Architect Review
+ARCHITECT_REVIEW_STATUS (slice 4.3): APPROVED
 
 Current revision: slice 4.3. The final reviews of slice 4.2 are in the closed record below.
 
-### Review Notes
+#### Review Notes
 Final review of slice 4.3, 2026-11-12.
 - Inputs: `team-Yuri/manager-phase4.md` ("Manager Review", MANAGER_REVIEW_STATUS: APPROVED, no corrections; shared folder, uncommitted) and the 4.3 section of `team-Yuri/dev-phase4.md` (STATUS: COMPLETE; committed in the worktree).
 - Branch `feature/phase-4-shell-cache`, HEAD `cd94c50`, base `7bc45f8`, worktree `C:\Users\אוהד\Documents\Woffiz-4.3`. Local only: the branch is not on the remote, and there is no PR or CI run yet.
@@ -240,8 +577,9 @@ Final review of slice 4.3, 2026-11-12.
 
 **Next slice (Architect decision): 4.4, account deletion**, per the approved plan order. Its contract is designed after 4.3 is merged. It is the first slice since 4.1 that changes server and data code, so it gets its own full contract (transaction scope, the table inventory, a possible migration and the production order). The six open owner decisions are re-checked there; retention of failed-job payloads is expected to matter for 4.4.
 
-### Required Corrections
+#### Required Corrections
 None.
+
 
 ---
 

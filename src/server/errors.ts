@@ -21,6 +21,9 @@ export type ErrorCode =
   | 'MEDIA_CONFLICT'
   | 'GUIDANCE_PAUSED'
   | 'ADAPT_UNAVAILABLE'
+  | 'PASSWORD_INCORRECT'
+  | 'RATE_LIMITED'
+  | 'ADMIN_DELETE_BLOCKED'
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -45,6 +48,9 @@ const STATUS: Record<ErrorCode, number> = {
   MEDIA_CONFLICT: 409,
   GUIDANCE_PAUSED: 409,
   ADAPT_UNAVAILABLE: 409,
+  PASSWORD_INCORRECT: 422,
+  RATE_LIMITED: 429,
+  ADMIN_DELETE_BLOCKED: 403,
 }
 
 /** Hebrew messages safe to show owners. Never include internals or other users' data. */
@@ -71,6 +77,9 @@ const MESSAGE: Record<ErrorCode, string> = {
   MEDIA_CONFLICT: 'הפעולה אינה אפשרית במצב הנוכחי של הסרטון או של הטכניקה.',
   GUIDANCE_PAUSED: 'התרגיל הזה מושהה לבדיקה. ההתקדמות שלכם נשמרה.',
   ADAPT_UNAVAILABLE: 'אין כרגע תרגיל חלופי מאושר. ההתקדמות שלכם נשמרה.',
+  PASSWORD_INCORRECT: 'הסיסמה שגויה. לא נמחק דבר.',
+  RATE_LIMITED: 'בוצעו יותר מדי ניסיונות. נסו שוב בעוד כמה דקות. לא נמחק דבר.',
+  ADMIN_DELETE_BLOCKED: 'זהו חשבון מנהל. כדי למחוק אותו צריך קודם לבטל את הרשאת המנהל, פעולה שמבצע בעל המערכת.',
 }
 
 export class AppError extends Error {

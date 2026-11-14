@@ -180,4 +180,4 @@ Extend the existing app; no new hosted services. The service worker remains a si
 | Mobile performance test profile (device, network throttling) for LCP/INP | Targets are meaningless without an agreed profile | Owner/Architect, in arch-phase4.md |
 | Pilot recruitment, size and timing; who runs usability sessions | 4.8 scheduling and the results report | Owner, before 4.8 |
 | Verified sending domain: which domain and when | Blocks opening the pilot to non-tester addresses | Owner, before opening the pilot |
-| Retention period for analytics events and failed-job payloads (PRD proposes 30 days for payloads) | Privacy commitments in 4.4 and 4.6 | Owner, in arch-phase4.md |
+| Retention period for analytics events and failed-job payloads (PRD proposes 30 days for payloads) | Privacy commitments in 4.4 and 4.6 | Payloads resolved 2026-11-12 (B3 in arch-phase4.md: at most 30 days; deleted accounts immediately). Analytics retention still open, owner, before 4.6 |

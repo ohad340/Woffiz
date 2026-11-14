@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { prisma } from '../db'
+import { prisma, type Tx } from '../db'
 
 /**
  * Two persistent daily counters (UTC days), both stored in PostgreSQL and therefore shared by every server
@@ -58,4 +58,15 @@ export function takeCallUnit(maxCallsPerDay: number, day = utcDay()) {
 /** Removes counters of past days. Cheap (indexed); run occasionally. */
 export async function pruneAiUsage(keepDays = 7) {
   await prisma.$executeRaw`DELETE FROM "AiUsageDay" WHERE "day" < CURRENT_DATE - ${keepDays}::int`
+}
+
+/**
+ * Account deletion: removes this account's request counters inside the deletion transaction. Keys are hashes, so they
+ * are recomputed for the UTC days from eight days ago to tomorrow (pruneAiUsage keeps seven; the extra margin covers
+ * the UTC/server-date edge). The system-wide 'ai-calls' counter is not personal and is not touched.
+ */
+export async function deleteRequestUnits(tx: Tx, userId: string, now = new Date()) {
+  const keys: string[] = []
+  for (let offset = -8; offset <= 1; offset++) keys.push(keyOf('ai-request', userId, new Date(now.getTime() + offset * 86_400_000).toISOString().slice(0, 10)))
+  await tx.aiUsageDay.deleteMany({ where: { key: { in: keys } } })
 }

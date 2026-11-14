@@ -6,22 +6,279 @@ PHASE=4
 ## Status
 STATUS: APPROVED
 
-Scope of this revision: **slice 4.3 only** (public shell asset caching), revision 1, 2026-11-12. Input: the completed 4.3 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions S1-S10) and the owner decision of 2026-11-12 that `/art/*.webp` stays outside the cache. Slice 4.2 is merged (`7bc45f8`) and deployed; its design and reviews are kept unchanged below as a closed record and are not reopened. Slices 4.4-4.8 are not designed here.
+Scope of this revision: **slice 4.4 only** (account deletion), revision 1, 2026-11-12. Input: the 4.4 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions A1-A10, the deletion inventory, owner decisions B1-B3 approved on 2026-11-12). Slices 4.2 (`7bc45f8`) and 4.3 (`ad6b55a`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.5-4.8 are not designed here. **No migration is needed** (confirmed, see "Verified semantics" V7). Nothing in this document authorizes deleting a real account, a migration, a push, a merge or a deployment.
 
 ## Phase Goal
-The service worker keeps a versioned cache of immutable public build assets only: everything under `/_next/static/` (code, styles and the bundled Heebo fonts) and the four app icons. It never caches HTML, API responses, RSC payloads, signed media URLs, `/art/*` or any per-account response. Caches of earlier worker versions are purged on activate. The new worker reaches existing installations only through the 4.2 mechanism (version bump, then the owner's tap on "לעדכן עכשיו"). The P4-1 offline fallback (`woffiz-offline-v1`, `/offline.html`) keeps working exactly as today. 4.3 makes no performance claim; measurement belongs to slice 4.7.
+A signed-in, verified owner permanently deletes their account from `/puppy`: they read an honest Hebrew scope statement, re-enter their password, and one server transaction removes every owner-scoped row; every session ends, no in-flight request can recreate data, and shared media and other accounts are untouched. Slices 4.2 and 4.3 behavior (offline fallback, owner-activated update, shell cache allowlist) is unchanged.
 
 ## Source References
+- `team-Yuri/PHASE.md` (`PHASE=4`), `team-Yuri/plan.md` (slice 4.4), `team-Yuri/arch-phase4.md` (A1-A10, inventory, B1-B3), `PRD.md` §8 and §10, `DESIGN_SYSTEM.md` §8 "Puppy and settings", §9, §12, §14, `docs/DECISIONS.md` (48, 57, 62, 64, 66, 68-71, 76, P4-1 to P4-3).
+- `.claude/rules/20-testing.md`, `30-docs.md`, `40-project-structure.md`.
+- Code baseline `origin/main` `ad6b55a`, read with `git show ad6b55a:<path>`: `prisma/schema.prisma`, `src/server/{auth,session,http,errors,onboarding,progress,revision,idempotency,queries,db}.ts`, `src/server/ai/{jobs,quota}.ts`, `src/server/email/rate-limit.ts`, `src/app/api/**/route.ts`, `src/components/ui/{Sheet,Button}.tsx`, `src/app/(main)/puppy/page.tsx`.
+- Better Auth **1.7.14** (the installed `node_modules/better-auth`, version printed from its `package.json`): `dist/crypto/password.mjs`, `dist/api/routes/{sign-in,sign-out,password,email-verification,update-user}.mjs`, `dist/cookies/index.mjs`, `dist/integrations/next-js.mjs`.
+
+## Architecture Summary
+The contract is followed as written, with **two corrections to A5** found while checking the lock order (F1, F2 below), one **choke point** for the deleted-account 500 mapping (F3), and the Better Auth API names the contract asked for. One new route, one server module, one dialog component, one account-card change, a welcome-page status line, three error codes, tests, docs. No schema, `sw.js`, `auth.ts`, environment or dependency change.
+
+## Verified semantics
+Better Auth 1.7.14 (read from the installed source):
+- **V1 Password verifier.** `import { verifyPassword } from 'better-auth/crypto'`, signature `({ hash, password }) => Promise<boolean>` (scrypt through `node:crypto`; it is what sign-in uses as `ctx.context.password.verify`). The credential account is the `Account` row with `providerId = 'credential'` and `accountId = user.id`; the hash is its `password` column. Sign-in does the same lookup and treats a missing account or hash as a wrong password. `maxPasswordLength` is 128 in `auth.ts`, so the body bound is 1-128.
+- **V2 Reset tokens.** A password-reset request stores a `verification` row with `identifier = 'reset-password:<24-character id>'` and **`value = the user id`**, plus `expiresAt` (`dist/api/routes/password.mjs`); a reset consumes it. Deleting by `value = userId` is correct whether or not the identifier is hashed. Email-verification links in this project are stateless signed tokens (`createEmailVerificationToken`); for a deleted account Better Auth answers `verify-email` with a redirect carrying `USER_NOT_FOUND`, not a 500.
+- **V3 Session cookies.** `import { getCookies } from 'better-auth/cookies'`; `getCookies(auth.options)` returns `{ sessionToken, sessionData, dontRememberToken, accountData }`, each `{ name, attributes }`. Name is `better-auth.<key>`, with the `__Secure-` prefix when `BETTER_AUTH_URL` starts with `https://` (production). Attributes: `httpOnly: true`, `sameSite: 'lax'`, `path: '/'`, `secure` true exactly when prefixed, no `domain` (cross-subdomain is off), `maxAge` 30 days for the session token. This project has no cookie cache and no account cookie, so only `session_token` (and possibly `dont_remember`) is ever set.
+- **V4 Supported expiry from a route handler.** Better Auth's own `expireCookie` sets the same name and attributes with value `''` and `maxAge: 0`. Two supported routes: `auth.api.signOut({ headers, asResponse: true })`, or building the expiry from `getCookies(auth.options)` (`auth.options` and `(await auth.$context).authCookies` are both exposed by the `betterAuth()` return value in 1.7.14, and are the same data Better Auth's sign-out uses). **Decision: the second.** It is deterministic, does not depend on a session row that the deletion just removed, logs nothing, and works outside a Next request scope (the `nextCookies()` plugin silently does nothing there, which would make an integration test of the route blind). Expire `sessionToken`, `sessionData` and `dontRememberToken`. A test proves the equivalence against a real sign-out (see M2).
+- **V5 Sessions are database rows.** No cookie cache: `auth.api.getSession` reads `session` and `user` on every request. Deleting the `session` rows ends every device at its next request (`UNAUTHENTICATED`).
+- **V6 `verification` has no foreign key**; the reset-token row must be deleted explicitly (A5).
+- **V7 Foreign keys (schema at `ad6b55a`).** `Session`, `Account`, `Puppy` (`ownerId`, unique) and `IdempotencyKey` cascade from `User`; `Plan`, `GenerationJob` and `Attempt` cascade from `Puppy`; `Level` from `Plan`; `ExerciseVersion` and `MasteryEvent` from `Level`. **Two RESTRICT keys** block a cascade: `Attempt.exerciseVersionId` and `MasteryEvent.attemptId`. `Plan.currentLevelId` is a plain column (no foreign key, so no cycle). `GenerationJob.ownerId` is a plain string (jobs are owned through `puppyId`). `AiUsageDay` has no foreign key. **No schema change is required, so no migration** (A1 holds).
+- **V8 Lock side effects.** Inserting a row that references `Puppy` or `User` takes `FOR KEY SHARE` on the referenced row, which conflicts with `FOR UPDATE` and with a `DELETE`. This is why the real lock graph differs from the explicit locks.
+
+## Lock-order check (A5 against the code)
+Locks per write path at `ad6b55a` (explicit lock, then implicit key-share locks from foreign keys):
+
+| Path | Order |
+|---|---|
+| Generation commit, onboarding (`completeOnboarding`) | `fenceJob` (job row) → `lockPuppy` (`FOR UPDATE`) → plan inserts under that lock |
+| Generation commit, adapt and revise | `fenceJob` (job row) → `lockPlan` (`FOR UPDATE`) → writes under that lock (new rows take key-share on `Puppy`) |
+| Progression (`recordAttempt`, `confirmMastery`) | `lockPlan` (`FOR UPDATE`) → `attempt.create` (key-share on `Puppy`, `Level`, `ExerciseVersion`) → `idempotencyKey.create` (key-share on `User`) |
+| `saveOnboardingDraft`, first tx of `completeOnboarding` | `ensurePuppy` insert (key-share on `User`, only when a puppy is really inserted) → `lockPuppy` |
+| `startJob`, `finishJob`, `refundJobUnitOnce`, `claimAttempt` | single autocommit statements on job rows (and `INSERT` with key-share on `Puppy`); no transaction held |
+| Idempotency write in adapt and revise | `saveResult` (`idempotencyKey.create`, key-share on `User`) inside the commit transaction, after `fenceJob` and `lockPlan`; the snapshot transaction before the provider call writes nothing |
+
+The global order that every path above respects is **job → plan → puppy → user**, where a path simply skips the levels it does not use.
+
+- **F1 (correction of A5 steps 3 and 4).** The contract locks the puppy, then the plans. Progression holds the plan lock and then needs key-share on the puppy; a deletion holding `Puppy FOR UPDATE` and waiting for that plan lock closes a cycle (`40P01`). **The deletion must lock jobs, then plans, then the puppy.** This is the same rationale as A5 ("matches decisions 66 and 76"), applied to the real graph.
+- **F2 (gap in the job lock).** A job inserted after the deletion's first job-lock pass (a new request that passed authentication before the deletion) whose worker then reaches its commit would hold that job row and wait for the puppy, while the deletion holds the puppy and waits for the job row in its `DELETE`: a second cycle. **Fix, no waiting while holding the puppy:** right after the puppy lock, lock the account's jobs again with **`FOR UPDATE NOWAIT`** (locks already held by this transaction do not conflict; unlocked newcomers are locked on the spot; a job held by another transaction raises `55P03`). On `55P03`, `40P01` or `40001` the whole transaction rolls back and is retried, **at most 3 attempts** with 50-150 ms jitter; after that the route answers the existing `500 INTERNAL`, nothing deleted.
+- The `User` row is deleted last. In-flight transactions that hold key-share on it (idempotency inserts, `ensurePuppy`) never wait for a lock the deletion holds, so the deletion simply waits for them. A `ensurePuppy` insert that lands after the deletion's explicit deletes is removed by the `user` cascade (a draft puppy has no attempts, so no RESTRICT key is involved).
+- A deletion that finds the user already gone (`DELETE FROM "user"` affects 0 rows, for example two concurrent deletions) answers `UNAUTHENTICATED`.
+
+**Final deletion transaction (replaces A5's order; interactive transaction with the bounds of `COMMIT_TX`: `maxWait` 10 s, `timeout` 20 s):**
+1. Read the user's current role and the credential `Account`. Role `ADMIN` → `ADMIN_DELETE_BLOCKED`. `verifyPassword`; wrong or missing hash → `PASSWORD_INCORRECT`. (No row lock is held while scrypt runs.)
+2. `SELECT id FROM "GenerationJob" WHERE "puppyId" = <the puppy> ORDER BY id FOR UPDATE`.
+3. `SELECT id FROM "Plan" WHERE "puppyId" = <the puppy> ORDER BY id FOR UPDATE`.
+4. `SELECT id FROM "Puppy" WHERE "ownerId" = <user> FOR UPDATE`; then the `NOWAIT` job re-lock (F2).
+5. Deletes, each scoped to this user: `MasteryEvent` → `Attempt` → `ExerciseVersion` → `Level` → `Plan` → `GenerationJob` (payloads included) → `Puppy` → `IdempotencyKey` → `verification` (`value = userId`) → `AiUsageDay` (ten `keyOf('ai-request', userId, day)` keys around today, see M1) → `session` → `account` → `user`. The `user` delete must affect exactly one row.
+When the account has no puppy (never started onboarding) steps 2-4 find nothing and are skipped; the rest is unchanged.
+
+## Deleted-account responses today (A6: every path that surfaces as a 500)
+Authentication is by session, so a request that begins after the deletion is already `UNAUTHENTICATED` (401), and all read paths answer cleanly (`getOverview` and `getExercise` return null, `playbackFor` and the captions route throw `NOT_FOUND`, pages redirect). Only a request **already past authentication when the deletion commits** can fail. Path by path:
+
+| Route (via `postRoute`) | What happens after the deletion committed | Today |
+|---|---|---|
+| `POST /api/attempts` | `lockPlan` returns no row (no error), then `level.findUniqueOrThrow` throws Prisma `P2025`, or `attempt.create` hits a missing foreign key | **500** |
+| `POST /api/mastery` | same, plus `idempotencyKey.create` foreign key | **500** |
+| `POST /api/onboarding/draft` | `ensurePuppy` raw insert fails on the `User` key (`23503`), or `puppy.findUniqueOrThrow` throws `P2025` | **500** |
+| `POST /api/onboarding/complete` | first transaction as above; `startJob` insert fails on the `Puppy` key (`23503`, not a unique violation, rethrown); `generationJob.update` of the charge day throws `P2025`; the commit stops at `fenceJob` with `GENERATION_PENDING` | **500** (first three), 409 (commit) |
+| `POST /api/plan/adapt`, `POST /api/plan/revise` | snapshot transaction: `NOT_FOUND` if the puppy is gone (404); `startJob` as above (insert or charge-day update); the commit stops at `fenceJob` (409) | **500** (`startJob`), 404/409 otherwise |
+| `GET /api/media/*`, pages, Better Auth routes | clean (404, redirect, 401, `USER_NOT_FOUND` redirect) | not a 500 |
+
+- **F3 (one choke point).** All six routes use `postRoute`, and `user` is known there. In its `catch`, for an error that is **not** an `AppError`: look up whether the session user's row still exists; if it does not, answer `UNAUTHENTICATED` (401, `no-store`) and log only the code (no error object, which can carry query text); otherwise behave exactly as today (log, 500). This maps exactly the failures caused by a deleted account and nothing else, without touching the domain code, and any path this table missed is covered too. The fence answers (409/404) stay as they are: they are clean, and the account's next request is 401.
+- `adminRoute` is not changed (an administrator cannot delete the account in-app, A4).
+
+## Ordered Milestones
+- **M0** Branch `feature/phase-4-account-deletion` from `origin/main` `ad6b55a` in a separate worktree; artifacts first; baseline.
+- **M1** Server: `account-deletion.ts`, the quota helper, error codes, `postRoute` mapping (F3), the route with cookie expiry.
+- **M2** Integration tests on PGlite and PostgreSQL: full clearance, isolation, other-account, password, ADMIN, sessions and cookies, rollback, inventory guard.
+- **M3** The six PostgreSQL-only concurrency tests and `scripts/required-pg-tests.json`.
+- **M4** UI: dialog, `/puppy` account card, welcome status.
+- **M5** E2E with disposable accounts.
+- **M6** Documentation.
+- **M7** Evidence in `dev-phase4.md`.
+
+## Detailed Development Plan
+
+### M0. Branch, worktree, baseline
+1. `git fetch origin`; verify `origin/main` is `ad6b55a` (if newer, record it and branch from it; a changed `schema.prisma` or any file listed under M1 would be a reason to stop and ask).
+2. Worktree outside the repository tree, sibling of the shared folder: `git worktree add ../Woffiz-4.4 -b feature/phase-4-account-deletion origin/main`, then `git branch --unset-upstream` (a stray `git push` must never target `main`). **Do not switch the branch of, or touch `node_modules` in, the shared Woffiz folder**; the owner's temporary worktree `Woffiz-4.3` is not used.
+3. Copy `.env` from the shared folder into the worktree (git-ignored, never committed). `npm ci`; `node_modules/.bin/prisma --version`; `node_modules/.bin/prisma generate` (never a bare `npx` tool).
+4. First commit: copy `team-Yuri/arch-phase4.md`, `team-Yuri/manager-phase4.md` and `team-Yuri/plan.md` byte for byte from the shared folder (all three are uncommitted there; check with `cmp`). Nothing else in that commit.
+5. Baseline on the untouched tree: `npm run check`, and the unit/integration/e2e commands you will use later; record counts.
+6. **Database safety.** Every database command uses `TEST_DATABASE_URL` (the local test database; print the host and check it differs from `DATABASE_URL`). No Supabase connection, no `migrate reset`, no `db push`, no real account is ever deleted. `MEDIA_REQUIRED` stays unset.
+
+### M1. Server
+1. **`src/server/account-deletion.ts`** (new). `deleteAccount(userId, password, deps?)` implements the **Final deletion transaction** above, with the retry of F2. Dependencies are injectable so that tests can (a) fail after some deletes (rollback proof) and (b) run a hook between the first job-lock pass and the puppy lock (the F2 test); both are optional parameters, with no environment switch and no test-only branch in the default path. Also export `hasMediaAuditRecords(userId)` (true when the id appears in `MediaVersion.createdById|publishedById|withdrawnById`, `MediaReview.reviewerId` or `TechniqueSuspensionEvent.actorId`), used only by `/puppy` for the A4 line.
+2. **Quota helper.** `keyOf` in `src/server/ai/quota.ts` is private. Add one exported, transaction-aware function (for example `deleteRequestUnits(tx, userId)`) that deletes the keys of the ten UTC days from eight days ago to tomorrow (`prune` keeps seven days; the extra margin covers the UTC/server-date edge). No other change to that file; the system-wide `ai-calls` counter is not touched.
+3. **Rate limit.** Before the transaction, `takeRateLimit({ scope: 'account-delete', max: 5, windowSeconds: 900 }, userId)`; refusal → `RATE_LIMITED`. The key is taken **before** the password check. (The function uses the global client, so it must not run inside the interactive transaction.)
+4. **Error codes** in `src/server/errors.ts` (add to the union, `STATUS` and `MESSAGE`): `PASSWORD_INCORRECT` 422 "הסיסמה שגויה. לא נמחק דבר."; `RATE_LIMITED` 429 "בוצעו יותר מדי ניסיונות. נסו שוב בעוד כמה דקות. לא נמחק דבר."; `ADMIN_DELETE_BLOCKED` 403 "זהו חשבון מנהל. כדי למחוק אותו צריך קודם לבטל את הרשאת המנהל, פעולה שמבצע בעל המערכת."
+5. **`postRoute` mapping (F3)** in `src/server/http.ts`: only in the non-`AppError` branch, only when `user` was resolved and its row is gone. Unit-test the helper that decides it (user present → 500 as today; user gone → 401).
+6. **`src/app/api/account/delete/route.ts`** (POST only). Order: `assertSameOrigin`; `requireUserFromRequest` (verified session, identity only from the cookie); body `z.object({ password: z.string().min(1).max(128) })` **not strict**, so any extra field, including another account's id, is ignored and never read; `deleteAccount(user.id, password)`; success `200 { deleted: true }` with the three cookies expired (V4) and `Cache-Control: private, no-store`; every `AppError` mapped as in `postRoute`; anything else 500 `INTERNAL` with only the code logged. The password never appears in a log, an error or a response. Because it must add `Set-Cookie`, the route writes its own small try/catch rather than using `postRoute`.
+7. **No change** to `src/server/auth.ts`, `public/sw.js`, `prisma/`, `next.config.ts`, `package.json`.
+
+### M2. Integration tests (run on PGlite locally and on standard PostgreSQL in CI)
+New `test/integration/account-deletion.test.ts` (use `helpers.ts`: `createUser`, `onboard`, `planFor`, `insertJob`; create real Better Auth sessions with the existing pattern):
+1. **Full clearance.** Populate account A: profile, plan with completed, current and locked levels, several exercise versions, attempts (current and review), mastery events, idempotency keys, a failed job with `payloadJson`, a **real** reset token (request it through Better Auth, assert the `verification` row exists with `value = A`), today's `ai-request` counter, two sessions. Delete through the route. Assert **zero rows for A in every inventory table** (a scoped count per table, listed in the test), and that this account had mastery events (so the RESTRICT order is exercised).
+2. **Isolation.** Account B populated the same way: snapshot B's rows in every owner table and the shared tables (`MediaAsset`, `MediaVersion`, `MediaReview`, `TechniqueVersionState`, `TechniqueSuspensionEvent`) as `ORDER BY id` JSON before and after; byte-identical.
+3. **Not by another account.** Authenticated as B, with a body carrying A's id and email: only B is deleted, A is intact. Unauthenticated, unverified, cross-origin and non-JSON requests delete nothing (status codes asserted).
+4. **Password.** Wrong password → 422, nothing deleted, session still valid. A missing password or one over 128 characters → 400. After 5 attempts in the window → 429 and the counter key is taken before verification (assert the row count moves on a wrong password).
+5. **ADMIN.** Current role ADMIN → 403 `ADMIN_DELETE_BLOCKED`, nothing deleted. Revoke the role in the database (the effect of `scripts/grant-admin.ts --revoke`), delete: succeeds, the audit rows that carried the id (`MediaVersion`, `MediaReview`, `TechniqueSuspensionEvent`) are unchanged byte for byte, and no `user` row exists for that id.
+6. **Sessions and cookies.** After success both sessions fail `auth.api.getSession`. The `Set-Cookie` headers expire `better-auth.session_token` (and `session_data`, `dont_remember`) with `Max-Age=0`, `Path=/`, `HttpOnly`, `SameSite=Lax`; with an https base URL the names carry `__Secure-` and `Secure`. **Equivalence test:** perform a real `auth.api.signOut({ headers, asResponse: true })` on another session and assert the route's cookie names and attributes equal Better Auth's own.
+7. **Rollback.** Inject a failure after some deletes: every row of A and both sessions are intact; a following normal deletion works.
+8. **Deleted-account mapping (F3)** at the route level: `postRoute` with a valid session whose user row is deleted between authentication and the failure answers 401, not 500; with the user present, an unexpected error still answers 500 (unit test of the decision helper plus one route-level case).
+9. **Inventory guard.** List every table of the `public` schema from `information_schema` (excluding `_prisma_migrations`) and compare with an explicit classification in the test (deleted for the owner / retained shared / retained pseudonymous). An unclassified table fails the test. The classification mirrors the contract's inventory table.
+
+### M3. PostgreSQL-only concurrency tests (required)
+`describe.skipIf(!REAL_POSTGRES)('account deletion on standard PostgreSQL', …)`, all added to `scripts/required-pg-tests.json` by their full titles. Use the deterministic pattern of `test/integration/media-generation.test.ts` (`waitingBackends`, `observeWaiting`, `pg_blocking_pids`, locks held by the test on independent connections; no sleep orders anything):
+1. **Deletion waits for a generation commit that holds the job row.** A transaction holds the job row (the `fenceJob` position); the deletion starts, is observed waiting behind it; the commit completes (plan created); the deletion proceeds and removes the committed plan as well. Nothing of the account remains.
+2. **Commit after the deletion.** A generation and an adaptation whose commit starts after the deletion committed stop at `fenceJob` (`GENERATION_PENDING`), create no row, refund nothing (`refundJobUnitOnce` matches no row), and the route answers 409/401, never 500.
+3. **Mastery confirmation and the plan lock (the F1 cycle).** A transaction holds the plan lock and has inserted an attempt (key-share on the puppy); the deletion is observed waiting on the plan lock **and holding no puppy lock**; the transaction commits; the deletion completes, with no `40P01`. Then the reverse order: the deletion started first, a mastery confirmation after it either waits and then fails cleanly (401 through F3) or lands first and is then deleted. No orphan row, no deadlock. Record in the evidence that swapping steps 3 and 4 of the deletion makes this test fail with `40P01` (a temporary local change, restored and shown identical with `cmp`).
+4. **Onboarding racing the deletion.** A draft save and a puppy creation racing the deletion never leave a `Puppy` row for the deleted user (the `user` cascade or the explicit delete removes it); the request answers cleanly.
+5. **Two concurrent deletions of the same account.** One succeeds (200), the other answers 401 or deletes nothing; no deadlock; the rate limit key is taken twice.
+6. **F2 gap.** Using the injectable hook between the first job-lock pass and the puppy lock: a new `PENDING` job is inserted and its row is held by a test transaction that then waits for the puppy lock (the worker's commit position). The deletion's `NOWAIT` re-lock raises `55P03`, the deletion rolls back, releases the puppy, and the retry succeeds once the test transaction ends. No `40P01`, nothing remains.
+Also required for the evidence: the full PostgreSQL integration suite and these six run **locally on a real PostgreSQL** (see "Open owner items") before the single push, so that CI is a confirmation and not the first execution.
+
+### M4. UI (read `DESIGN_SYSTEM.md` §5, §8, §9, §12, §14 first; tokens only, no ad-hoc variants)
+1. **`src/components/account/DeleteAccount.tsx`** (+ `.module.css`). A destructive `Button` "מחיקת החשבון" opens the existing `Sheet` (native `<dialog>`). Props from the server page: `isAdmin` (current database role) and `hasAuditRecords`. Contents:
+   - heading (the `Sheet` title) "מחיקת החשבון";
+   - the scope statement (below), then, only when `hasAuditRecords`, the A4 line;
+   - a labelled password field "הסיסמה הנוכחית" (`type="password"`, `autoComplete="current-password"`, visible label, error text associated with the field and announced politely);
+   - "ביטול" (secondary) which has the initial focus (`autoFocus` on it: the `Sheet` header close button precedes it in the DOM, so a plain `showModal()` would focus the close button) and "מחיקה לצמיתות" (destructive), disabled while sending;
+   - `isAdmin`: the dialog shows the ADMIN explanation instead of the form (no password field, no delete button).
+   States: sending (no duplicate submit); wrong password (inline error, field kept and re-focused); rate limited; offline or network failure ("לא נמחק דבר. בדקו את החיבור ונסו שוב.", retry possible); the password is cleared when the dialog closes or a request ends. Escape and the close button close the dialog and restore focus to the opening button.
+2. **Scope copy (final Hebrew wording of A9; it must not promise a removal time, names no provider):**
+   - **"מה יימחק עכשיו, ולא ניתן לשחזר:"** החשבון, כתובת האימייל והסיסמה, וכל ההתחברויות שלכם בכל המכשירים · פרופיל הגור ותשובות השאלון · כל מסלולי האימון והתרגילים · דיווחי התרגול ואישורי השליטה · רשומות ההתאמה האישית, כולל התוצרים השמורים שלהן.
+   - **"מה נשאר:"** סרטוני ההדגמה המשותפים. הם אף פעם לא הכילו מידע שלכם.
+   - A4 line (only when `hasAuditRecords`): "רשומות הבדיקה והפרסום של סרטוני הדגמה נשמרות עם מזהה פנימי שאינו מכיל כתובת אימייל. אחרי המחיקה הוא כבר לא מקושר לשום חשבון אצלנו. גיבויים שנוצרו לפני המחיקה עשויים עדיין לקשר אותו עד שיפוגו."
+   - **"כדאי לדעת:"** אי אפשר לשחזר את החשבון. עותקים עשויים להישאר זמן מוגבל בגיבויים וביומנים של ספקי האחסון והדואר, לפי מדיניות השמירה שלהם, ובכל בקשת התאמה אישית שכבר הייתה בעיבוד.
+3. **Success flow:** on `200`, a full navigation to `/?deleted=1` (not a client-side route change: it drops all client state; the session is already gone, so the client does not call sign-out). `?deleted=1` is a constant marker with no personal data. The service worker is unchanged (a navigation is network first).
+4. **`src/app/(main)/puppy/page.tsx`:** in the "חשבון" card replace "עריכת פרטים ומחיקת חשבון יתווספו בהמשך." with the new `DeleteAccount` (sign-out stays; the card keeps one clear order: sign-out, then the destructive action last). **`src/app/page.tsx`:** when `deleted=1`, a short status line "החשבון נמחק." with `role="status"`, shown above the usual welcome content; no other change.
+
+### M5. E2E (Playwright, three viewports, disposable accounts from the existing `owner` fixture only, local test database)
+`e2e/account-deletion.spec.ts`: dialog opens with focus on "ביטול"; Escape closes and restores focus; axe clean; RTL; no horizontal overflow at 360 px; reduced motion; cancel deletes nothing (the account still works); a wrong password shows the inline error and keeps the dialog; a successful deletion lands on `/` with "החשבון נמחק.", `/home` redirects to `/`, and signing in with the old credentials fails; a **second browser context** signed in to the same account is signed out at its next navigation; the ADMIN explanation instead of the form when the disposable account is made ADMIN in the test database. Assertions use `expect.poll`, never sleeps. The existing `offline.spec.ts`, `pwa.spec.ts` and `shell.spec.ts` stay green and unchanged; `public/sw.js` is not in the diff. **Known local noise:** the PGlite test database is unstable under load and `auth.spec.ts` "register, onboard, refresh…" fails about half the time on `main` locally (shown on `7bc45f8`); report every rerun as a rerun; CI on standard PostgreSQL is the gate.
+
+### M6. Documentation
+`DESIGN_SYSTEM.md` §8 ("Puppy and settings": the account card and the dialog, with the scope copy) and §14 (dialog states); `docs/DECISIONS.md` row `P4-4` (endpoint, password re-entry and limit, ADMIN block, the transaction order **as corrected by F1/F2 with the lock graph**, the F3 mapping, cookie expiry, accepted residues, B3 at 30 days, no migration); `README.md` new "Account deletion" section (behavior, what is deleted and kept, the A9 limits; for providers say only what is true: Supabase backups depend on the plan and the owner's open "backups" decision, Resend keeps delivery logs, Vercel keeps runtime logs, the AI provider keeps requests under its own policy; invent no retention figure); `PRD.md` §8 (the 30-day payload retention is owner-approved, no longer "proposed"). Not touched: `public/sw.js`, `src/server/auth.ts`, `prisma/`, `.env.example`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`.
+
+### M7. Evidence
+`team-Yuri/dev-phase4.md`: 4.4 section on top, the 4.3 and 4.2 records kept below unchanged.
+
+## Acceptance / Gating Criteria
+1. Branch `feature/phase-4-account-deletion` from `origin/main` `ad6b55a` (or recorded newer `main`) in a separate worktree; the shared folder's branch and `node_modules` untouched; the three Team Yuri artifacts are the first commit.
+2. `POST /api/account/delete` follows A2/A3/A7 and the final transaction; identity only from the session; the body schema has no id; a wrong password changes nothing; the limit key is taken before verification; ADMIN is refused.
+3. The transaction locks jobs, then plans, then the puppy, then re-locks jobs `NOWAIT`, retries at most 3 times, deletes in the listed order and ends with exactly one `user` row deleted; any error rolls everything back.
+4. A deleted account's in-flight write requests answer 401 (never 500) through the F3 choke point; an unrelated unexpected error still answers 500; no row is ever recreated.
+5. Cookies are expired with Better Auth's names and attributes (equivalence test).
+6. `npm run check` passes; the M2 integration tests pass on PGlite and on PostgreSQL; the inventory guard fails for an unclassified table (negative check recorded).
+7. The six M3 tests pass on standard PostgreSQL, are listed in `scripts/required-pg-tests.json`, and the F1 negative check is recorded.
+8. E2E passes at the three viewports (reruns reported as reruns); accessibility, RTL, 360 px, reduced motion verified; `offline.spec.ts`, `pwa.spec.ts`, `shell.spec.ts` unchanged and green.
+9. The dialog and the Hebrew copy match M4; the scope statement is accurate and promises no removal time.
+10. The diff against `origin/main` contains only: `src/server/account-deletion.ts`, `src/server/ai/quota.ts` (one helper), `src/server/errors.ts`, `src/server/http.ts` (F3 only), `src/app/api/account/delete/route.ts`, `src/components/account/*`, `src/app/(main)/puppy/page.tsx`, `src/app/page.tsx`, the new tests, `e2e/account-deletion.spec.ts`, `scripts/required-pg-tests.json`, `DESIGN_SYSTEM.md`, `docs/DECISIONS.md`, `README.md`, `PRD.md` §8, the Team Yuri artifacts. Not in the diff: `prisma/`, `public/sw.js`, `public/offline.html`, `next.config.ts`, `src/server/auth.ts`, `.env.example`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, media code.
+11. No migration, no environment variable, no dependency; `MEDIA_REQUIRED` off; video production paused; no real account deleted; nothing pushed, merged or deployed without the owner's approval.
+12. After the owner-approved push: CI green on the final head, first attempt, both runs, "All N required PostgreSQL tests executed and passed" with the six new titles, e2e and build.
+13. Real-device checks (phone dialog, keyboard, VoiceOver reading the scope text) recorded as PENDING for 4.8; they do not block the merge.
+
+## Functional Testability Criteria
+- Page the user can open: `/puppy`, "חשבון" card, "מחיקת החשבון" dialog; the welcome page after deletion.
+- User-visible behavior: cancel changes nothing; a wrong password shows an error and deletes nothing; the correct password removes the account, signs out every device and the credentials no longer work.
+- API: `POST /api/account/delete` with the responses 200, 400, 401, 403, 422, 429, 500 as specified.
+- Command-line flow: `npm run check`; `npm run test:integration` (and the PostgreSQL run); `npm run test:e2e`.
+- Minimal end-to-end flow: register a disposable account locally, onboard, practice and confirm mastery, delete it from `/puppy`, and check in the database that no owner row remains while another account and the shared media are unchanged.
+
+## Required Developer Evidence
+`team-Yuri/dev-phase4.md` (4.4 section), per `.claude/rules/20-testing.md` §80 and `30-docs.md` §50:
+1. `PHASE=4`, slice 4.4, branch, worktree path, base hash, `git merge-base HEAD origin/main`, confirmation that the shared folder was not touched.
+2. Implementation summary per milestone, and the interpretations list below.
+3. Final diff (`git diff --stat` and the criterion 10 absent-list check).
+4. Dependencies "none added"; `npm ci`, prisma version and generate; the database host of every database command (local test database only; for the PostgreSQL run, the throwaway server's address).
+5. Unit and integration tests: commands, counts, every M2 case; the inventory-guard negative check.
+6. PostgreSQL run: the six M3 titles executed and passed, the full integration suite on real PostgreSQL, the F1 negative check (a temporary swap of steps 3 and 4, then restored and `cmp`-identical).
+7. Lint and typecheck results.
+8. E2E: command, per-project counts, the new cases named, reruns reported as reruns, the three pre-existing PWA specs unchanged.
+9. The F3 table: for each of the six routes, the assertion or test that proves 401 instead of 500 (or why the path stays 409/404).
+10. Functional testability: how the minimal flow was exercised.
+11. Documentation: sections changed; `DESIGN_SYSTEM.md` change explained.
+12. Real-device checklist (PENDING, owner).
+13. Known issues, scope compliance, declaration. After the owner-approved push: PR link, run ids and attempts, per-job results, integration counts, the required-tests line, the e2e count.
+
+## Out of Scope
+- Profile editing, data export, soft or delayed deletion, admin deletion of other accounts, purging never-verified accounts (follow-up for 4.5/4.6).
+- Any change to payload retention code for remaining accounts (30 days already implemented; only recorded).
+- Any migration, change to `auth.ts`, the service worker, the update flow, the shell allowlist, media code, `MEDIA_REQUIRED`.
+- Deleting any real account, including the owner's own, in any environment.
+- 4.5-4.8 work.
+
+## Risks / Open Questions
+- **Owner items.** (1) **Approved by the owner on 2026-11-12:** running a throwaway PostgreSQL 17.11 server from the session scratchpad (the `embedded-postgres` npm package, outside the repository and removed afterwards, as in the 4.2 corrective cycle) for the six required tests and the full integration suite **before the single push** (scope of the approval: that tool, this purpose, this slice; it adds nothing to the project and is removed afterwards). Without it those tests would run for the first time in CI, and a failure there would cost a second push. (2) No other decision: B1-B3 are approved; the `plan.md` items (alert channel, backups, retention, sending domain, pilot recruitment, performance profile) affect only README specifics of A9 or later slices.
+- **Interpretations flagged for the Architect's final review** (none changes the intent of A1-A10): (I1) A5 steps 3 and 4 swapped, plans before the puppy (F1: deadlock against progression); (I2) the `NOWAIT` job re-lock with a bounded retry and the sixth PostgreSQL test (F2); (I3) the deleted-account 500 mapping at the `postRoute` choke point (`src/server/http.ts`) instead of per-path catches; (I4) cookie expiry built from `getCookies(auth.options)` rather than `auth.api.signOut`; (I5) one exported helper in `src/server/ai/quota.ts` because `keyOf` is private; (I6) the `/?deleted=1` marker and the welcome status; (I7) the final Hebrew copy; (I8) the body schema is not strict, so extra fields are ignored as A2 says; (I9) the password check runs inside the transaction before any lock, and the limit outside it.
+- **Production release consequence (for the later owner approval).** The release is code-only, with no migration. Merging to `main` starts the automatic Vercel production deployment. Rollback target: the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`). **A deletion is irreversible: a code rollback does not restore a deleted account**, so post-deploy verification must not delete a real account. Registration in production is limited to the tester address, so there is no disposable production account; the post-deploy checks are public and read-only (the route exists and refuses an unauthenticated or cross-origin request without deleting anything; the `/puppy` dialog is checked only up to the cancel button), and an actual production deletion is left entirely to the owner's decision.
+- **Shared test database and port 3100.** Several sessions use the local test database and the fixed e2e port; wait rather than collide, and do not change `playwright.config.ts`.
+- **Local PGlite instability** (see M5) can hide or fake e2e failures; rerun and report honestly.
+- **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0).
+
+## Manager Review
+MANAGER_REVIEW_STATUS: APPROVED
+
+Review of slice 4.4 (revision 1 of this design), 2026-11-13. Reviewed: branch `feature/phase-4-account-deletion`, HEAD `c92e2a8`, base `origin/main` `ad6b55a` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.4`, evidence in the 4.4 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed, no real account touched.
+
+### Review Notes
+
+**Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are present and consistent. No reject condition applies.
+
+**Independent verification by the Manager (not copied from the evidence):**
+- **Scope.** `git diff ad6b55a HEAD --name-only` outside `team-Yuri/` lists exactly the 16 files of criterion 10; the path-filtered diff over `prisma/`, `public/`, `next.config.ts`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, `.env.example` and `src/server/auth.ts` is empty. `arch-phase4.md` and `plan.md` in the first commit are byte-identical to the shared folder.
+- **Implementation read in full:** `src/server/account-deletion.ts`, `src/app/api/account/delete/route.ts`, the `http.ts`, `quota.ts` and `errors.ts` diffs, `DeleteAccount.tsx`, the `/puppy` and welcome changes, the documentation diffs.
+- **Commands run by the Manager in the 4.4 worktree:** `vitest run` (unit) 19 files / 285 tests passed; `tsc --noEmit` exit 0; `eslint src e2e test` clean; `npm run test:integration -- test/integration/account-deletion.test.ts` on the local PGlite database: **18 passed, 6 skipped** (the PostgreSQL-only ones, by design); `npm run test:e2e -- e2e/account-deletion.spec.ts e2e/offline.spec.ts e2e/pwa.spec.ts e2e/shell.spec.ts --workers=1`: **138 passed, first run, no failure and no rerun** (the 18 new tests and the three unchanged PWA specs). The local test database was started for this and stopped afterwards.
+
+**1. Transaction order, `NOWAIT` retry, PostgreSQL tests, F1 negative check.**
+- The code matches the Architect's corrected A5 (C1, C2): identity checks first with no row lock held (scrypt runs while the transaction holds nothing), then jobs, plans, the puppy, a `FOR UPDATE NOWAIT` re-lock of the jobs, deletes in the listed dependency order, `user` last with exactly one row required (zero answers `UNAUTHENTICATED`). `55P03`, `40P01`, `40001` and `P2034` roll back and retry at most 3 times with jitter, then propagate (500, nothing deleted). The rate-limit unit is taken once, outside the retried transaction (Architect condition on I9). The test seams are optional parameters, none read from the environment, none used by the default path (Architect condition on I2). The password is never logged.
+- I read the F1 test (deletion queued behind a plan lock held by a progression transaction that inserts its attempt afterwards, `maxAttempts: 1`, a `FOR NO KEY UPDATE NOWAIT` probe proving the queued deletion holds no puppy lock, then the reverse order through the real `/api/attempts` route) and the F2 test (a new job appears through the hook and is held at the `fenceJob` position; the `NOWAIT` re-lock fails once, the retry waits at the first pass, the puppy is free, the retry succeeds). Both observe lock state through `pg_stat_activity` and `pg_blocking_pids` and order nothing by sleeping. They test the real scenario of the Manager's finding, and the Developer's account of the first F1 test that masked the cycle (interpretation 9) is the right correction.
+- **F1 negative check:** recorded as a failure with `40P01 deadlock detected` when steps 3 and 4 are swapped, then restored and `cmp`-identical. The Developer ran the six tests 10 times (60 executions) and the full integration suite once on a throwaway PostgreSQL 17.11 under the owner's approval; `assert-required-tests` lists only the two `CI=true` cases of `ci-guard` as skipped. **Limit of this review:** the Manager did not re-execute the PostgreSQL-only tests (no standard PostgreSQL was started for the review, so as not to repeat the approved download for a second party). They are judged from the code and the evidence, and CI on standard PostgreSQL (expected line "All 34 required PostgreSQL tests executed and passed": 28 + 6) is the independent execution.
+
+**2. F3 mapping and the F3 table.**
+- `postRoute` answers 401 only in the non-`AppError` branch and only when the session user's row is gone; a failing lookup counts as "not deleted", so an unexpected error stays 500 and is logged as before; `adminRoute` is unchanged; only a code is logged (Architect condition on I3). Tested: the helper's four cases, a handler that deletes the user and then throws (401, no error object logged), the user-present case (500, logged once) and an `AppError` that keeps its status.
+- Per route: `/api/attempts` is proved with a real in-flight request (401); `/api/onboarding/draft` and `/api/onboarding/complete`, and `/api/plan/adapt`, have race tests (never 500). **`/api/mastery` and `/api/plan/revise` have no dedicated race test; accepted.** Both are `postRoute` routes, so the mapping and its decision are the same function; `/api/mastery` has the same failure shape as `/api/attempts` (`lockPlan` returns no row after the deletion committed, the next read throws a Prisma not-found error, which is a non-`AppError`), and `/api/plan/revise` shares `startJob`, the `fenceJob` stop and the choke point with `/api/plan/adapt`. A dedicated case would repeat a proof that already exists for the same code path. Recorded as an observation, not a correction.
+
+**3. Cookie equivalence.** The route expires `session_token`, `session_data` and `dont_remember` from `getCookies(auth.options)`. The tests compare the serialized `Set-Cookie` entries with those of a real `auth.api.signOut`, with an http base URL and again with an https base URL (`__Secure-` prefix and `Secure`). This is the mandatory test of the Architect's ruling on I4. The two normalizations in `expiredAuthCookies` (lower-casing `SameSite`, dropping Better Auth's `prefix` attribute) are required by Next's `ResponseCookies` and are covered by the same comparison.
+
+**4. E2E results.** The Developer reported 235 of 235 with 14 passing only on a rerun after a local PGlite restart, all in specs that 4.4 does not touch, and the 18 new tests passing on the first run; an earlier targeted run had one new test fail inside the `owner` fixture (`P2028` in the server log) and pass in the full run. The Manager's own run of the new spec together with the `offline`, `pwa` and `shell` specs passed 138 of 138 on the first attempt. That the local PGlite database makes unrelated specs fail on first attempts was already demonstrated in the 4.3 cycle (the same pre-existing `auth.spec.ts` test failed about half the time on `main` `7bc45f8`, 6 of 12 against 5 of 12 on the 4.3 branch). Every rerun is reported as a rerun in the evidence. CI on standard PostgreSQL is the gate (criterion 12).
+
+**5. The nine interpretations, Manager position** (none changes A1-A10; the Architect rules on them in the final review):
+1. The F3 helper is tested in the integration file (it imports the database client, and the unit configuration has no database); accepted.
+2. `afterJobLock` runs after the plan locks and before the puppy lock, which is the position the F2 test needs; accepted.
+3. Initial focus on "ביטול" by an effect and a `data-delete-cancel` attribute, because `Sheet` renders its children while closed and `autoFocus` would run on a hidden element; accepted, and verified by the e2e focus assertions.
+4. "מחיקה לצמיתות" is also disabled while the password field is empty; this goes one step beyond "disabled while sending", avoids a pointless 400, and is documented in `DESIGN_SYSTEM.md`; accepted.
+5. The `eslint-disable-next-line` on `window.location.href` is narrowly scoped and justified (the contract requires a full navigation); accepted.
+6. The cookie normalizations (see 3): accepted.
+7. The welcome status reuses `.card` and `.lead`: accepted, no CSS change.
+8. Extra tests beyond M2: accepted.
+9. The rewritten F1 test: accepted (see 1).
+
+**Documentation.** `DESIGN_SYSTEM.md` §8 and §14, `docs/DECISIONS.md` `P4-4` (with the lock graph and the corrected order), the README "Account deletion" section (honest A9 limits, no retention figure invented, the Supabase "backups" decision still open) and `PRD.md` §8 (B3, 30 days owner-approved) match the shipped behavior. The Hebrew copy in the component is the copy of M4.
+
+**Non-blocking observations.**
+- The deployed `/puppy` dialog and the phone, keyboard and VoiceOver reading of the scope text are PENDING for the owner (the 4.8 matrix).
+- A real deletion on production is never part of verification. Registration there is limited to the tester address, and a deletion cannot be undone by a code rollback.
+- Maximum 3 attempts then a 500 `INTERNAL` with nothing deleted is acceptable: each attempt is all-or-nothing and the owner can simply try again.
+
+**Criteria status.** 1-11: met. 12: pending the owner-approved push (CI on the final head, first attempt, both runs, "All 34 required PostgreSQL tests executed and passed", e2e and build). 13: PENDING for the owner by design.
+
+### Required Corrections
+None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, by copying `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder (the committed copy of `manager-phase4.md` predates this review and one line of the owner-items text, so it must be refreshed); (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no documentation-only commit afterwards; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval; the release is code-only with no migration, the rollback target is the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`), and a code rollback does not restore a deleted account.
+
+---
+
+## Slice 4.3 record (APPROVED, merged in `ad6b55a`; closed, not reopened)
+STATUS (slice 4.3): APPROVED. MANAGER_REVIEW_STATUS (slice 4.3): APPROVED. Kept unchanged below; only the heading levels and these two status labels were adapted when slice 4.4 was added.
+
+### Phase Identifier
+PHASE=4
+
+### Status
+STATUS (slice 4.3): APPROVED
+
+Scope of this revision: **slice 4.3 only** (public shell asset caching), revision 1, 2026-11-12. Input: the completed 4.3 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions S1-S10) and the owner decision of 2026-11-12 that `/art/*.webp` stays outside the cache. Slice 4.2 is merged (`7bc45f8`) and deployed; its design and reviews are kept unchanged below as a closed record and are not reopened. Slices 4.4-4.8 are not designed here.
+
+### Phase Goal
+The service worker keeps a versioned cache of immutable public build assets only: everything under `/_next/static/` (code, styles and the bundled Heebo fonts) and the four app icons. It never caches HTML, API responses, RSC payloads, signed media URLs, `/art/*` or any per-account response. Caches of earlier worker versions are purged on activate. The new worker reaches existing installations only through the 4.2 mechanism (version bump, then the owner's tap on "לעדכן עכשיו"). The P4-1 offline fallback (`woffiz-offline-v1`, `/offline.html`) keeps working exactly as today. 4.3 makes no performance claim; measurement belongs to slice 4.7.
+
+### Source References
 - `team-Yuri/arch-phase4.md`, slice 4.3 contract: decisions S1-S10, expected files, testing expectations, handoff notes. Owner decision 2026-11-12: `/art/*` excluded (S2 unchanged).
 - `team-Yuri/plan.md` (APPROVED), slice 4.3; `PRD.md` §8 and §10 (public static assets only, never private content in shared caches); `docs/DECISIONS.md` P4-1 and P4-2; `README.md` "Installation and updates".
 - Code baseline `origin/main` `7bc45f8`: `public/sw.js` (`// sw-version: 4.2.0`), `e2e/offline.spec.ts`, `e2e/pwa.spec.ts`, `e2e/demo-video.spec.ts`, `src/components/pwa/ServiceWorkerRegistration.tsx` (registers the worker in production builds only), `vitest.config.ts` (unit tests are `src/**/*.test.ts`).
 - Official documentation checked by the Manager on 2026-11-12 (MDN `Cache.put`, `Cache.keys`, `FetchEvent.respondWith`; W3C Service Workers, Batch Cache Operations): see "Verified platform semantics".
 - Measurements by the Manager on 2026-11-12 (read-only): see M1.
 
-## Architecture Summary
+### Architecture Summary
 Service-worker-only change (S10). One file, `public/sw.js`, stays dependency-free and unsplit. Positive allowlist (S2), storable-response rule (S3), cache-first for `/_next/static/*` and stale-while-revalidate for the icons (S4), one `SW_VERSION` constant that names the shell cache `woffiz-shell-<SW_VERSION>` (S5), purge on activate (S6), oldest-first entry cap (S7), navigation, offline cache and message handler unchanged (S8), rollout through the 4.2 update flow (S9).
 
-## Verified platform semantics
+### Verified platform semantics
 Checked against current official documentation; the Developer must not rely on anything weaker.
 - `Cache.put(request, response)` stores any request/response pair, including non-200 and opaque ones, and overwrites an existing entry that matches the request (MDN). It throws `TypeError` for a URL scheme other than http or https, a non-GET request and a null response (W3C Batch Cache Operations). Therefore S3 is the only gate against bad entries; `cache.add`/`addAll` must not be used for runtime caching (they refetch and reject non-2xx).
 - In the specification's batch `put`, a matching entry is **removed and the new pair appended to the end** of the cache's list. `Cache.keys()` returns requests in insertion order (MDN). So `keys()[0]` is the oldest entry, and a refreshed icon moves to the newest position.
@@ -30,7 +287,7 @@ Checked against current official documentation; the Developer must not rely on a
 - `event.waitUntil(promise)` keeps the worker alive for background work after the response is returned. Cache writes and the stale-while-revalidate refresh must be passed to `waitUntil` before the response promise settles.
 - A same-origin response has `Response.type === 'basic'` even for a CORS-mode request. Font requests made by CSS use CORS mode, so the predicate must not reject `request.mode === 'cors'` (only `navigate` is rejected).
 
-## Ordered Milestones
+### Ordered Milestones
 
 | Order | Milestone | Description | Acceptance Signal |
 |---:|---|---|---|
@@ -42,9 +299,9 @@ Checked against current official documentation; the Developer must not rely on a
 | 5 | Documentation | `README.md` "Installation and updates", `docs/DECISIONS.md` `P4-3`, reference from `P4-2` | Docs match the shipped behavior |
 | 6 | Evidence | `team-Yuri/dev-phase4.md`, 4.3 section on top, 4.2 record kept below | Manager review checklist satisfiable |
 
-## Detailed Development Plan
+### Detailed Development Plan
 
-### M0. Branch, worktree and baseline
+#### M0. Branch, worktree and baseline
 - **Shared folder rule.** The Woffiz folder is shared with other sessions and sits on the merged branch `feature/phase-4-install-update`. Do not switch its branch and do not touch its `node_modules`. Create a worktree outside the repository tree, for example `git worktree add ../Woffiz-4.3 -b feature/phase-4-shell-cache origin/main` (adapt the path; it must not be inside the repository). Run every command of this slice from that worktree.
 - Base is `origin/main` `7bc45f8` (S1). If `main` has moved when work starts, base on current `main` and record the hash; do not merge or rebase later without telling the owner.
 - `npm ci` inside the worktree; run `node_modules/.bin/prisma generate` (never a bare `npx <tool>`). The e2e tests need the local test database: reuse the existing local `TEST_DATABASE_URL` setup by copying the untracked `.env` into the worktree. It is never committed, and no command may touch the Supabase database or any non-test database. If the Developer cannot start the local test database, stop and report.
@@ -52,14 +309,14 @@ Checked against current official documentation; the Developer must not rely on a
 - **Artifacts.** The Architect's `arch-phase4.md` (4.3 revision) and this file are uncommitted in the shared folder. Copy `team-Yuri/arch-phase4.md` and `team-Yuri/manager-phase4.md` byte for byte into the worktree and commit them first, as one commit "Team Yuri artifacts for slice 4.3", before any code. Do not edit them.
 - Baseline: `npm run check` and `npm run test:e2e -- e2e/offline.spec.ts e2e/pwa.spec.ts` on the untouched base. Record the results.
 
-### M1. Measure the production build and fix the S7 cap (S7)
+#### M1. Measure the production build and fix the S7 cap (S7)
 Manager's starting measurement (read-only, 2026-11-12), **to be replaced by the Developer's own measurement of the 4.3 build**:
 - Local build in the shared folder (`.next/BUILD_ID` `LoRpoEXFPNcPoLxiuEsNL`, 2026-11-11, commit not recorded): `.next/static` holds **67 files, 1,229,393 bytes**: 24 in `chunks/` (871,798 B), 40 in `media/` (357,200 B: 20 `.woff` and 20 `.woff2`) and 3 tiny build manifests (395 B). The four icons are 365,841 bytes. A browser fetches one format per font face, so one real session loads fewer files, but the cap uses the full directory.
 - Production landing page (`https://woffiz.vercel.app/`) references 11 static files (674,379 bytes). Their URLs are under `/_next/static/immutable/chunks/…`, which differs from the local directory layout above. **The predicate and the tests must therefore match the prefix `/_next/static/` and never hard-code `/_next/static/chunks/`**, and the Developer must record which layout the 4.3 build produces.
 - Proposed cap: **160 entries** (shell cache). Basis: two full builds are 2 × (67 + 4) = 142 entries, plus margin. Byte estimate: about 18 KB average per static file, so exactly two full builds are about 2.8 MB and the cache at its cap is about 3.2 MB worst case (the 4 icons are about 0.37 MB of that). These are raw file sizes, as stored responses are not compressed.
 - **Rule for the Developer.** Build with `npm run build` in the worktree. Let N be the number of files under `.next/static` (all files, as served under `/_next/static/`). If 2 × (N + 4) ≤ 160 the cap stays 160; otherwise the cap is 2 × (N + 4) rounded up to the next multiple of 10. Record N, the byte total, the layout (`chunks`/`media`/`immutable`), the cap and the byte estimate in `dev-phase4.md` and in `P4-3`. The cap is a named constant in `public/sw.js` with a comment giving this derivation.
 
-### M2. `public/sw.js` (S2-S9)
+#### M2. `public/sw.js` (S2-S9)
 Design details that the contract leaves to the Manager. The contract's decisions are not changed.
 1. **Constants at the top:** `SW_VERSION = '4.3.0'`; `OFFLINE_CACHE = 'woffiz-offline-v1'` (value unchanged); `SHELL_CACHE = 'woffiz-shell-' + SW_VERSION`; `SHELL_CACHE_MAX_ENTRIES` (M1); the four icon paths in a `Set`. The `// sw-version:` comment line is removed; `SW_VERSION` is the one place to bump (S5). Before removing it, `git grep` for the marker string and update every reference (README, DECISIONS and the comment in `e2e/pwa.spec.ts` that mentions it are the known ones; the e2e comment may stay if it is only history, but then it must not claim the marker still exists).
 2. **Predicate `isShellRequest(request)`, synchronous and pure.** True only if all of: method GET; `new URL(request.url).origin === self.location.origin`; `request.mode !== 'navigate'`; no `Range` header; no `RSC` header (case-insensitive) and no `_rsc` search parameter; and either the pathname starts with `/_next/static/` (any query string, because the platform may append a deployment query), or the pathname is exactly one of the four icon paths **and the query string is empty** (stricter than S2: it admits only the four URLs themselves, so a crafted query cannot create unbounded variants). Everything in S2's exclusion list falls out of the allowlist; do not add exclusion code paths that could drift from it.
@@ -75,7 +332,7 @@ Design details that the contract leaves to the Manager. The contract's decisions
 9. **Header comment** rewritten to describe 4.3 (what is cached and why, the allowlist, the version constant, the purge, the rollback worker that calls `skipWaiting()` itself, deletes the `woffiz-*` caches and unregisters).
 10. **Dev machines.** The worker is registered only in production builds (`ServiceWorkerRegistration.tsx`), so `next dev` does not use it. A developer who ran `npm start` and later `next dev` on the **same origin** may still have the production worker registered and serve cached chunks. `README.md` gets one line telling developers to unregister the worker or clear site data when switching (M5).
 
-### M3. Unit tests: `src/lib/sw.test.ts`
+#### M3. Unit tests: `src/lib/sw.test.ts`
 - **Location (Manager decision).** `src/lib/sw.test.ts`, because `vitest.config.ts` only includes `src/**/*.test.ts`, `vitest.config.ts` is not in the contract's expected files, and the contract lists `src/lib/pwa/*` as not touched. No config change is allowed.
 - **Harness (Manager decision).** Read `public/sw.js` as text and execute it with `node:vm` (`runInNewContext`) in a sandbox that provides: `self` (with `location`, `addEventListener` collecting handlers by event name, `skipWaiting`, `clients.claim`, `registration`), an in-memory `caches` fake, a stubbed `fetch`, and Node's real `Request`, `Response`, `Headers`, `URL`. Tests drive the collected handlers with fake events (`request`, `respondWith`, `waitUntil`, `data`, `origin`) and await what was handed over. `public/sw.js` gets no export, no test hook and no conditional code. The fake `Cache` must implement the verified semantics: `put` removes any matching entry and appends the new one; `keys()` returns insertion order; `match`, `delete`, `open`, `keys` on the storage. Node's `Response.type` is `'default'`, so a "basic" response is made by overriding `type` (for example with `Object.defineProperty`) in a small helper.
 - **Cases (all required):**
@@ -88,7 +345,7 @@ Design details that the contract leaves to the Manager. The contract's decisions
   - S8 unchanged behavior: `install` adds only `/offline.html` to `woffiz-offline-v1` and never calls `skipWaiting`; the `message` handler ignores a wrong origin and any type except `SKIP_WAITING`, and calls `skipWaiting` once for a valid message; a navigation whose `fetch` rejects returns the cached offline page; a navigation that gets HTTP 500 passes the 500 through.
 - A negative check recorded in the evidence: temporarily add `/art/` to the allowlist and see the S2 test fail, then revert (as the 4.2 static test did).
 
-### M4. End-to-end tests (Playwright)
+#### M4. End-to-end tests (Playwright)
 General: runs against the local production build as today. Cache writes happen after the response (`waitUntil`), so assertions use `expect.poll` on the cache contents, never a fixed sleep. No change to `playwright.config.ts`.
 1. **Privacy proof, `e2e/offline.spec.ts`: only the test "only the public offline page is ever cached" is redefined** (no other case in the file changes). After a signed-in session that loads `/home`, `/map`, `/review`, `/puppy` and a current exercise (`/exercise/<level>`, as `loop.spec.ts` does), and calls `/api/auth/get-session`:
    - `caches.keys()` equals exactly `['woffiz-offline-v1', 'woffiz-shell-4.3.0']` (order-insensitive);
@@ -102,21 +359,21 @@ General: runs against the local production build as today. Cache writes happen a
    - **Interpretation of the contract (flagged).** The contract says the waiting worker "caches nothing until the tap". Because the active worker in this test runs the same file and keeps writing allowlisted assets, a black-box check of "the waiting worker writes nothing" is not separable in e2e. It is proved at unit level (M3, S8: `install` only adds `/offline.html`) and in e2e by the stale cache surviving until the tap. If the Developer finds this reading unachievable, stop and report.
 5. All pre-existing cases stay green and unchanged: every other case in `offline.spec.ts`, `pwa.spec.ts`, `shell.spec.ts`, `auth.spec.ts`, and the Phase 3 suites.
 
-### M5. Documentation (`.claude/rules/30-docs.md`)
+#### M5. Documentation (`.claude/rules/30-docs.md`)
 - `README.md`, "Installation and updates" only: replace the `// sw-version:` instruction with `SW_VERSION` in `public/sw.js`; add a short list of what the worker caches (the `/_next/static/` assets and four icons), what it never caches and why (HTML, API, RSC, media and signed URLs, `/art/*`, all private content), that old shell caches are purged when a new worker activates, and the dev-machine note from M2.10. State honestly that 4.3 makes no performance claim.
 - `docs/DECISIONS.md`: a new `P4-3` row after `P4-2`: decision, the S2 allowlist, the owner decision on `/art/*`, the measured cap (M1), the `SW_VERSION` constant replacing the marker, status "Confirmed (owner, slice 4.3 plan; `/art/*` excluded 2026-11-12)", and that it supersedes the "only `/offline.html` is ever cached" part of P4-1. Do not edit the `P4-2` row except to add a reference to `P4-3`. No edit to any other row.
 - `DESIGN_SYSTEM.md`: no change (no UI change). State this in the evidence.
 
-### M6. Evidence in `team-Yuri/dev-phase4.md`
+#### M6. Evidence in `team-Yuri/dev-phase4.md`
 The Developer owns the file. Mirror the layout of the other two Phase 4 artifacts: the 4.3 evidence on top with the standard sections, the existing 4.2 record kept unchanged below it under a heading "Slice 4.2 record (closed)", the two status lines of the 4.2 record labelled "(slice 4.2)". Do not alter the 4.2 evidence.
 
-### Verification rules
+#### Verification rules
 - `npm run check` passes (typecheck, lint, unit, build), run on a clean worktree.
 - Full `npm run test:e2e` at 360/768/1280. The local PGlite database is known to be unstable under load (4.2 evidence); a failed test may be rerun after restarting the test database, and every rerun is reported as a rerun, never as a first-run pass. No test may fail twice.
 - No local integration run is required: 4.3 changes no server, database or test-database code. CI on standard PostgreSQL must still show the 28 required PostgreSQL tests executed and passed.
 - Push, draft PR and CI: the Developer prepares everything locally and **does not push, open a PR, merge or deploy** until the owner approves it. After approval: push once, open the draft PR, and CI (push and pull_request, both jobs) must be green on the final head in a single attempt. Record the run ids.
 
-## Acceptance / Gating Criteria
+### Acceptance / Gating Criteria
 1. Branch `feature/phase-4-shell-cache` is based on `origin/main` `7bc45f8` (or recorded newer `main`), worked in a separate worktree; the shared folder's branch and `node_modules` were not touched; the Team Yuri artifacts are the first commit.
 2. `public/sw.js` is one dependency-free file with `SW_VERSION = '4.3.0'`, the shell cache `woffiz-shell-4.3.0`, the exact S2 allowlist (`/art/*` excluded), the S3 rule, S4 strategies, S6 purge and the S7 cap derived by the M1 rule.
 3. `install` precaches only `/offline.html` and never calls `skipWaiting()`; the only `skipWaiting()` is in the `SKIP_WAITING` handler; the navigation branch, `woffiz-offline-v1` and the `message` handler behave as before.
@@ -130,7 +387,7 @@ The Developer owns the file. Mirror the layout of the other two Phase 4 artifact
 11. After owner-approved push: CI green on the final head in a single attempt for both runs (push and pull_request), including "All 28 required PostgreSQL tests executed and passed" and e2e.
 12. Real-device and deployed-build items recorded as PENDING with the arch list; they do not block this merge.
 
-## Functional Testability Criteria
+### Functional Testability Criteria
 
 - Page/screen the user can open: any app page; the new state is visible in DevTools, Application, Cache Storage.
 - User-visible behavior: none intended beyond the existing update banner for 4.2 installations. The app and the offline fallback behave as before.
@@ -139,7 +396,7 @@ The Developer owns the file. Mirror the layout of the other two Phase 4 artifact
 - Minimal end-to-end flow: sign in on the local production build; browse home, map, an exercise, review and puppy; inspect Cache Storage (only the offline page and allowlisted static assets); go offline (a cached asset loads from the worker, a page shows the offline fallback).
 - Expected observable result: as above, asserted by the e2e privacy proof and the offline-behavior case.
 
-## Required Developer Evidence
+### Required Developer Evidence
 `team-Yuri/dev-phase4.md` (4.3 section) must contain, per `.claude/rules/20-testing.md` §80 and `30-docs.md` §50:
 1. Phase identifier `PHASE=4`, slice 4.3, branch, worktree path, base hash, `git merge-base HEAD origin/main`, and confirmation that the shared folder was not touched.
 2. Implementation summary per milestone M0-M6.
@@ -155,12 +412,12 @@ The Developer owns the file. Mirror the layout of the other two Phase 4 artifact
 12. Real-device and deployed-build checklist from the arch (iPhone and Android installed app after the 4.3 update; DevTools Cache Storage on the deployed build), every item PENDING (owner).
 13. Known issues, scope compliance (including `MEDIA_REQUIRED` off and video paused, nothing pushed or deployed), declaration. After owner approval of the push: PR link, run ids, attempts, per-job results, integration counts, the required-tests line and the e2e count.
 
-## Out of Scope
+### Out of Scope
 - Caching pages, RSC payloads, API responses or any per-account response; offline training or offline report submission; `/art/*` (owner decision); precaching a build manifest; `/_next/image` caching; Background Sync; push.
 - Performance measurement and claims (slice 4.7); account deletion (4.4); allowlist (4.5); metrics and alerts (4.6); device matrix and usability (4.8).
 - Any change to the completed 4.2 reviews, to `next.config.ts` headers, to the manifest, icons, layout or UI, and any server, database, environment variable or dependency change.
 
-## Risks / Open Questions
+### Risks / Open Questions
 - **Open owner decisions: none block 4.3.** The six items in `plan.md` (alert channel, backups, retention, sending domain, pilot recruitment, performance profile) belong to 4.4-4.8. The only 4.3 decision, `/art/*`, is resolved (excluded).
 - **Layout mismatch.** The deployed build serves static files under `/_next/static/immutable/…` while the local `.next` directory examined by the Manager does not use that layout. Mitigation: prefix match on `/_next/static/`, M1 re-measurement on the 4.3 build, tests using the real layout.
 - **Asynchronous cache writes** make e2e assertions flaky if they read too early. Mitigation: `expect.poll`, never sleeps.
@@ -170,12 +427,12 @@ The Developer owns the file. Mirror the layout of the other two Phase 4 artifact
 - **Release consequence (for the later owner approval).** Merging to `main` starts the automatic production deployment. Existing 4.2 installations see the update banner once and keep the 4.2 worker until the owner taps. The rollback target is then the production deployment of the 4.2 release `7bc45f8`, and a worker defect is handled by the documented rollback worker (P4-2/D6), which also removes every `woffiz-*` cache.
 - **Interpretations flagged for the Architect's final review (none changes a decision S1-S10):** the unit test file location `src/lib/sw.test.ts`; icons admitted only with an empty query string; the media-variant e2e placed in `demo-video.spec.ts`; the reading of "caches nothing until the tap" given in M4.4.
 
-## Manager Review
-MANAGER_REVIEW_STATUS: APPROVED
+### Manager Review
+MANAGER_REVIEW_STATUS (slice 4.3): APPROVED
 
 Review of slice 4.3 (revision 1 of this design), 2026-11-12. Reviewed: branch `feature/phase-4-shell-cache`, HEAD `cd94c50`, base `origin/main` `7bc45f8`, worktree `C:\Users\אוהד\Documents\Woffiz-4.3`, evidence in the 4.3 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed.
 
-### Review Notes
+#### Review Notes
 
 **Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are all present and consistent. No reject condition applies.
 
@@ -210,8 +467,10 @@ Review of slice 4.3 (revision 1 of this design), 2026-11-12. Reviewed: branch `f
 
 **Criteria status.** 1-10: met. 11: pending the owner-approved push (CI on the final head, single attempt, both runs, "All 28 required PostgreSQL tests executed and passed", e2e). 12: PENDING for the owner by design (4.8 matrix).
 
-### Required Corrections
+#### Required Corrections
 None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, so the final head already contains all review documents; (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no further documentation-only commit; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval.
+
+---
 
 ---
 
