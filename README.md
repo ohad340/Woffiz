@@ -25,6 +25,7 @@ All email settings are server-only environment variables (see `.env.example`). P
 | Mode | Settings | Who can register | Where mail goes |
 |---|---|---|---|
 | **Resend** (test phase) | `RESEND_API_KEY`, `EMAIL_FROM`, `TESTER_EMAIL`, `BETTER_AUTH_URL` | only `TESTER_EMAIL`, in every environment, enforced on the server (direct API calls too) | only `TESTER_EMAIL`; other addresses get the same neutral answer and no mail |
+| **Resend, pilot** (opened by the owner) | the Resend settings above, plus `EMAIL_SENDER_VERIFIED=true`, an `EMAIL_FROM` outside `resend.dev` and `PILOT_EMAILS` | `TESTER_EMAIL` and the addresses in `PILOT_EMAILS`, enforced on the server (direct API calls too); anyone else gets today's `403` and the same restricted-registration line | allowed addresses and addresses that already have an account (so an account removed from the list can still reset its password and re-send verification); anyone else gets the same neutral answer and no mail |
 | **Local outbox** | `EMAIL_TRANSPORT=outbox` (+ `LOCAL_SIGNUP=true`, `APP_ENV=local`, localhost `BETTER_AUTH_URL`) | any address, this machine only | JSON files in `EMAIL_OUTBOX_DIR` (default `.email-outbox/`, git-ignored); open the `url` field to follow a link |
 | **None** | anything else | nobody (registration closed) | nothing |
 
@@ -61,7 +62,7 @@ Hosting is Vercel (project `woffiz`, region `cdg1`, Node 24) and the database is
 - **Production variables** (set in Vercel, never committed): `DATABASE_URL`, `BETTER_AUTH_SECRET` (fresh, never reused from local), `BETTER_AUTH_URL` (the stable HTTPS address; also the only trusted origin and the base of every emailed link), `RESEND_API_KEY`, `EMAIL_FROM`, `TESTER_EMAIL`. Do **not** set `APP_ENV`, `LOCAL_SIGNUP`, `EMAIL_TRANSPORT`, `EMAIL_OUTBOX_DIR`, `SHADOW_DATABASE_URL`, `TEST_DATABASE_URL` or `TEST_DB_KIND`.
 - **Data API lock**: the app tables are private. Migration `20261101120000_lock_public_data_api` enables Row Level Security without policies and revokes the `anon` and `authenticated` roles. A new table needs the same in its migration; `test/integration/data-api-lock.test.ts` fails otherwise.
 - **Never run the integration or e2e suites against Supabase**: they truncate tables. Keep `TEST_DATABASE_URL` on the local `woffiz-test` database or CI PostgreSQL.
-- Registration stays limited to `TESTER_EMAIL` while Resend is configured, and the sender is the shared `onboarding@resend.dev` (messages may land in spam). A verified sending domain is needed before anyone else can register.
+- Registration stays limited to `TESTER_EMAIL` while Resend is configured, and the sender is the shared `onboarding@resend.dev` (messages may land in spam). A verified sending domain is needed before anyone else can register: the shared `resend.dev` sender delivers only to the email address of the Resend account (any other recipient gets a 403 from Resend), so `PILOT_EMAILS` stays inert until the owner has verified a domain and switched `EMAIL_FROM` to it (see "Opening the pilot").
 
 ## Installation and updates (Phase 4, slice 2)
 
@@ -75,6 +76,18 @@ Hosting is Vercel (project `woffiz`, region `cdg1`, Node 24) and the database is
 - **Rollback**: publish a `sw.js` that calls `self.skipWaiting()` itself (a rollback never waits for a tap), deletes the `woffiz-*` caches (offline and shell) and calls `self.registration.unregister()`.
 - **`?state=` previews** (`/map?state=error`, …) work only under `next dev`, unit tests and a production build on this machine (`APP_ENV=local` with a localhost `BETTER_AUTH_URL`, as in the e2e server). Everywhere else, including Vercel, `?state=` is ignored.
 - **`npm run test:previews-gate`** (after `npm run build`, needs `TEST_DATABASE_URL`) starts the production build four times on port 3101 and proves that the previews stay off for the Vercel shape, `APP_ENV=local` with a public URL, and `APP_ENV=preview` on localhost, and stay on for this machine. It is not part of `npm run check` because it needs a build.
+
+## Opening the pilot (owner checklist, Phase 4, slice 5)
+
+The code for the pilot allowlist is in place and **changes nothing in production by itself**: until the owner sets the variables below, registration and mail stay tester-only. Each step is a deliberate production change that the owner approves separately, **followed by a redeploy** (the policy is read once per server instance, and Vercel applies environment changes only to new deployments). Do them in this order:
+
+1. Verify the sending domain in Resend (DNS records).
+2. Send a successful delivery test from that domain to an address that is not the Resend account owner.
+3. Set `EMAIL_FROM` to an address on that domain (for example `"Woffiz <hello@your-domain>"`).
+4. Set `EMAIL_SENDER_VERIFIED=true`.
+5. Set `PILOT_EMAILS` (grammar in `.env.example`).
+
+Good to know: the list is consulted only when an account is created. Removing an address blocks only a new registration; the existing account keeps signing in and can still reset its password and re-send verification. A change of `PILOT_EMAILS` needs a redeploy. If any entry is malformed, or there are more than 200 entries or 16 KB, the whole list is ignored (registration stays tester-only) and the server log says so once, with counts and never an address. The list is never logged, rendered or sent to the browser. Accounts that never verified their address are not purged yet (planned for slice 4.6); they are not locked out either.
 
 ## Account deletion (Phase 4, slice 4)
 
