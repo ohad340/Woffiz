@@ -4,23 +4,197 @@
 PHASE=4
 
 ## Status
-STATUS: APPROVED
+STATUS: READY_FOR_DEVELOPER
+
+Scope of this revision: **slice 4.5 only** (pilot access allowlist), revision 1, 2026-11-14. Input: the 4.5 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions P1-P9, owner decisions E1-E2 resolved on 2026-11-14). Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.6-4.8 are not designed here. **No migration, no dependency, no production environment variable change.** Nothing in this document authorizes a push, a merge, a deployment or any production environment change.
+
+## Phase Goal
+The server can admit a fixed list of pilot owners to registration through a server-only `PILOT_EMAILS` allowlist next to `TESTER_EMAIL`, and the list is **inert** unless the owner has set `EMAIL_SENDER_VERIFIED=true` and `EMAIL_FROM` is outside `resend.dev` (locally, with the outbox, it is testable without the flag). Sign-in for existing accounts is unchanged; unlisted addresses get today's neutral answer; removing an address from the list blocks only a new registration. With the production environment untouched, **the release changes no behavior in production** (tester-only registration and mail, exactly as today).
+
+## Source References
+- `team-Yuri/PHASE.md` (`PHASE=4`), `team-Yuri/plan.md` (slice 4.5, owner decision 3), `team-Yuri/arch-phase4.md` (P1-P9, E1-E2), `PRD.md` §1 and §10, `docs/DECISIONS.md`.
+- `.claude/rules/20-testing.md`, `30-docs.md`, `40-project-structure.md`.
+- Code baseline `origin/main` `0b18ee2`, read with `git show 0b18ee2:<path>`: `src/server/email/{config,delivery,transport,rate-limit}.ts`, `src/server/email/config.test.ts`, `src/server/{auth,local-mode}.ts`, `src/app/api/auth/[...all]/route.ts`, `src/app/page.tsx`, `src/components/auth/AuthForm.tsx`, `test/integration/{email-auth.test.ts,setup.ts}`, `vitest.integration.config.ts`, `.env.example`, `README.md`.
+- Better Auth 1.7.14 (installed): `dist/db/internal-adapter.mjs`, `dist/db/with-hooks.mjs`.
+- Resend documentation, fetched 2026-11-14: `https://resend.com/docs/knowledge-base/403-error-resend-dev-domain`.
+
+## Architecture Summary
+The contract is followed as written. The work is small and concentrated: a pure parser and activation rule in `email/config.ts`, one new branch in `sendAuthEmail`, one string in `AuthForm`, tests and docs. `src/server/auth.ts`, `src/app/page.tsx`, the transport, the database and every 4.2-4.4 behavior are not changed. The Manager's answers to the Architect's handoff questions are in "Verified semantics" (V1: the Resend rule; V3: how tests build a pilot instance without changing `auth.ts`).
+
+## Verified semantics
+- **V1 Resend sender rule (current documentation).** The shared `resend.dev` domain (`onboarding@resend.dev`) is meant for testing and delivers only to the email address of the Resend account; sending to any other recipient returns a 403. To reach other recipients the owner must add and verify their own domain in Resend and change the `from` address to one on that domain; the 403 can persist after verification if `from` still uses `resend.dev`. This confirms P1 exactly: the pilot is meaningful only when the sender is outside `resend.dev`, and the flag records that the owner has verified the domain and tested delivery. `transport.ts` sends `from: transport.from` verbatim, so the sender check must be made on the configured `EMAIL_FROM`.
+- **V2 `EMAIL_FROM` has a display name.** `.env.example` and the README use `"Woffiz <onboarding@resend.dev>"`. The activation rule therefore parses the address out of `Name <addr>` (or a bare address) before looking at its domain (see M1).
+- **V3 How a test builds a Better Auth instance with a pilot policy, with no change to production code.** `auth.ts` computes `const policy = signUpPolicy()` at module load; `delivery.ts` reads the environment at send time. The existing suite `test phase: Resend configured…` in `test/integration/email-auth.test.ts` already builds an instance under another policy with `vi.stubEnv(...)`, `vi.resetModules()` and dynamic imports of `@/app/api/auth/[...all]/route` and `@/server/auth` (its `deployed(env)` helper). **That is the mechanism: no factory and no change to `auth.ts` is needed**, so the default export behaves identically by construction. `delivery` is mocked there (`deliver` captured in `sent`), and `vi.resetModules()` also resets the "warn once" state, which the tests rely on.
+- **V4 The route hook can be bypassed in a test.** `databaseHooks.user.create.before` runs inside Better Auth's `createWithHooks` (`dist/db/with-hooks.mjs`), reached by `(await auth.$context).internalAdapter.createUser(...)`. A test uses it to prove the second line of defense without the `before` hook of `/sign-up/email`.
+- **V5 Only sign-up is gated.** The `before` hook acts on `ctx.path === '/sign-up/email'` only. `/send-verification-email`, `/request-password-reset` and sign-in are not gated by the list, so an existing account removed from the list keeps recovery and verification re-send; what stops it is only delivery (P4), which the contract makes permissive for existing accounts.
+- **V6 Request guard unchanged.** `POST /api/auth/*` goes through `guardEmailRequest` (per-IP and per-address limits, a 1 s floor) before any handler; 4.5 does not touch it. There is no existing test of the 1 s floor.
+- **V7 Every send concerns an existing user row or a sign-up that already passed the gate.** Sign-up creates the row first and then sends; reset and re-send need an account. P4's "allowed or existing account" therefore never blocks a legitimate mail; the account check only keeps an arbitrary address unreachable.
+- **V8 Environment of the integration suite.** `test/integration/setup.ts` sets `EMAIL_TRANSPORT=outbox`, `APP_ENV=local`, `LOCAL_SIGNUP=true`, no `RESEND_API_KEY` and no `TESTER_EMAIL`, i.e. the `open` policy; pilot tests must stub `LOCAL_SIGNUP` empty (outbox case) or go through the `deployed(env)` pattern (Resend case). The e2e server keeps the `open` policy, so e2e is unaffected and `playwright.config.ts` stays untouched.
+
+## Ordered Milestones
+- **M0** Branch `feature/phase-4-pilot-allowlist` from `origin/main` `0b18ee2` in a separate worktree; artifacts first; baseline.
+- **M1** `src/server/email/config.ts`: parser, sender rule, activation, policy, `signUpAllowedFor`.
+- **M2** `src/server/email/delivery.ts`: delivery on the verified sender (P4).
+- **M3** `AuthForm.tsx`: the `pilot` mode.
+- **M4** Unit tests (`config.test.ts`).
+- **M5** Integration tests.
+- **M6** Documentation.
+- **M7** Regression run and one recorded manual flow.
+- **M8** Evidence in `dev-phase4.md`.
+
+## Detailed Development Plan
+
+### M0. Branch, worktree, baseline
+1. `git fetch origin`; verify `origin/main` is `0b18ee2` (if newer, record it and branch from it).
+2. Worktree outside the repository tree, sibling of the shared folder: `git worktree add ../Woffiz-4.5 -b feature/phase-4-pilot-allowlist origin/main`, then `git branch --unset-upstream`. **Do not switch the branch of, or touch `node_modules` in, the shared Woffiz folder**; the older worktrees `Woffiz-4.3` and `Woffiz-4.4` are not used (the owner may delete them).
+3. Copy `.env` from the shared folder into the worktree (git-ignored, never committed). `npm ci`; `node_modules/.bin/prisma --version`; `node_modules/.bin/prisma generate` (never a bare `npx` tool).
+4. First commit: copy `team-Yuri/arch-phase4.md`, `team-Yuri/manager-phase4.md` and `team-Yuri/plan.md` byte for byte from the shared folder (all uncommitted there; verify with `cmp`). Nothing else.
+5. Baseline on the untouched tree: `npm run check`; record counts.
+6. **Database safety.** Every database command uses `TEST_DATABASE_URL` (the local test database; start it with `node_modules/.bin/prisma dev start woffiz-test --detach` if it is not running; print the host and check it differs from `DATABASE_URL`). No Supabase connection, no `migrate reset`, no `db push`. **Tests and the manual flow use only reserved addresses (`*.test`, `example.test`); never a real address and never a real `RESEND_API_KEY`** (the suite already deletes it). `MEDIA_REQUIRED` stays unset. No PostgreSQL-only test is expected in 4.5, so no throwaway server is needed.
+
+### M1. `src/server/email/config.ts`
+1. **Types.** `SignUpPolicy` gains `{ kind: 'pilot'; tester: string | null; emails: ReadonlySet<string> }`; `closed`, `tester` and `open` keep their meaning and shape.
+2. **`parsePilotEmails(raw: string | undefined)`**, pure. Result: `{ kind: 'none' }` (unset, empty or only separators) | `{ kind: 'valid'; emails: ReadonlySet<string> }` | `{ kind: 'invalid'; reason: 'too-large' | 'malformed' | 'too-many'; count: number }`. Rules (P3):
+   - raw longer than 16 384 characters → `too-large` (checked first, before any splitting);
+   - split on commas, semicolons and any whitespace (including newlines); drop empty items;
+   - each item goes through `normalizeEmail` and must match the existing `EMAIL_SHAPE`, contain only printable ASCII (`/^[\x21-\x7E]+$/`) and be at most 254 characters (Manager detail, flagged); no provider-specific folding (a `+tag` address is listed exactly as typed, lower-cased);
+   - any malformed item → `malformed` for the **whole** list; duplicates collapse; more than 200 distinct entries → `too-many`; `count` is the number of distinct entries seen (an integer, never an address).
+3. **Sender rule.** `senderDomain(from: string)`: take the text inside `<...>` when present, else the whole trimmed string; the domain is what follows the last `@`, trimmed and lower-cased; anything unparsable gives `null`. `isSharedSender(from)` is true for `null`, for `resend.dev` and for any `*.resend.dev` (the suffix test needs the dot: `notresend.dev` and `resend.dev.example.test` are **not** shared). A sender that cannot be parsed counts as shared, so the list stays inert (fail closed).
+4. **Activation** (P1). `EMAIL_SENDER_VERIFIED` counts only when `env.EMAIL_SENDER_VERIFIED?.trim().toLowerCase() === 'true'`. On the Resend transport the list is honored only when that flag is true **and** `!isSharedSender(transport.from)`. On the outbox transport (which `emailTransport` returns only on a local machine) the list is honored without the flag. If `PILOT_EMAILS` is set and non-empty but not honored, the list is ignored and the policy falls through to the next rule.
+5. **`signUpPolicy(env = process.env, warn = warnOnce)`** with the priority of P2: (1) outbox + `LOCAL_SIGNUP=true` → `open`; (2) a valid list that is honored (4) → `pilot` with `tester` set to the transport's tester on Resend and `null` on the outbox; (3) Resend → `tester`; (4) otherwise `closed`. A valid honored list is only possible on a configured transport (Resend needs `TESTER_EMAIL` as today; the pilot does not remove that requirement).
+6. **Warnings (P1, P3).** One `console.warn` per process **per reason**, a module-level `Set` of reasons, only when `PILOT_EMAILS` is set and non-empty, fixed text and counts only, never an address and never the list. Reasons: the flag is not `true`; the sender is the shared `resend.dev` (or unparsable); the list is invalid (`too-large`, `malformed` or `too-many`, with the entry count). `signUpPolicy` accepts an optional `warn` function so unit tests can observe the messages; production uses the deduplicating default. Because `signUpPolicy()` is also called per request (welcome page) and per send, the deduplication is what keeps the log at one line.
+7. **`signUpAllowedFor(policy, email)`**: `open` true; `tester` unchanged; `pilot`: a string whose normalized form equals `policy.tester` (when not `null`) or is in `policy.emails`; non-strings and `closed` false.
+8. `src/server/auth.ts` is **not changed**: `disableSignUp: policy.kind === 'closed'`, the `before` hook and the database hook already go through `signUpAllowedFor` and treat any non-`closed` kind alike.
+
+### M2. `src/server/email/delivery.ts` (P4)
+In `sendAuthEmail`, replace only the `transport.kind === 'resend' && recipient !== transport.tester` test:
+- compute `policy = signUpPolicy()` at send time (the same environment the transport was read from);
+- `policy.kind === 'pilot'` (verified sender): deliver when `signUpAllowedFor(policy, recipient)` **or** an account with that normalized email exists (`prisma.user.findUnique({ where: { email: recipient }, select: { id: true } })`; Better Auth stores the lower-cased address). A failing lookup counts as "no account": fail closed, with the same neutral log line;
+- otherwise on Resend (tester mode, shared sender or flag false): unchanged, only `transport.tester` receives mail;
+- any recipient that is not delivered gets the existing neutral `console.warn` (no address), never an error and never a different answer;
+- the outbox and `none` paths, `guardEmailRequest` and the 1 s floor are unchanged.
+
+### M3. `src/components/auth/AuthForm.tsx`
+`SignUpMode` becomes `'closed' | 'tester' | 'pilot' | 'open'`; the line "בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות." is shown for `tester` and `pilot` (the sentence is accurate for both: no list contents and no count are rendered). The tabs already follow `signUp !== 'closed'`. `src/app/page.tsx` is not changed (its `signUpPolicy().kind` now satisfies the wider type). No new Hebrew string.
+
+### M4. Unit tests (`src/server/email/config.test.ts`)
+- **Parser:** commas, semicolons, spaces, tabs and newlines as separators; mixed case and surrounding whitespace normalize; duplicates collapse; `+tag` kept exactly (no folding); a malformed item, a non-ASCII item, an item over 254 characters, 201 distinct entries, and more than 16 384 characters each make the whole list `invalid` (with the right `reason` and an integer `count`); empty, unset and only separators give `none`; `count` and the reasons never contain an address.
+- **Sender rule:** `Woffiz <onboarding@resend.dev>`, `onboarding@RESEND.DEV`, `x@mail.resend.dev`, an unparsable `Woffiz` and an empty string are shared; `Woffiz <hello@pilot.example.test>`, `a@notresend.dev` and `a@resend.dev.example.test` are not.
+- **Policy matrix** (the contract's list): Resend with the shared sender plus a valid list, flag false and flag true, gives `tester`; Resend with a non-`resend.dev` sender plus a valid list and the flag unset, `false`, `1` or `yes` gives `tester`; with `true` and ` TRUE ` gives `pilot`; the same with an invalid list gives `tester`; Resend without `TESTER_EMAIL` keeps today's `closed`; outbox plus `LOCAL_SIGNUP=true` gives `open`; outbox plus a valid list and no `LOCAL_SIGNUP` gives `pilot` (`tester: null`); outbox off the local machine gives `closed` even with a list; the existing assertions stay unchanged.
+- **`signUpAllowedFor`:** the tester, a listed address (case-insensitive, surrounding whitespace), an unlisted address, a non-string, `closed`, `open`.
+- **Warnings:** with the injected `warn`, each reason is reported once per process for repeated calls, only when `PILOT_EMAILS` is set; the messages contain neither an address nor the list.
+
+### M5. Integration tests (`test/integration/email-auth.test.ts` or a sibling file; use the `deployed(env)` pattern of V3)
+Environment for the Resend cases: `RESEND_API_KEY` a non-real value, `EMAIL_FROM: 'Woffiz <hello@pilot.example.test>'`, `TESTER_EMAIL`, `EMAIL_SENDER_VERIFIED: 'true'`, `PILOT_EMAILS` two reserved addresses with different casing. All through direct `POST /api/auth/sign-up/email` (and the server API):
+1. **Pilot, verified sender.** A listed address registers (200) and gets exactly one verification message, addressed to its normalized form; the tester address registers; an unlisted address gets `403 SIGN_UP_RESTRICTED` with no `user` row and no message; a listed address given with different casing registers.
+2. **Shared sender, same list.** With `EMAIL_FROM` on `resend.dev` (flag true), and again with the flag false on the non-`resend.dev` sender: only the tester is admitted; a listed address is refused (403, no row, no mail).
+3. **Second line of defense.** `(await auth.$context).internalAdapter.createUser(...)` for an unlisted address is refused by the database hook (V4); for a listed address it succeeds.
+4. **P4/P5, removal from the list.** An existing verified account whose address is not (any more) on the list: still signs in; receives its password-reset mail and a verification re-send (use an unverified second account for the re-send); its new sign-up is refused (403). Its refused sign-up answer is **identical** (status and body) to the answer for a never-seen unlisted address (no enumeration).
+5. **Delivery to an address with no account and not on the list** sends nothing and answers neutrally (reset and re-send answers identical to those for a delivered address).
+6. **Shared sender / tester mode:** only the tester receives mail; an existing non-tester account gets nothing (unchanged behavior, neutral answer).
+7. **Local outbox pilot** (Resend stubs removed, `LOCAL_SIGNUP` empty, `PILOT_EMAILS` set): a listed address registers and its message is captured; an unlisted one is refused.
+8. **Timing and limits unchanged:** a restricted pilot sign-up and an admitted pilot sign-up both take at least ~900 ms (real time, `MIN_EMAIL_RESPONSE_MS`), and the existing per-address and per-IP limit tests stay green and unchanged.
+9. The existing suites in `email-auth.test.ts` stay green unchanged.
+
+### M6. Documentation
+- `.env.example`: `EMAIL_SENDER_VERIFIED="false"` and `PILOT_EMAILS=""`, each commented: server-only; the activation rule (flag exactly `true` **and** an `EMAIL_FROM` outside `resend.dev`; locally with the outbox no flag); the grammar (separators, ASCII, lower-cased, no `+tag` folding, at most 200 distinct entries and 16 KB, any bad entry ignores the whole list); an `example.test` sample only.
+- `README.md`: the "Email" table gains the pilot rows (who may register, who receives mail, per sender); the "Deployment" notes keep "a verified sending domain is needed before anyone else can register" and add the Resend rule (V1); a new **"Opening the pilot (owner checklist)"** lists, in this order and each as a separate owner approval followed by a redeploy: (1) verify the sending domain in Resend; (2) a successful delivery test; (3) set `EMAIL_FROM` to that domain; (4) set `EMAIL_SENDER_VERIFIED=true`; (5) set `PILOT_EMAILS`. It states that removing an address blocks only new registration, that a change of `PILOT_EMAILS` needs a redeploy, that unverified accounts are not purged yet (4.6), and that the list is never logged.
+- `docs/DECISIONS.md` row `P4-5` (activation rule, policy shape, parser, delivery, removal semantics, local-only exception, no migration, no production change authorized).
+- `team-Yuri/plan.md` is the Architect's file (the 4.6 follow-up); the Developer only copies it.
+- Not touched: `public/sw.js`, `prisma/`, `next.config.ts`, account-deletion code, media code, `src/server/auth.ts`, `src/app/page.tsx`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, `DESIGN_SYSTEM.md` (no new UI element or string).
+
+### M7. Regression and one recorded manual flow
+1. `npm run check` and the full integration suite on the local test database; the full e2e suite once (the e2e server keeps `open`); report every rerun as a rerun. **Known local noise:** the PGlite test database is unstable under load, and `auth.spec.ts` "register, onboard, refresh…" fails about half the time on `main` locally (shown on `7bc45f8`); CI on standard PostgreSQL is the gate.
+2. **Manual flow, recorded once as text** (local production build on a free port such as 3110, `APP_ENV=local`, `BETTER_AUTH_URL=http://localhost:3110`, `EMAIL_TRANSPORT=outbox`, no `LOCAL_SIGNUP`, `PILOT_EMAILS="pilot1@example.test"`, `TEST_DATABASE_URL` only): registering `pilot1@example.test` writes one verification message to the outbox; `other@example.test` gets `403 SIGN_UP_RESTRICTED` and writes nothing; `/` shows the restricted-registration line. Remove the outbox files afterwards.
+
+### M8. Evidence
+`team-Yuri/dev-phase4.md`: the 4.5 section on top; the 4.4, 4.3 and 4.2 records kept below unchanged.
+
+## Acceptance / Gating Criteria
+1. Branch `feature/phase-4-pilot-allowlist` from `origin/main` `0b18ee2` (or recorded newer `main`) in a separate worktree; the shared folder's branch and `node_modules` untouched; the three Team Yuri artifacts are the first commit.
+2. `PILOT_EMAILS` parsing follows M1 exactly and fails closed (whole list ignored) on any malformed, non-ASCII, oversized or too-many input; unset or empty gives no list.
+3. The list is honored on Resend only with `EMAIL_SENDER_VERIFIED` exactly `true` (trim, case-insensitive) **and** a sender outside `resend.dev` (display name parsed, `*.resend.dev` and unparsable senders count as shared); locally, with the outbox on a local machine, without the flag; never off a local machine; `LOCAL_SIGNUP=true` still gives `open`.
+4. In `pilot`, registration admits the tester and listed addresses only; an unlisted address gets today's `403 SIGN_UP_RESTRICTED`, no row, no mail; no enumeration (identical answers for a removed existing account and a never-seen address); both Better Auth hooks use `signUpAllowedFor` (database hook proved alone).
+5. Delivery: tester-only on the shared sender or with the flag false (unchanged); on the verified sender, allowed addresses and existing accounts only; a removed account still signs in and still receives reset and verification mail; anything else is skipped with the neutral log line.
+6. `AuthForm` shows the restricted-registration line for `pilot`; no list content or count reaches the client.
+7. Logs carry fixed text and counts only, one warning per reason per process; never an address or the list.
+8. `npm run check` passes; the unit matrix and the integration tests of M4-M5 pass on PGlite and on standard PostgreSQL in CI; the existing email suites stay green unchanged.
+9. E2E: existing suites green, `playwright.config.ts` untouched; the manual flow of M7 recorded.
+10. The diff against `origin/main` contains only: `src/server/email/config.ts`, `src/server/email/delivery.ts`, `src/components/auth/AuthForm.tsx`, `src/server/email/config.test.ts`, the integration test file(s), `.env.example`, `README.md`, `docs/DECISIONS.md`, and the Team Yuri artifacts. Not in the diff: `src/server/auth.ts`, `src/app/page.tsx`, `prisma/`, `public/sw.js`, `next.config.ts`, account-deletion and media code, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, `DESIGN_SYSTEM.md`.
+11. No migration, no dependency, no production environment variable change; `MEDIA_REQUIRED` off; video production paused; only reserved test addresses; nothing pushed, merged or deployed without the owner's approval.
+12. After the owner-approved push: CI green on the final head, first attempt, both runs ("All 34 required PostgreSQL tests executed and passed" unchanged, e2e and build).
+13. Opening the pilot (domain, delivery test, `EMAIL_FROM`, flag, list) is documented as owner steps and recorded PENDING; it does not block this merge.
+
+## Functional Testability Criteria
+- Page the user can open: `/` (registration form) in pilot mode shows the restricted-registration line.
+- Command-line / API flow: the manual flow of M7 (outbox, `PILOT_EMAILS`, no `LOCAL_SIGNUP`) and direct `POST /api/auth/sign-up/email`.
+- Expected observable result: a listed address gets one verification message; an unlisted one gets `403 SIGN_UP_RESTRICTED` and no message; with the shared sender or the flag off, only the tester is admitted.
+- Automated: `npm run check`; `npm run test:integration`; `npm run test:e2e`.
+
+## Required Developer Evidence
+`team-Yuri/dev-phase4.md` (4.5 section), per `.claude/rules/20-testing.md` §80 and `30-docs.md` §50:
+1. `PHASE=4`, slice 4.5, branch, worktree path, base hash, `git merge-base HEAD origin/main`, confirmation that the shared folder was not touched.
+2. Implementation summary per milestone, and the interpretations list below.
+3. Final diff (`git diff --stat` and the criterion 10 absent-list check).
+4. Dependencies "none added"; `npm ci`, prisma version and generate; the database host of every database command (local test database only); confirmation that only reserved addresses were used and no real key was configured.
+5. Unit tests: command, counts, the new matrix by name.
+6. Integration tests: command, counts, every M5 case by name; the existing email suites unchanged and green.
+7. Lint and typecheck results.
+8. E2E: command, per-project counts, reruns reported as reruns.
+9. The recorded manual flow (M7.2) as text.
+10. Documentation: sections changed; `.env.example` and README "Opening the pilot".
+11. Owner checklist for opening the pilot, every item PENDING (owner); no production variable touched.
+12. Known issues, scope compliance, declaration. After the owner-approved push: PR link, run ids and attempts, per-job results, counts, the required-tests line, the e2e count.
+
+## Out of Scope
+- Configuring or verifying the Resend sending domain, the delivery test, and any change of production `EMAIL_FROM`, `EMAIL_SENDER_VERIFIED` or `PILOT_EMAILS` (owner actions, each a separate approval, each followed by a redeploy).
+- An admin UI or table for the list, invitations, per-address expiry, revoking access of existing accounts.
+- Purging never-verified accounts (4.6, P8).
+- Analytics and alerts (4.6), drills (4.7), device matrix and usability (4.8).
+- Any change to the service worker, the update flow, account deletion, media, `MEDIA_REQUIRED` or the e2e configuration.
+
+## Risks / Open Questions
+- **Owner decisions: none block 4.5.** E1 and E2 are resolved. The `plan.md` items "sending domain" and "pilot recruitment" are owner actions that open the pilot later; "alert channel", "backups", "retention" and "performance profile" do not affect 4.5.
+- **Interpretations flagged for the Architect's final review** (none changes P1-P9): (I1) the parser's return shape, the per-entry limit of 254 characters and the 16 384-character limit counted in characters; (I2) the sender parse (`Name <addr>`), with `*.resend.dev` and an unparsable sender counted as shared; (I3) one warning per reason per process through a module-level set, and the optional `warn` parameter of `signUpPolicy`; (I4) delivery computes the policy at send time and looks the account up with `prisma.user.findUnique`; a failing lookup fails closed; (I5) the pilot still requires the Resend transport to be configured (including `TESTER_EMAIL`), as before; (I6) the test mechanism is the existing `deployed(env)` pattern, so `auth.ts` and `page.tsx` are not in the diff; (I7) `AuthForm` reuses the tester sentence; (I8) no e2e addition, one manual flow recorded instead; (I9) the README "Opening the pilot" checklist.
+- **Release consequence (for the later owner approval).** The release is code-only with no migration and **no production behavior change**: neither `EMAIL_SENDER_VERIFIED` nor `PILOT_EMAILS` is set in production, so registration and mail stay tester-only. Merging to `main` still starts the automatic Vercel production deployment, which the owner approves explicitly. Rollback target: the production deployment of `0b18ee2` (`6kx6RtfQTw6D84p2JJuRL1w9XJ9Z`). Post-deploy checks are read-only: the public assets and `/sw.js` unchanged; `/` still shows the registration form with the restricted-registration line for a non-listed address; one `POST /api/auth/sign-up/email` with a reserved `.test` address answers `403 SIGN_UP_RESTRICTED` and creates no account and no mail; nothing is registered.
+- **Redeploy requirement.** The policy is read once per server instance and Vercel applies environment changes only to new deployments; the later owner steps each need a redeploy (documented).
+- **Shared test database and port 3100.** Several sessions use the local test database and the fixed e2e port; wait rather than collide. The manual flow uses another port.
+- **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0).
+
+## Manager Review
+MANAGER_REVIEW_STATUS: NOT_REVIEWED
+
+### Review Notes
+Not reviewed yet: no Developer evidence exists for slice 4.5.
+
+### Required Corrections
+
+---
+
+## Slice 4.4 record (APPROVED, merged in `0b18ee2`; closed, not reopened)
+STATUS (slice 4.4): APPROVED. MANAGER_REVIEW_STATUS (slice 4.4): APPROVED. Kept unchanged below; only the heading levels and these two status labels were adapted when slice 4.5 was added.
+
+### Phase Identifier
+PHASE=4
+
+### Status
+STATUS (slice 4.4): APPROVED
 
 Scope of this revision: **slice 4.4 only** (account deletion), revision 1, 2026-11-12. Input: the 4.4 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions A1-A10, the deletion inventory, owner decisions B1-B3 approved on 2026-11-12). Slices 4.2 (`7bc45f8`) and 4.3 (`ad6b55a`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.5-4.8 are not designed here. **No migration is needed** (confirmed, see "Verified semantics" V7). Nothing in this document authorizes deleting a real account, a migration, a push, a merge or a deployment.
 
-## Phase Goal
+### Phase Goal
 A signed-in, verified owner permanently deletes their account from `/puppy`: they read an honest Hebrew scope statement, re-enter their password, and one server transaction removes every owner-scoped row; every session ends, no in-flight request can recreate data, and shared media and other accounts are untouched. Slices 4.2 and 4.3 behavior (offline fallback, owner-activated update, shell cache allowlist) is unchanged.
 
-## Source References
+### Source References
 - `team-Yuri/PHASE.md` (`PHASE=4`), `team-Yuri/plan.md` (slice 4.4), `team-Yuri/arch-phase4.md` (A1-A10, inventory, B1-B3), `PRD.md` §8 and §10, `DESIGN_SYSTEM.md` §8 "Puppy and settings", §9, §12, §14, `docs/DECISIONS.md` (48, 57, 62, 64, 66, 68-71, 76, P4-1 to P4-3).
 - `.claude/rules/20-testing.md`, `30-docs.md`, `40-project-structure.md`.
 - Code baseline `origin/main` `ad6b55a`, read with `git show ad6b55a:<path>`: `prisma/schema.prisma`, `src/server/{auth,session,http,errors,onboarding,progress,revision,idempotency,queries,db}.ts`, `src/server/ai/{jobs,quota}.ts`, `src/server/email/rate-limit.ts`, `src/app/api/**/route.ts`, `src/components/ui/{Sheet,Button}.tsx`, `src/app/(main)/puppy/page.tsx`.
 - Better Auth **1.7.14** (the installed `node_modules/better-auth`, version printed from its `package.json`): `dist/crypto/password.mjs`, `dist/api/routes/{sign-in,sign-out,password,email-verification,update-user}.mjs`, `dist/cookies/index.mjs`, `dist/integrations/next-js.mjs`.
 
-## Architecture Summary
+### Architecture Summary
 The contract is followed as written, with **two corrections to A5** found while checking the lock order (F1, F2 below), one **choke point** for the deleted-account 500 mapping (F3), and the Better Auth API names the contract asked for. One new route, one server module, one dialog component, one account-card change, a welcome-page status line, three error codes, tests, docs. No schema, `sw.js`, `auth.ts`, environment or dependency change.
 
-## Verified semantics
+### Verified semantics
 Better Auth 1.7.14 (read from the installed source):
 - **V1 Password verifier.** `import { verifyPassword } from 'better-auth/crypto'`, signature `({ hash, password }) => Promise<boolean>` (scrypt through `node:crypto`; it is what sign-in uses as `ctx.context.password.verify`). The credential account is the `Account` row with `providerId = 'credential'` and `accountId = user.id`; the hash is its `password` column. Sign-in does the same lookup and treats a missing account or hash as a wrong password. `maxPasswordLength` is 128 in `auth.ts`, so the body bound is 1-128.
 - **V2 Reset tokens.** A password-reset request stores a `verification` row with `identifier = 'reset-password:<24-character id>'` and **`value = the user id`**, plus `expiresAt` (`dist/api/routes/password.mjs`); a reset consumes it. Deleting by `value = userId` is correct whether or not the identifier is hashed. Email-verification links in this project are stateless signed tokens (`createEmailVerificationToken`); for a deleted account Better Auth answers `verify-email` with a redirect carrying `USER_NOT_FOUND`, not a 500.
@@ -31,7 +205,7 @@ Better Auth 1.7.14 (read from the installed source):
 - **V7 Foreign keys (schema at `ad6b55a`).** `Session`, `Account`, `Puppy` (`ownerId`, unique) and `IdempotencyKey` cascade from `User`; `Plan`, `GenerationJob` and `Attempt` cascade from `Puppy`; `Level` from `Plan`; `ExerciseVersion` and `MasteryEvent` from `Level`. **Two RESTRICT keys** block a cascade: `Attempt.exerciseVersionId` and `MasteryEvent.attemptId`. `Plan.currentLevelId` is a plain column (no foreign key, so no cycle). `GenerationJob.ownerId` is a plain string (jobs are owned through `puppyId`). `AiUsageDay` has no foreign key. **No schema change is required, so no migration** (A1 holds).
 - **V8 Lock side effects.** Inserting a row that references `Puppy` or `User` takes `FOR KEY SHARE` on the referenced row, which conflicts with `FOR UPDATE` and with a `DELETE`. This is why the real lock graph differs from the explicit locks.
 
-## Lock-order check (A5 against the code)
+### Lock-order check (A5 against the code)
 Locks per write path at `ad6b55a` (explicit lock, then implicit key-share locks from foreign keys):
 
 | Path | Order |
@@ -58,7 +232,7 @@ The global order that every path above respects is **job → plan → puppy → 
 5. Deletes, each scoped to this user: `MasteryEvent` → `Attempt` → `ExerciseVersion` → `Level` → `Plan` → `GenerationJob` (payloads included) → `Puppy` → `IdempotencyKey` → `verification` (`value = userId`) → `AiUsageDay` (ten `keyOf('ai-request', userId, day)` keys around today, see M1) → `session` → `account` → `user`. The `user` delete must affect exactly one row.
 When the account has no puppy (never started onboarding) steps 2-4 find nothing and are skipped; the rest is unchanged.
 
-## Deleted-account responses today (A6: every path that surfaces as a 500)
+### Deleted-account responses today (A6: every path that surfaces as a 500)
 Authentication is by session, so a request that begins after the deletion is already `UNAUTHENTICATED` (401), and all read paths answer cleanly (`getOverview` and `getExercise` return null, `playbackFor` and the captions route throw `NOT_FOUND`, pages redirect). Only a request **already past authentication when the deletion commits** can fail. Path by path:
 
 | Route (via `postRoute`) | What happens after the deletion committed | Today |
@@ -73,7 +247,7 @@ Authentication is by session, so a request that begins after the deletion is alr
 - **F3 (one choke point).** All six routes use `postRoute`, and `user` is known there. In its `catch`, for an error that is **not** an `AppError`: look up whether the session user's row still exists; if it does not, answer `UNAUTHENTICATED` (401, `no-store`) and log only the code (no error object, which can carry query text); otherwise behave exactly as today (log, 500). This maps exactly the failures caused by a deleted account and nothing else, without touching the domain code, and any path this table missed is covered too. The fence answers (409/404) stay as they are: they are clean, and the account's next request is 401.
 - `adminRoute` is not changed (an administrator cannot delete the account in-app, A4).
 
-## Ordered Milestones
+### Ordered Milestones
 - **M0** Branch `feature/phase-4-account-deletion` from `origin/main` `ad6b55a` in a separate worktree; artifacts first; baseline.
 - **M1** Server: `account-deletion.ts`, the quota helper, error codes, `postRoute` mapping (F3), the route with cookie expiry.
 - **M2** Integration tests on PGlite and PostgreSQL: full clearance, isolation, other-account, password, ADMIN, sessions and cookies, rollback, inventory guard.
@@ -83,9 +257,9 @@ Authentication is by session, so a request that begins after the deletion is alr
 - **M6** Documentation.
 - **M7** Evidence in `dev-phase4.md`.
 
-## Detailed Development Plan
+### Detailed Development Plan
 
-### M0. Branch, worktree, baseline
+#### M0. Branch, worktree, baseline
 1. `git fetch origin`; verify `origin/main` is `ad6b55a` (if newer, record it and branch from it; a changed `schema.prisma` or any file listed under M1 would be a reason to stop and ask).
 2. Worktree outside the repository tree, sibling of the shared folder: `git worktree add ../Woffiz-4.4 -b feature/phase-4-account-deletion origin/main`, then `git branch --unset-upstream` (a stray `git push` must never target `main`). **Do not switch the branch of, or touch `node_modules` in, the shared Woffiz folder**; the owner's temporary worktree `Woffiz-4.3` is not used.
 3. Copy `.env` from the shared folder into the worktree (git-ignored, never committed). `npm ci`; `node_modules/.bin/prisma --version`; `node_modules/.bin/prisma generate` (never a bare `npx` tool).
@@ -93,7 +267,7 @@ Authentication is by session, so a request that begins after the deletion is alr
 5. Baseline on the untouched tree: `npm run check`, and the unit/integration/e2e commands you will use later; record counts.
 6. **Database safety.** Every database command uses `TEST_DATABASE_URL` (the local test database; print the host and check it differs from `DATABASE_URL`). No Supabase connection, no `migrate reset`, no `db push`, no real account is ever deleted. `MEDIA_REQUIRED` stays unset.
 
-### M1. Server
+#### M1. Server
 1. **`src/server/account-deletion.ts`** (new). `deleteAccount(userId, password, deps?)` implements the **Final deletion transaction** above, with the retry of F2. Dependencies are injectable so that tests can (a) fail after some deletes (rollback proof) and (b) run a hook between the first job-lock pass and the puppy lock (the F2 test); both are optional parameters, with no environment switch and no test-only branch in the default path. Also export `hasMediaAuditRecords(userId)` (true when the id appears in `MediaVersion.createdById|publishedById|withdrawnById`, `MediaReview.reviewerId` or `TechniqueSuspensionEvent.actorId`), used only by `/puppy` for the A4 line.
 2. **Quota helper.** `keyOf` in `src/server/ai/quota.ts` is private. Add one exported, transaction-aware function (for example `deleteRequestUnits(tx, userId)`) that deletes the keys of the ten UTC days from eight days ago to tomorrow (`prune` keeps seven days; the extra margin covers the UTC/server-date edge). No other change to that file; the system-wide `ai-calls` counter is not touched.
 3. **Rate limit.** Before the transaction, `takeRateLimit({ scope: 'account-delete', max: 5, windowSeconds: 900 }, userId)`; refusal → `RATE_LIMITED`. The key is taken **before** the password check. (The function uses the global client, so it must not run inside the interactive transaction.)
@@ -102,7 +276,7 @@ Authentication is by session, so a request that begins after the deletion is alr
 6. **`src/app/api/account/delete/route.ts`** (POST only). Order: `assertSameOrigin`; `requireUserFromRequest` (verified session, identity only from the cookie); body `z.object({ password: z.string().min(1).max(128) })` **not strict**, so any extra field, including another account's id, is ignored and never read; `deleteAccount(user.id, password)`; success `200 { deleted: true }` with the three cookies expired (V4) and `Cache-Control: private, no-store`; every `AppError` mapped as in `postRoute`; anything else 500 `INTERNAL` with only the code logged. The password never appears in a log, an error or a response. Because it must add `Set-Cookie`, the route writes its own small try/catch rather than using `postRoute`.
 7. **No change** to `src/server/auth.ts`, `public/sw.js`, `prisma/`, `next.config.ts`, `package.json`.
 
-### M2. Integration tests (run on PGlite locally and on standard PostgreSQL in CI)
+#### M2. Integration tests (run on PGlite locally and on standard PostgreSQL in CI)
 New `test/integration/account-deletion.test.ts` (use `helpers.ts`: `createUser`, `onboard`, `planFor`, `insertJob`; create real Better Auth sessions with the existing pattern):
 1. **Full clearance.** Populate account A: profile, plan with completed, current and locked levels, several exercise versions, attempts (current and review), mastery events, idempotency keys, a failed job with `payloadJson`, a **real** reset token (request it through Better Auth, assert the `verification` row exists with `value = A`), today's `ai-request` counter, two sessions. Delete through the route. Assert **zero rows for A in every inventory table** (a scoped count per table, listed in the test), and that this account had mastery events (so the RESTRICT order is exercised).
 2. **Isolation.** Account B populated the same way: snapshot B's rows in every owner table and the shared tables (`MediaAsset`, `MediaVersion`, `MediaReview`, `TechniqueVersionState`, `TechniqueSuspensionEvent`) as `ORDER BY id` JSON before and after; byte-identical.
@@ -114,7 +288,7 @@ New `test/integration/account-deletion.test.ts` (use `helpers.ts`: `createUser`,
 8. **Deleted-account mapping (F3)** at the route level: `postRoute` with a valid session whose user row is deleted between authentication and the failure answers 401, not 500; with the user present, an unexpected error still answers 500 (unit test of the decision helper plus one route-level case).
 9. **Inventory guard.** List every table of the `public` schema from `information_schema` (excluding `_prisma_migrations`) and compare with an explicit classification in the test (deleted for the owner / retained shared / retained pseudonymous). An unclassified table fails the test. The classification mirrors the contract's inventory table.
 
-### M3. PostgreSQL-only concurrency tests (required)
+#### M3. PostgreSQL-only concurrency tests (required)
 `describe.skipIf(!REAL_POSTGRES)('account deletion on standard PostgreSQL', …)`, all added to `scripts/required-pg-tests.json` by their full titles. Use the deterministic pattern of `test/integration/media-generation.test.ts` (`waitingBackends`, `observeWaiting`, `pg_blocking_pids`, locks held by the test on independent connections; no sleep orders anything):
 1. **Deletion waits for a generation commit that holds the job row.** A transaction holds the job row (the `fenceJob` position); the deletion starts, is observed waiting behind it; the commit completes (plan created); the deletion proceeds and removes the committed plan as well. Nothing of the account remains.
 2. **Commit after the deletion.** A generation and an adaptation whose commit starts after the deletion committed stop at `fenceJob` (`GENERATION_PENDING`), create no row, refund nothing (`refundJobUnitOnce` matches no row), and the route answers 409/401, never 500.
@@ -124,7 +298,7 @@ New `test/integration/account-deletion.test.ts` (use `helpers.ts`: `createUser`,
 6. **F2 gap.** Using the injectable hook between the first job-lock pass and the puppy lock: a new `PENDING` job is inserted and its row is held by a test transaction that then waits for the puppy lock (the worker's commit position). The deletion's `NOWAIT` re-lock raises `55P03`, the deletion rolls back, releases the puppy, and the retry succeeds once the test transaction ends. No `40P01`, nothing remains.
 Also required for the evidence: the full PostgreSQL integration suite and these six run **locally on a real PostgreSQL** (see "Open owner items") before the single push, so that CI is a confirmation and not the first execution.
 
-### M4. UI (read `DESIGN_SYSTEM.md` §5, §8, §9, §12, §14 first; tokens only, no ad-hoc variants)
+#### M4. UI (read `DESIGN_SYSTEM.md` §5, §8, §9, §12, §14 first; tokens only, no ad-hoc variants)
 1. **`src/components/account/DeleteAccount.tsx`** (+ `.module.css`). A destructive `Button` "מחיקת החשבון" opens the existing `Sheet` (native `<dialog>`). Props from the server page: `isAdmin` (current database role) and `hasAuditRecords`. Contents:
    - heading (the `Sheet` title) "מחיקת החשבון";
    - the scope statement (below), then, only when `hasAuditRecords`, the A4 line;
@@ -140,16 +314,16 @@ Also required for the evidence: the full PostgreSQL integration suite and these 
 3. **Success flow:** on `200`, a full navigation to `/?deleted=1` (not a client-side route change: it drops all client state; the session is already gone, so the client does not call sign-out). `?deleted=1` is a constant marker with no personal data. The service worker is unchanged (a navigation is network first).
 4. **`src/app/(main)/puppy/page.tsx`:** in the "חשבון" card replace "עריכת פרטים ומחיקת חשבון יתווספו בהמשך." with the new `DeleteAccount` (sign-out stays; the card keeps one clear order: sign-out, then the destructive action last). **`src/app/page.tsx`:** when `deleted=1`, a short status line "החשבון נמחק." with `role="status"`, shown above the usual welcome content; no other change.
 
-### M5. E2E (Playwright, three viewports, disposable accounts from the existing `owner` fixture only, local test database)
+#### M5. E2E (Playwright, three viewports, disposable accounts from the existing `owner` fixture only, local test database)
 `e2e/account-deletion.spec.ts`: dialog opens with focus on "ביטול"; Escape closes and restores focus; axe clean; RTL; no horizontal overflow at 360 px; reduced motion; cancel deletes nothing (the account still works); a wrong password shows the inline error and keeps the dialog; a successful deletion lands on `/` with "החשבון נמחק.", `/home` redirects to `/`, and signing in with the old credentials fails; a **second browser context** signed in to the same account is signed out at its next navigation; the ADMIN explanation instead of the form when the disposable account is made ADMIN in the test database. Assertions use `expect.poll`, never sleeps. The existing `offline.spec.ts`, `pwa.spec.ts` and `shell.spec.ts` stay green and unchanged; `public/sw.js` is not in the diff. **Known local noise:** the PGlite test database is unstable under load and `auth.spec.ts` "register, onboard, refresh…" fails about half the time on `main` locally (shown on `7bc45f8`); report every rerun as a rerun; CI on standard PostgreSQL is the gate.
 
-### M6. Documentation
+#### M6. Documentation
 `DESIGN_SYSTEM.md` §8 ("Puppy and settings": the account card and the dialog, with the scope copy) and §14 (dialog states); `docs/DECISIONS.md` row `P4-4` (endpoint, password re-entry and limit, ADMIN block, the transaction order **as corrected by F1/F2 with the lock graph**, the F3 mapping, cookie expiry, accepted residues, B3 at 30 days, no migration); `README.md` new "Account deletion" section (behavior, what is deleted and kept, the A9 limits; for providers say only what is true: Supabase backups depend on the plan and the owner's open "backups" decision, Resend keeps delivery logs, Vercel keeps runtime logs, the AI provider keeps requests under its own policy; invent no retention figure); `PRD.md` §8 (the 30-day payload retention is owner-approved, no longer "proposed"). Not touched: `public/sw.js`, `src/server/auth.ts`, `prisma/`, `.env.example`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`.
 
-### M7. Evidence
+#### M7. Evidence
 `team-Yuri/dev-phase4.md`: 4.4 section on top, the 4.3 and 4.2 records kept below unchanged.
 
-## Acceptance / Gating Criteria
+### Acceptance / Gating Criteria
 1. Branch `feature/phase-4-account-deletion` from `origin/main` `ad6b55a` (or recorded newer `main`) in a separate worktree; the shared folder's branch and `node_modules` untouched; the three Team Yuri artifacts are the first commit.
 2. `POST /api/account/delete` follows A2/A3/A7 and the final transaction; identity only from the session; the body schema has no id; a wrong password changes nothing; the limit key is taken before verification; ADMIN is refused.
 3. The transaction locks jobs, then plans, then the puppy, then re-locks jobs `NOWAIT`, retries at most 3 times, deletes in the listed order and ends with exactly one `user` row deleted; any error rolls everything back.
@@ -164,14 +338,14 @@ Also required for the evidence: the full PostgreSQL integration suite and these 
 12. After the owner-approved push: CI green on the final head, first attempt, both runs, "All N required PostgreSQL tests executed and passed" with the six new titles, e2e and build.
 13. Real-device checks (phone dialog, keyboard, VoiceOver reading the scope text) recorded as PENDING for 4.8; they do not block the merge.
 
-## Functional Testability Criteria
+### Functional Testability Criteria
 - Page the user can open: `/puppy`, "חשבון" card, "מחיקת החשבון" dialog; the welcome page after deletion.
 - User-visible behavior: cancel changes nothing; a wrong password shows an error and deletes nothing; the correct password removes the account, signs out every device and the credentials no longer work.
 - API: `POST /api/account/delete` with the responses 200, 400, 401, 403, 422, 429, 500 as specified.
 - Command-line flow: `npm run check`; `npm run test:integration` (and the PostgreSQL run); `npm run test:e2e`.
 - Minimal end-to-end flow: register a disposable account locally, onboard, practice and confirm mastery, delete it from `/puppy`, and check in the database that no owner row remains while another account and the shared media are unchanged.
 
-## Required Developer Evidence
+### Required Developer Evidence
 `team-Yuri/dev-phase4.md` (4.4 section), per `.claude/rules/20-testing.md` §80 and `30-docs.md` §50:
 1. `PHASE=4`, slice 4.4, branch, worktree path, base hash, `git merge-base HEAD origin/main`, confirmation that the shared folder was not touched.
 2. Implementation summary per milestone, and the interpretations list below.
@@ -187,14 +361,14 @@ Also required for the evidence: the full PostgreSQL integration suite and these 
 12. Real-device checklist (PENDING, owner).
 13. Known issues, scope compliance, declaration. After the owner-approved push: PR link, run ids and attempts, per-job results, integration counts, the required-tests line, the e2e count.
 
-## Out of Scope
+### Out of Scope
 - Profile editing, data export, soft or delayed deletion, admin deletion of other accounts, purging never-verified accounts (follow-up for 4.5/4.6).
 - Any change to payload retention code for remaining accounts (30 days already implemented; only recorded).
 - Any migration, change to `auth.ts`, the service worker, the update flow, the shell allowlist, media code, `MEDIA_REQUIRED`.
 - Deleting any real account, including the owner's own, in any environment.
 - 4.5-4.8 work.
 
-## Risks / Open Questions
+### Risks / Open Questions
 - **Owner items.** (1) **Approved by the owner on 2026-11-12:** running a throwaway PostgreSQL 17.11 server from the session scratchpad (the `embedded-postgres` npm package, outside the repository and removed afterwards, as in the 4.2 corrective cycle) for the six required tests and the full integration suite **before the single push** (scope of the approval: that tool, this purpose, this slice; it adds nothing to the project and is removed afterwards). Without it those tests would run for the first time in CI, and a failure there would cost a second push. (2) No other decision: B1-B3 are approved; the `plan.md` items (alert channel, backups, retention, sending domain, pilot recruitment, performance profile) affect only README specifics of A9 or later slices.
 - **Interpretations flagged for the Architect's final review** (none changes the intent of A1-A10): (I1) A5 steps 3 and 4 swapped, plans before the puppy (F1: deadlock against progression); (I2) the `NOWAIT` job re-lock with a bounded retry and the sixth PostgreSQL test (F2); (I3) the deleted-account 500 mapping at the `postRoute` choke point (`src/server/http.ts`) instead of per-path catches; (I4) cookie expiry built from `getCookies(auth.options)` rather than `auth.api.signOut`; (I5) one exported helper in `src/server/ai/quota.ts` because `keyOf` is private; (I6) the `/?deleted=1` marker and the welcome status; (I7) the final Hebrew copy; (I8) the body schema is not strict, so extra fields are ignored as A2 says; (I9) the password check runs inside the transaction before any lock, and the limit outside it.
 - **Production release consequence (for the later owner approval).** The release is code-only, with no migration. Merging to `main` starts the automatic Vercel production deployment. Rollback target: the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`). **A deletion is irreversible: a code rollback does not restore a deleted account**, so post-deploy verification must not delete a real account. Registration in production is limited to the tester address, so there is no disposable production account; the post-deploy checks are public and read-only (the route exists and refuses an unauthenticated or cross-origin request without deleting anything; the `/puppy` dialog is checked only up to the cancel button), and an actual production deletion is left entirely to the owner's decision.
@@ -202,12 +376,12 @@ Also required for the evidence: the full PostgreSQL integration suite and these 
 - **Local PGlite instability** (see M5) can hide or fake e2e failures; rerun and report honestly.
 - **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0).
 
-## Manager Review
-MANAGER_REVIEW_STATUS: APPROVED
+### Manager Review
+MANAGER_REVIEW_STATUS (slice 4.4): APPROVED
 
 Review of slice 4.4 (revision 1 of this design), 2026-11-13. Reviewed: branch `feature/phase-4-account-deletion`, HEAD `c92e2a8`, base `origin/main` `ad6b55a` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.4`, evidence in the 4.4 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed, no real account touched.
 
-### Review Notes
+#### Review Notes
 
 **Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are present and consistent. No reject condition applies.
 
@@ -249,8 +423,10 @@ Review of slice 4.4 (revision 1 of this design), 2026-11-13. Reviewed: branch `f
 
 **Criteria status.** 1-11: met. 12: pending the owner-approved push (CI on the final head, first attempt, both runs, "All 34 required PostgreSQL tests executed and passed", e2e and build). 13: PENDING for the owner by design.
 
-### Required Corrections
+#### Required Corrections
 None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, by copying `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder (the committed copy of `manager-phase4.md` predates this review and one line of the owner-items text, so it must be refreshed); (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no documentation-only commit afterwards; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval; the release is code-only with no migration, the rollback target is the production deployment of `ad6b55a` (`A8GhBhUGUhaS1vP5b9D54YHGnifz`), and a code rollback does not restore a deleted account.
+
+---
 
 ---
 

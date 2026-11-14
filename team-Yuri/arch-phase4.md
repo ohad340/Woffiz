@@ -4,7 +4,183 @@
 PHASE=4
 
 ## Status
-STATUS: APPROVED
+STATUS: READY_FOR_MANAGER
+
+Owner decisions recorded on 2026-11-14: E1 resolved as an explicit `EMAIL_SENDER_VERIFIED` flag (P1), and P4/P5 revised so that removal from the list blocks only new registration. No production environment change is authorized.
+
+Revision for **slice 4.5** (pilot access allowlist), 2026-11-14. Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`, PR #7) are approved, merged and deployed. Their contracts and final reviews are kept below as closed records and are not reopened.
+
+## Phase Goal
+Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/plan.md`. 4.1-4.4 are done. This revision details **slice 4.5 only**; 4.6-4.8 get their own contract later.
+
+**Slice 4.5 goal:** the server can admit a fixed list of pilot owners to registration through a server-only `PILOT_EMAILS` allowlist, next to `TESTER_EMAIL`.
+- Sign-in for existing accounts is unchanged.
+- Addresses not on the list get the same neutral Hebrew answer as today, with no account enumeration.
+- New access is granted only through the registration gate. Mail about an existing account (password reset, verification re-send) is not blocked by later removal from the list, as long as the provider can deliver it (P4).
+- **The allowlist is inert unless the owner has set `EMAIL_SENDER_VERIFIED=true` and `EMAIL_FROM` is outside `resend.dev`**, so the pilot cannot open by accident before the sending domain is verified and tested (P1).
+- Locally, with the outbox transport, the allowlist is fully testable without Resend.
+
+## Source References
+- `team-Yuri/plan.md` (APPROVED). Slice 4.5, and owner decision 3: "Pilot access is a server-side email allowlist now; a verified sending domain comes later. Opening the pilot to non-tester addresses is blocked until the owner has a domain verified in Resend."
+- PRD.md §1 (test phase limited to one tester address; registration and authentication mail) and §10 (server-only secrets).
+- README "Email" and "Deployment": the shared `onboarding@resend.dev` sender only delivers to the Resend account's own address; production variables; the "a verified sending domain is needed before anyone else can register" note.
+- Code baseline `origin/main` `0b18ee2`, read-only:
+  - `src/server/email/config.ts`: `emailTransport`, `signUpPolicy` (`closed | tester | open`), `signUpAllowedFor`, `normalizeEmail` (trim + lower-case), `EMAIL_SHAPE`;
+  - `src/server/email/delivery.ts`: `sendAuthEmail` delivers on Resend only to `TESTER_EMAIL`, otherwise logs and returns neutrally; `guardEmailRequest`: per-IP and per-address limits and a 1 s minimum response time;
+  - `src/server/auth.ts`: the `policy` constant read at module load; `disableSignUp` when closed; the `before` hook on `/sign-up/email` throws `SIGN_UP_RESTRICTED`; `databaseHooks.user.create.before` as the second line of defense; `onExistingUserSignUp` re-sends verification to unverified accounts;
+  - `src/server/local-mode.ts`: `isLocalMachine`, `signUpEnabled`;
+  - `src/app/page.tsx` passes `signUpPolicy().kind` to `AuthForm`;
+  - `src/components/auth/AuthForm.tsx` (`SignUpMode = 'closed' | 'tester' | 'open'`) and `messages.ts` (`SIGN_UP_RESTRICTED`: "בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות.");
+  - `test/integration/email-auth.test.ts` (tester-phase suite), `src/server/email/config.test.ts`;
+  - `.env.example`.
+
+## Current-state findings that shape the design
+1. Registration and mail share one decision: `emailTransport()` gives `resend` only when `TESTER_EMAIL` is set, and `sendAuthEmail` refuses every other recipient on Resend. **Admitting an address to registration without also admitting it to delivery would create accounts that can never be verified.** Delivery must therefore cover every allowed address, and, per the owner (P4), existing accounts as well.
+2. The shared `onboarding@resend.dev` sender delivers only to the Resend account's own address. On that sender a pilot address can register but never receive its verification link. So the allowlist has a meaning only once `EMAIL_FROM` uses another, verified domain.
+3. The policy is computed once per server instance (`const policy = signUpPolicy()` in `auth.ts`), and Vercel applies environment changes only to new deployments. **Changing `PILOT_EMAILS` in production therefore requires a redeploy.**
+4. The non-allowed answer today is an explicit `403 SIGN_UP_RESTRICTED` with the Hebrew line above. It reveals whether an address may register, but never whether an account exists. The owner asked to keep this ("as today").
+5. `onExistingUserSignUp` re-sends verification for an unverified account. A person who never verified is therefore not locked out: registering again, while still allowed, re-sends the link.
+
+## Architectural Decisions
+
+| Decision | Rationale | Consequence |
+|---|---|---|
+| P1. **Activation rule (owner decision E1, 2026-11-14).** New server-only variable **`EMAIL_SENDER_VERIFIED`**, default false. Only the exact value `true` (after trim, case-insensitive) counts as true; anything else is false. On the Resend transport, `PILOT_EMAILS` is honored **only when both** `EMAIL_SENDER_VERIFIED` is true **and** the sender address in `EMAIL_FROM` is outside the shared `resend.dev` domain. If either condition is missing, the list is ignored, the policy stays tester-only, and one warning is logged per process (which condition failed and a count, no addresses). **Local exception (interpretation, flagged):** on the local outbox transport (local machine only, nothing leaves the machine), the list is honored without the flag, so the pilot policy is testable. Production never uses the outbox transport. | Two independent deliberate signals. The flag records the owner's confirmation; the domain check guards against a flag set while the shared sender is still configured. | The owner opens the pilot with deliberate production changes, each a separate approval and followed by a redeploy, in this order:<br>(1) verify the sending domain in Resend;<br>(2) a successful delivery test;<br>(3) switch `EMAIL_FROM` to that domain;<br>(4) set `EMAIL_SENDER_VERIFIED=true`;<br>(5) set `PILOT_EMAILS`.<br>Nothing is authorized now. |
+| P2. **Policy shape.** `SignUpPolicy` gains `{ kind: 'pilot', tester: string \| null, emails: ReadonlySet<string> }`; the existing `closed`, `tester` and `open` keep their meaning. Priority:<br>(1) local outbox with `LOCAL_SIGNUP=true` gives `open` (unchanged);<br>(2) a valid allowlist that is active under P1 (Resend: flag true and sender outside `resend.dev`; or the local outbox) gives `pilot`;<br>(3) Resend with `TESTER_EMAIL` gives `tester` (unchanged);<br>(4) otherwise `closed`.<br>In `pilot`, an address may register if it equals `TESTER_EMAIL` (when set) or is in `emails`. | Minimal change to the one decision point. Better Auth's `disableSignUp` stays `kind === 'closed'`. | Every consumer (`auth.ts` hook, database hook, delivery, the welcome page) asks one function, `signUpAllowedFor`. |
+| P3. **Parsing `PILOT_EMAILS` (fixed rules, no owner decision needed).**<br>- Separators: commas, semicolons and any whitespace, including newlines; empty items are dropped.<br>- Each entry goes through `normalizeEmail` (trim, lower-case) and must match the existing `EMAIL_SHAPE` **and** be printable ASCII. No provider-specific folding (no Gmail dot or `+tag` removal): match is exact after lower-casing, so a `+tag` address must be listed as such.<br>- Duplicates are removed.<br>- **Limit: at most 200 distinct entries** (the pilot targets 20-30 owners) and at most 16 KB raw.<br>- **Fail closed:** if any entry is malformed, or a limit is exceeded, the whole list is ignored and the policy falls back to rule (3)/(4), with one warning per process logged (counts only).<br>- An empty or unset variable gives no allowlist. | A typo must never silently admit or drop someone. Ignoring the whole list is visible: no pilot address can register, and the log says why. ASCII-only avoids homograph look-alikes. | Pure, unit-tested parser. The owner corrects the list and redeploys. |
+| P4. **Delivery (revised by the owner, 2026-11-14).** The registration gate decides who gets an account; delivery decides who gets mail.<br>- **Shared sender** (tester mode, `resend.dev` or flag false): unchanged. Mail goes only to `TESTER_EMAIL`, the provider's own limit.<br>- **Verified sender** (P1 active): `sendAuthEmail` delivers to an address that is allowed by `signUpAllowedFor` **or belongs to an existing account** (checked server-side by the normalized email). This covers password reset, verification re-send and account recovery for accounts whose address was later removed from `PILOT_EMAILS`.<br>- Any other recipient is skipped with the existing neutral log line (no address).<br>- Outbox: unchanged. | Removing someone from the list must stop new registrations, not lock an existing owner out of recovery. Every mail path already concerns an existing user row: sign-up creates the row only after the gate, and reset and re-send require an account. The extra account check keeps arbitrary addresses unreachable even if a future caller passes one. | No enumeration change. Better Auth's reset and re-send answer generically whether or not the account exists, and `guardEmailRequest` keeps its 1 s floor and limits. The account lookup happens inside the send path, under that floor. |
+| P5. **Sign-in and recovery unchanged.** The allowlist is consulted only when an account is created. Existing accounts, including those whose address was later removed from the list, sign in, reset their password and re-send verification as before, whenever the provider permits delivery (P4). Removal from the list blocks only new registration of that address. Revoking an existing account's access is out of scope; the person can delete their account (4.4). | Owner decision 2026-11-14. No lock-outs mid-pilot. | Documented in README. |
+| P6. **No enumeration; neutral copy kept.** Non-allowed addresses get today's answer: the `before` hook's `403 SIGN_UP_RESTRICTED`, shown as "בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות.", with the same timing floor from `guardEmailRequest`. Existing-account behavior (generic success, re-send only for unverified) is unchanged. `AuthForm` treats `pilot` exactly like `tester`: same restricted-registration line, no list contents, no count. | "As today" (finding 4). The answer reveals list membership only, never account existence, as the tester gate already does. | `SignUpMode` gains `pilot` with the tester copy; no new Hebrew strings unless the Manager finds the tester line inaccurate for `pilot`. |
+| P7. **No migration, no new storage, no new dependency.** The list lives only in the server environment and is never sent to the client, logged or rendered. | Scope and privacy. A database-backed or admin-editable list is a later option, not 4.5. | The release is code-only. The production variable is a separate owner approval. |
+| P8. **Never-verified accounts follow-up goes to 4.6, not 4.5.** Purging accounts that never verified is a scheduled retention job with a retention period (an owner decision), next to the existing 30-day payload pruning and the analytics retention that 4.6 must decide anyway. 4.5 changes nothing for them: they are not locked out (finding 5, and under P4 the verification re-send for an existing account is delivered even after removal from the list). | 4.5 stays a pure gate change. Purging is deletion of personal data and needs its own contract and retention decision. | Recorded in plan.md as a 4.6 item. 4.5's README states that unverified accounts are not purged yet. |
+| P9. **Everything else unchanged:** service worker, offline fallback, owner-activated update, shell allowlist, account deletion (4.4), progression, media, `MEDIA_REQUIRED` (off) and video production (paused). | Scope discipline. | — |
+
+## Constraints / Non-Negotiables
+- `PILOT_EMAILS` is server-only. It never appears in client bundles, responses, logs or the UI, and it is never committed with real addresses (only empty or `example.test` values in `.env.example` and tests).
+- The pilot cannot open unless `EMAIL_SENDER_VERIFIED` is true **and** the sender is outside `resend.dev` (P1). Both default to closed. No production environment variable is added or changed as part of implementation.
+- Fail closed on any malformed or oversized list (P3).
+- No enumeration of accounts (P6). Existing timing and rate limits unchanged.
+- No migration, no dependency, no change to the 4.2-4.4 behavior.
+- Real addresses are never used in tests. Only `*.test` / `example.test` addresses.
+
+## Technical Boundaries / Out of Scope
+- Configuring or verifying the Resend sending domain, the delivery test, and changing production `EMAIL_FROM`, `EMAIL_SENDER_VERIFIED` or `PILOT_EMAILS` (owner actions, each a separate approval).
+- An admin UI or database table for the list; invitations or invite links; per-address expiry; revoking access of existing accounts.
+- Purging never-verified accounts (4.6, P8).
+- Analytics and alerts (4.6), drills (4.7), device matrix and usability (4.8).
+
+## Dependencies and Interfaces
+
+### Expected files (slice 4.5)
+Modified:
+- `src/server/email/config.ts`: the `pilot` policy, the parser (P3) and the activation rule (P1); `signUpAllowedFor` for `pilot`.
+- `src/server/email/delivery.ts`: P4 (revised): tester-only on the shared sender; allowed-or-existing-account on the verified sender.
+- `src/server/auth.ts`: only if needed so that the hook and the database hook use the extended policy. No other Better Auth configuration change.
+- `src/components/auth/AuthForm.tsx` (`SignUpMode` gains `pilot`); `src/app/page.tsx` only if the type requires it.
+- `src/server/email/config.test.ts`: the parser and policy matrix.
+- `test/integration/email-auth.test.ts`, or a sibling file: direct sign-up API calls under the pilot policy.
+- `.env.example`: documented `EMAIL_SENDER_VERIFIED="false"` and `PILOT_EMAILS=""`, with the rules and an `example.test` sample.
+- `README.md`: the "Email" table and the "Deployment" notes, plus an "Opening the pilot" checklist (owner steps, each a separate approval).
+- `docs/DECISIONS.md` `P4-5`; `team-Yuri/plan.md` (Architect: the follow-up moved to 4.6).
+
+Not touched: `prisma/`, `public/sw.js`, `public/offline.html`, `next.config.ts`, the account-deletion code, media code, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`.
+
+### Interfaces
+- Environment: `EMAIL_SENDER_VERIFIED` (server-only, optional, default false; only `true` enables). `PILOT_EMAILS` (server-only, optional). Grammar: entries separated by `,`, `;` or whitespace; each a valid ASCII email; at most 200 distinct entries; at most 16 KB.
+- No new HTTP route. `POST /api/auth/sign-up/email` behavior per policy:
+  - allowed new address: generic success, verification mail sent;
+  - allowed existing address: generic success, re-send only if unverified (unchanged);
+  - not allowed: `403 SIGN_UP_RESTRICTED`, no mail, no row.
+
+## Data / State Considerations
+- No schema change, no migration.
+- The list is read once per server instance (finding 3). A change takes effect on the next deployment.
+- No personal data is stored beyond what registration already stores.
+
+## Security / Privacy Considerations
+- Two independent enforcement points stay in place (the `before` hook and `databaseHooks.user.create.before`), both through `signUpAllowedFor`. Direct API calls are covered by the same code.
+- Mail reaches only the tester on the shared sender. On the verified sender it reaches allowed addresses and existing accounts only (P4). The pilot cannot open without the explicit flag and a non-`resend.dev` sender (P1).
+- Logs carry counts and fixed text only, never addresses or the list.
+- Membership disclosure (the 403 tells a caller whether an address may register) is accepted "as today". It never reveals account existence.
+
+## Testing and Lint Expectations
+Automated (Developer, recorded in `dev-phase4.md`):
+- `npm run check` passes.
+- **Unit (`config.test.ts`), parser:**
+  - comma, semicolon, space, tab and newline separators;
+  - mixed case and surrounding whitespace normalize;
+  - duplicates collapse;
+  - `+tag` kept exactly;
+  - each of these makes the whole list ignored: a malformed entry, a non-ASCII entry, 201 distinct entries, more than 16 KB;
+  - empty and unset give no list.
+- **Unit (`config.test.ts`), policy matrix:**
+  - Resend with the shared `resend.dev` sender plus `PILOT_EMAILS`, with the flag false **and** with the flag true, gives `tester` (list ignored);
+  - Resend with a non-`resend.dev` sender plus a valid list and the flag unset, false, `1` or `yes` gives `tester`;
+  - Resend with a non-`resend.dev` sender plus a valid list and `EMAIL_SENDER_VERIFIED=true` (also ` TRUE `) gives `pilot`;
+  - the same with an invalid list gives `tester`;
+  - Resend without `TESTER_EMAIL` keeps today's behavior unchanged;
+  - local outbox plus `LOCAL_SIGNUP=true` gives `open`;
+  - local outbox plus a valid list (no `LOCAL_SIGNUP`) gives `pilot`;
+  - outbox off the local machine gives `none`/`closed`;
+  - `signUpAllowedFor` covers the tester, a listed address (case-insensitive), an unlisted address and a non-string.
+- **Integration (direct `POST /api/auth/sign-up/email` against a policy built from a test environment; the Manager chooses how to build that instance without changing production configuration):**
+  - a listed address registers and gets exactly one verification message;
+  - the tester address registers;
+  - an unlisted address gets `403 SIGN_UP_RESTRICTED`, no `user` row and no message;
+  - the same three under the shared sender: only the tester is admitted;
+  - the database hook alone refuses an unlisted address when the route hook is bypassed;
+  - delivery on the verified sender: an existing account whose address was removed from the list still receives its password-reset mail and a verification re-send, and still signs in (P4, P5);
+  - its new registration is refused;
+  - delivery to an address with no account and not on the list sends nothing and answers neutrally;
+  - on the shared sender, only the tester receives mail (unchanged);
+  - the timing floor and rate limits are unchanged.
+- E2E: the existing suites stay green (the e2e server keeps the `open` policy). No `playwright.config.ts` change.
+- CI green on the final head, as before. No new PostgreSQL-only test is expected.
+
+## Functional Testability
+- Command-line flow: run the local production build with the outbox transport (P1 local exception, no flag needed), `PILOT_EMAILS="pilot1@example.test"` and without `LOCAL_SIGNUP`. Registering `pilot1@example.test` writes a verification message to the outbox. Registering `other@example.test` shows "בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות." and writes nothing.
+- API: the same through `POST /api/auth/sign-up/email`.
+- Page: `/` (registration form) in pilot mode shows the restricted-registration line.
+- Expected result: as above, asserted by integration tests and recorded once manually in the evidence.
+
+## Handoff Notes for Manager
+- Detail slice 4.5 only. Base `main` `0b18ee2`, new branch and worktree. Bring over the updated artifacts from the shared folder.
+- Apply E1 as decided by the owner: `EMAIL_SENDER_VERIFIED` (default false) **and** a sender outside `resend.dev` (P1); P4 and P5 as revised. The local-outbox exception in P1 is an Architect interpretation for testability; keep it local-only.
+- Confirm how a test can build a Better Auth instance with a pilot policy without changing production `auth.ts` behavior. A small factory is acceptable if the default export behaves identically.
+- Verify the Resend sender rule against current Resend documentation: the shared `resend.dev` sender delivers only to the account's own address.
+- Production `EMAIL_FROM`, `EMAIL_SENDER_VERIFIED` and `PILOT_EMAILS` changes are owner actions with separate approvals, in the P1 order (domain verified, delivery test, sender, flag, list) with a redeploy. The README "Opening the pilot" checklist lists them.
+
+## Owner Decisions (slice 4.5)
+
+Resolved by the owner on 2026-11-14:
+
+| # | Decision | Owner decision |
+|---|---|---|
+| E1 | What activates the allowlist on Resend | **Explicit `EMAIL_SENDER_VERIFIED=true`, default false**, and `EMAIL_FROM` outside `resend.dev`; both required (P1). The production flag is set only after the sending domain is verified in Resend and a delivery test succeeds. |
+| E2 | Effect of removing an existing account's address from `PILOT_EMAILS` | **Blocks new registration only.** Password reset and account recovery continue whenever the provider permits delivery (P4, P5 revised). |
+
+Recorded, not blocking:
+- **Adding or changing any production environment variable** (`EMAIL_FROM`, `EMAIL_SENDER_VERIFIED`, `PILOT_EMAILS`) is a separate owner approval each time, followed by a redeploy. **No production environment change is authorized now.** Implementing 4.5 changes no production variable.
+- **No migration** in 4.5.
+- **Never-verified accounts follow-up: assigned to 4.6** (P8). Its retention period is an owner decision there.
+- The open plan.md decision "sending domain" remains the owner's action that actually opens the pilot. "Alert channel", "backups", "pilot recruitment" and "performance profile" do not affect 4.5.
+
+## Architect Review
+ARCHITECT_REVIEW_STATUS: NOT_REVIEWED
+
+Current revision: slice 4.5. The final reviews of slices 4.4, 4.3 and 4.2 are in the closed records below.
+
+### Review Notes
+
+### Required Corrections
+
+---
+
+## Slice 4.4 record (APPROVED, merged in `0b18ee2`; closed, not reopened)
+The text below is the slice 4.4 contract, its design-stage corrections and its final Architect review exactly as approved, with headings demoted one level and its status lines qualified as slice 4.4.
+
+### Status
+STATUS (slice 4.4): APPROVED
 
 Slice 4.4 approved in final review on 2026-11-13 (see "Architect Review").
 
@@ -12,7 +188,7 @@ Owner decisions B1-B3 approved on 2026-11-12 (see "Owner Decisions"). This appro
 
 Revision for **slice 4.4** (account deletion), 2026-11-12. Slices 4.2 (`7bc45f8`) and 4.3 (`ad6b55a`, PR #6) are approved, merged and deployed. Their contracts and final reviews are kept below as closed records and are not reopened.
 
-## Phase Goal
+### Phase Goal
 Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/plan.md`. 4.1-4.3 are done. This revision details **slice 4.4 only**; 4.5-4.8 get their own contract later, each before it starts.
 
 **Slice 4.4 goal:** a signed-in, verified owner can permanently delete their account from `/puppy`.
@@ -23,7 +199,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 - No in-flight generation, adaptation, revision, onboarding or progression request can commit afterwards or recreate deleted data.
 - Shared media and other accounts are untouched.
 
-## Source References
+### Source References
 - `team-Yuri/plan.md` (APPROVED), slice 4.4.
 - PRD.md §8: "Account deletion deletes personal profiles, plans and attempts and removes linked job payloads. Shared media assets remain. Proposed failed-job payload retention: 30 days; application backups and provider retention must be documented before launch."
 - PRD §5 progression contract; §10 server requirements (authenticated requests, CSRF, transactions, server-only secrets).
@@ -46,7 +222,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
   - `src/server/email/rate-limit.ts`: `takeRateLimit`;
   - `src/components/ui/Sheet.tsx`: native `<dialog>`; `Button` has a `destructive` variant.
 
-## Current-state findings that shape the design
+### Current-state findings that shape the design
 1. **Two `ON DELETE RESTRICT` foreign keys block a naive cascade:**
    - `Attempt.exerciseVersionId → ExerciseVersion`;
    - `MasteryEvent.attemptId → Attempt`.
@@ -63,7 +239,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 5. **Payload retention already exists in code.** `pruneJobPayloads` clears `GenerationJob.payloadJson` older than 30 days, run opportunistically when a job starts. The PRD calls the 30 days "proposed"; it is not owner-approved.
 6. **Everything owner-scoped chains to `user` through a foreign key** (`Puppy.ownerId`, `IdempotencyKey.userId`, `session`, `account`; `Plan`, `Attempt` and `GenerationJob` through `Puppy`). Once the `user` row is gone, no insert can recreate owner data, because the foreign key fails. The exception is `AiUsageDay`, whose keys are hashes with no foreign key.
 
-## Architectural Decisions
+### Architectural Decisions
 
 | Decision | Rationale | Consequence |
 |---|---|---|
@@ -78,7 +254,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 | A9. **Honest scope copy (Hebrew; final wording by the Manager within this meaning):**<br>- **Deleted now, irreversibly:** the account, email address and password, all sessions, the puppy profile and onboarding answers, all training plans and exercises, practice reports and mastery confirmations, and AI generation records including their stored outputs.<br>- **Retained:** shared demonstration media, which never contained the owner's data; for a former administrator, also the A4 line on the opaque identifier in video review records.<br>- **Limits:** recovery is not possible; copies may remain for a limited time in the hosting and email providers' backups and logs under their own retention, and in any generation request that was already being processed.<br>The copy must not promise a removal time we do not control, and it names no providers. | PRD §8 requires backups and provider retention to be documented. The copy must match actual behavior exactly. | README documents the same limits with specifics: Supabase backups depend on the plan (open owner decision "backups"); Resend keeps delivery logs; Vercel runtime logs; AI provider request retention. |
 | A10. **No change elsewhere.** No change to the service worker (P4-1 to P4-3 unchanged: `/api/*` is never cached and pages are network-first), the update flow, progression rules, generation prompts, media or `MEDIA_REQUIRED` (off). No deletion of real accounts in any environment except disposable test accounts on local or CI databases. | Scope discipline. | Deleting any real account in production, including the owner's own test account, happens only through the shipped UI by that account's owner. |
 
-## Owner-scoped deletion inventory (complete, from `prisma/schema.prisma` at `ad6b55a`)
+### Owner-scoped deletion inventory (complete, from `prisma/schema.prisma` at `ad6b55a`)
 
 | Table | Scope key | Action in 4.4 | Note |
 |---|---|---|---|
@@ -102,7 +278,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 
 A guard test lists every table from `information_schema` and fails if a table is not classified in this inventory, so a future table cannot silently escape deletion.
 
-## Constraints / Non-Negotiables
+### Constraints / Non-Negotiables
 - The identity comes only from the session. No caller-supplied owner, user or puppy id is accepted anywhere in 4.4.
 - One transaction: all or nothing. No partial deletion is observable.
 - Progression invariants untouched. Deletion is the only new write path, and it only deletes.
@@ -112,16 +288,16 @@ A guard test lists every table from `information_schema` and fails if a table is
 - Pilot scope stays as agreed: no videos; approved emails only once the sender domain is verified (4.5); first-party analytics (4.6).
 - No production migration, merge, deployment or deletion of real accounts without explicit owner approval. Merging to `main` is the production deployment.
 
-## Technical Boundaries / Out of Scope
+### Technical Boundaries / Out of Scope
 - Profile editing; data export; delayed or soft deletion ("grace period"); admin-initiated deletion of other accounts; support tooling.
 - Purging never-verified accounts. They cannot sign in, so they cannot use this flow. This is recorded as a follow-up for 4.5/4.6, not built here.
 - Changing the payload retention for remaining accounts. B3 is approved at the 30 days already implemented, so 4.4 changes no retention code; it only records the decision in `P4-4` and the README.
 - Rewriting media audit rows; any migration.
 - 4.5-4.8 work.
 
-## Dependencies and Interfaces
+### Dependencies and Interfaces
 
-### Expected files (slice 4.4)
+#### Expected files (slice 4.4)
 New:
 - `src/server/account-deletion.ts`: the A5 transaction and A6 error mapping, with injectable dependencies for the rollback test.
 - `src/app/api/account/delete/route.ts`: A2/A3/A7.
@@ -139,7 +315,7 @@ Modified:
 
 Not touched: `public/sw.js`, `public/offline.html`, `next.config.ts`, `src/server/auth.ts` (unless the Manager shows a required configuration change, which is a contract change), `prisma/schema.prisma` and `prisma/migrations/`, media code, `playwright.config.ts`, `.env.example`, `package.json`, `package-lock.json`.
 
-### Interfaces
+#### Interfaces
 - `POST /api/account/delete`. Body: `{ password: string }` (bounded length). Same-origin JSON. Possible responses:
   - `200 { deleted: true }`, with expired auth cookies;
   - `401 UNAUTHENTICATED`;
@@ -150,18 +326,18 @@ Not touched: `public/sw.js`, `public/offline.html`, `next.config.ts`, `src/serve
   - `500 INTERNAL`, with nothing deleted.
 - No other API, no schema change, no environment variable.
 
-## Data / State Considerations
+### Data / State Considerations
 - After success, no row in any owner-scoped table references the account (inventory).
 - Retained pseudonymous residues are documented: email rate-limit hashes (24 h), a possible late `ai-request` counter hash (7 days) and media audit actor ids (permanent, ADMIN history only).
 - **B3, remaining accounts' failed-job payloads (owner-approved 2026-11-12):** a maximum of 30 days, as `pruneJobPayloads` already implements. Account deletion removes the deleted account's job payloads immediately, inside the A5 transaction. Record the decision in `P4-4`, and update the PRD §8 wording ("proposed") in the same change.
 
-## Security / Privacy Considerations
+### Security / Privacy Considerations
 - Defenses: CSRF via same-origin JSON; session-only identity; password re-entry with a per-account limit; constant, neutral error text; no enumeration (the account is already the session's).
 - ADMIN self-deletion blocked (A4); `assertAdmin` reads the database, so a deleted or revoked admin can never act.
 - No personal data in logs. The route logs only error codes. In-flight AI requests already sent to the provider are outside our control; A9 says so.
 - Responses are `no-store`, and the service worker never caches `/api/*` (S2).
 
-## Testing and Lint Expectations
+### Testing and Lint Expectations
 Automated (Developer, recorded in `dev-phase4.md`):
 - `npm run check` passes.
 - Integration tests (PGlite locally, and standard PostgreSQL in CI):
@@ -191,7 +367,7 @@ Automated (Developer, recorded in `dev-phase4.md`):
 
 Manual or owner (PENDING, not a merge blocker): deletion on a real phone (dialog, keyboard, VoiceOver reading the scope text). It belongs to the 4.8 matrix.
 
-## Functional Testability
+### Functional Testability
 - Page/screen: `/puppy`, "חשבון" card, "מחיקת החשבון" dialog; welcome page `/` after deletion.
 - User-visible behavior:
   1. Open the dialog, read the scope, cancel: nothing changes.
@@ -205,7 +381,7 @@ Manual or owner (PENDING, not a merge blocker): deletion on a real phone (dialog
   4. Database check: zero owner rows, other accounts and media unchanged.
 - Expected result: as above, asserted by integration and e2e tests.
 
-## Handoff Notes for Manager
+### Handoff Notes for Manager
 - Detail slice 4.4 only. Base `main` `ad6b55a`, new branch and worktree.
 - Apply the owner decisions B1-B3 below (approved; no further approval round). They do not authorize deleting real accounts, any migration, merging or deploying.
 - Verify against Better Auth 1.7.14 (source or official docs): the password verifier API, the reset-token storage in `verification`, the session cookie names and attributes, and a supported way to expire them from a route handler.
@@ -213,7 +389,7 @@ Manual or owner (PENDING, not a merge blocker): deletion on a real phone (dialog
 - List every path where a deleted account would surface as a 500 today, and map only those (A6).
 - No migration. If one becomes necessary, stop and return to the Architect.
 
-## Design-stage corrections and rulings (2026-11-12)
+### Design-stage corrections and rulings (2026-11-12)
 Input: `team-Yuri/manager-phase4.md` slice 4.4 revision 1 (STATUS: READY_FOR_DEVELOPER), sections "Lock-order check", "Deleted-account responses today" and "Risks / Open Questions". I checked the lock graph against `src/server/progress.ts` (`recordAttempt`/`confirmMastery`: `lockPlan`, then `attempt.create`), `src/server/onboarding.ts`, `src/server/revision.ts` and `src/server/ai/jobs.ts` at `ad6b55a`, read-only.
 
 **Corrections to the contract (accepted; the Architect's A5 was wrong):**
@@ -239,7 +415,7 @@ Input: `team-Yuri/manager-phase4.md` slice 4.4 revision 1 (STATUS: READY_FOR_DEV
 
 Contract status: still READY_FOR_MANAGER, now with C1-C3. No migration and no change to A1-A4 or A7-A10.
 
-## Owner Decisions (slice 4.4)
+### Owner Decisions (slice 4.4)
 
 All approved by the owner on 2026-11-12:
 
@@ -253,12 +429,12 @@ Also recorded:
 - The open plan.md decision "backups" affects only the README specifics of A9, not the UI wording.
 - None of the other open plan.md decisions (alert channel, sending domain, pilot recruitment, performance profile) affects 4.4.
 
-## Architect Review
-ARCHITECT_REVIEW_STATUS: APPROVED
+### Architect Review
+ARCHITECT_REVIEW_STATUS (slice 4.4): APPROVED
 
 Current revision: slice 4.4. The final reviews of slices 4.3 and 4.2 are in the closed records below.
 
-### Review Notes
+#### Review Notes
 Final review of slice 4.4, 2026-11-13.
 - Inputs: `team-Yuri/manager-phase4.md` ("Manager Review", MANAGER_REVIEW_STATUS: APPROVED, no corrections; shared folder) and the 4.4 section of `team-Yuri/dev-phase4.md` (STATUS (slice 4.4): COMPLETE; committed in the worktree).
 - Branch `feature/phase-4-account-deletion`, HEAD `c92e2a8`, base `ad6b55a` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.4`. Local only: not on the remote, no PR, no CI run yet.
@@ -332,8 +508,9 @@ Final review of slice 4.4, 2026-11-13.
 - The allowlist is built now. Opening the pilot to non-tester addresses stays blocked until the owner's sender domain is verified (owner decision, plan.md).
 - The never-verified-accounts follow-up is re-evaluated there.
 
-### Required Corrections
+#### Required Corrections
 None.
+
 
 ---
 
