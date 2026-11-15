@@ -84,6 +84,31 @@ export const test = base.extend<Fixtures>({
 
 export { expect }
 
+/**
+ * Names of the finite animations still running in the page (runs in the browser).
+ * A pending start already reports `running`. Infinite ones (the loading spinner and skeleton) never finish, so they are skipped.
+ */
+function runningFiniteAnimations(): string[] {
+  return document
+    .getAnimations()
+    .filter((a) => a.playState === 'running' && a.effect !== null && a.effect.getComputedTiming().iterations !== Infinity)
+    .map((a) => (a instanceof CSSAnimation ? a.animationName : a instanceof CSSTransition ? a.transitionProperty : a.id || 'animation'))
+}
+
+/**
+ * Waits until no finite animation is running, because axe measures colors as rendered and a fading panel is partly transparent.
+ * Bounded: at the bound it fails with what is still moving instead of running axe on a moving page.
+ */
+async function waitForFiniteAnimations(page: Page, timeoutMs = 2000) {
+  try {
+    await page.waitForFunction(`(${runningFiniteAnimations.toString()})().length === 0`, undefined, { timeout: timeoutMs })
+  } catch (error) {
+    const running = await page.evaluate(runningFiniteAnimations).catch(() => [] as string[])
+    if (running.length === 0) throw error
+    throw new Error(`expectHealthyPage: finite animations still running after ${timeoutMs} ms: ${running.length} (${running.join(', ')})`)
+  }
+}
+
 /** Hebrew RTL, a heading, no horizontal overflow and no serious or critical axe violations. */
 export async function expectHealthyPage(page: Page) {
   await expect(page.locator('html')).toHaveAttribute('lang', 'he')
@@ -91,6 +116,7 @@ export async function expectHealthyPage(page: Page) {
   await expect(page.locator('h1').first()).toBeAttached()
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow).toBeLessThanOrEqual(0)
+  await waitForFiniteAnimations(page)
   const results = await new AxeBuilder({ page }).analyze()
   const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
   expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([])
