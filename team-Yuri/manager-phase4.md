@@ -4,7 +4,7 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_DEVELOPER
+STATUS: APPROVED
 
 Scope of this revision: **slice 4.5 only** (pilot access allowlist), revision 1, 2026-11-14. Input: the 4.5 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions P1-P9, owner decisions E1-E2 resolved on 2026-11-14). Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.6-4.8 are not designed here. **No migration, no dependency, no production environment variable change.** Nothing in this document authorizes a push, a merge, a deployment or any production environment change.
 
@@ -162,12 +162,51 @@ Environment for the Resend cases: `RESEND_API_KEY` a non-real value, `EMAIL_FROM
 - **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0).
 
 ## Manager Review
-MANAGER_REVIEW_STATUS: NOT_REVIEWED
+MANAGER_REVIEW_STATUS: APPROVED
+
+Review of slice 4.5 (revision 1 of this design), 2026-11-15. Reviewed: branch `feature/phase-4-pilot-allowlist`, HEAD `6e3ae38`, base `origin/main` `0b18ee2` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.5`, evidence in the 4.5 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed, no production environment variable touched.
 
 ### Review Notes
-Not reviewed yet: no Developer evidence exists for slice 4.5.
+
+**Checklist (`developer-review-checklist.md`):** phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope and known issues are present and consistent. No reject condition applies.
+
+**Independent verification by the Manager (not copied from the evidence):**
+- **Scope.** `git diff 0b18ee2 HEAD --name-only` outside `team-Yuri/` lists exactly the eight files of criterion 10 (`.env.example`, `README.md`, `docs/DECISIONS.md`, `AuthForm.tsx`, `config.ts`, `config.test.ts`, `delivery.ts`, `test/integration/pilot-allowlist.test.ts`); the path-filtered diff over `src/server/auth.ts`, `src/app/page.tsx`, `prisma/`, `public/`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, `next.config.ts` and `DESIGN_SYSTEM.md` is empty. The three Team Yuri documents in the first commit are byte-identical to the shared folder (`cmp`).
+- **Implementation read in full:** the `config.ts`, `delivery.ts` and `AuthForm.tsx` diffs, the documentation diffs, the integration test file's case list and its second-line-of-defense test.
+- **Commands run by the Manager in the 4.5 worktree:** `vitest run` (unit) 19 files / 340 tests passed; `tsc --noEmit` exit 0; `eslint src test e2e scripts` clean; `npm run test:integration` on the local PGlite database for `pilot-allowlist.test.ts` together with the unchanged `email-auth.test.ts`: **34 passed, 1 skipped**; and `pilot-allowlist.test.ts` alone, a second time: **20 of 20 passed**.
+- **Head-to-head e2e comparison on `main` (review focus 3).** On a clean detached worktree of `main` `0b18ee2` (no 4.5 code) and on the 4.5 branch, same local database, one worker, 4 repetitions per project (12 runs per test):
+
+  | Test | `main` `0b18ee2` | 4.5 |
+  |---|---|---|
+  | `auth.spec.ts` "register, onboard, refresh…" | **8 failed, 4 passed** | 7 failed, 5 passed |
+  | `ai-plan.spec.ts` "…rebuilt…" | 2 failed, 10 passed | 0 failed, 12 passed |
+
+  Every `auth.spec.ts` failure, on both sides, is the same assertion with the same received URL (`/onboarding` instead of `/home`). These are the two tests the Developer reported as failing twice in suite runs and passing in isolation: **they fail on `main` at the same rate, so they are independent of 4.5**, which turns the Developer's stated inference into a measurement. The temporary worktree was removed and the local test database stopped. **How this was obtained, for the record:** the first comparison run never started a test (the `|` inside the `-g` pattern was split by the Windows shell, exit 255), and two later attempts stopped at the migration step with `P1001` because the local PGlite server was listening but no longer accepting connections; after restarting that database only the runs that had not executed were repeated. No result was taken from a run that did not execute.
+
+**1. Parser, sender rule, activation rule (`config.ts`).** All as specified. The ASCII check runs on the entry **as typed, before lower-casing** (the Kelvin sign, Cyrillic look-alikes and Hebrew are refused; a unit test covers each); the whole list is ignored on any malformed entry, more than 200 distinct entries or more than 16 384 characters (checked before splitting); an unset, empty or separators-only value is no list; `count` is an integer and reasons never carry an address. The sender parse reads `Name <addr>` or a bare address by the last `@`, treats `resend.dev`, `*.resend.dev` and an unparsable sender as shared (the suffix test needs the dot, so `notresend.dev` and `a@resend.dev.example.test` are not shared). The list is honored on Resend only with `EMAIL_SENDER_VERIFIED` exactly `true` (trim, case-insensitive) **and** a non-shared sender; on the outbox (which `emailTransport` returns only on a local machine) without the flag; `open` local sign-up keeps priority; the pilot still needs the Resend transport configured, including `TESTER_EMAIL`. Warnings are one line per reason per process through a module-level set, fixed text and counts only.
+
+**2. Delivery and the integration cases.** The verified-sender branch delivers to an allowed address or an existing account (`prisma.user.findUnique` on the normalized email); a failing lookup fails closed with the existing neutral log line; tester mode and the shared sender are unchanged; the outbox, `guardEmailRequest`, the one-second floor and the limits are untouched. The 20 cases cover every item of the contract's integration list: listed, tester and differently cased addresses admitted, an unlisted address refused with `403 SIGN_UP_RESTRICTED` and no row or mail, a `+tag` variant refused, the inert list on the shared sender and with the flag off or wrongly spelled, a malformed list ignored as a whole, the database hook alone (through `internalAdapter.createUser`), removal from the list (still signs in, still receives reset and verification mail, its new sign-up answers **identically** to a never-seen address), no mail to an unknown unlisted address with an identical answer, tester mode unchanged, the local outbox, the 900 ms floor and the per-address limit. They use the existing `deployed(env)` pattern with the mocked `deliver`; `email-auth.test.ts` is byte-identical and green.
+
+**3. E2E results.** The Developer's full run had 13 first-run failures and 8 tests that did not run (the serial `demo-video.spec.ts` after a failure), recovered to 18 of 21 by a rerun after restarting the database, with the remaining three passing in isolation. All of these are in specs that 4.5 does not touch (the e2e server keeps the `open` policy), and the comparison above shows the three persistent ones fail on `main` at the same rate. CI on standard PostgreSQL is the gate (criterion 12).
+
+**4. Recorded manual flow.** The recorded output is consistent with the design: a listed address registers (200) and writes one verification message to the outbox; an unlisted address gets `403 SIGN_UP_RESTRICTED` and writes nothing; `/` shows the restricted-registration line and the page contains neither the list nor an address. Only the local test database and reserved addresses were used.
+
+**5. Interpretations.** The Developer's seven, Manager position: (1) ASCII check before lower-casing: accepted, stricter and correct; (2) both warnings when both conditions fail: accepted, the owner sees every missing step; (3) integration tests in a sibling file with `email-auth.test.ts` untouched: accepted; (4) the HTTP-level test uses different casing but not surrounding whitespace, covered at the unit level because Better Auth rejects spaces first: accepted; (5) the database-hook test uses `try`/`catch`: accepted with the observation below; (6) one disposable row in the local database from the manual flow: accepted; (7) `auth.ts` and `page.tsx` unchanged: accepted. The Manager's own flagged I1-I9 are implemented as designed; the Architect rules on all of them in the final review.
+
+**Nothing in production is changed.** Neither `EMAIL_SENDER_VERIFIED` nor `PILOT_EMAILS` is added to any environment; `.env.example` defaults are `false` and empty; there is no migration, dependency, or change to `auth.ts`, `page.tsx`, `public/sw.js` or any 4.2-4.4 behavior. Registration and mail in production stay tester-only until the owner performs the separately approved steps of the README checklist.
+
+**Non-blocking observations (recorded, not corrections).**
+- The Developer wrote that a first version of the database-hook test, using `.catch(...)` on the call, failed inconsistently and was not diagnosed. The final `try`/`catch` form passed in the Developer's runs and in both Manager runs (20 of 20 twice, and inside the 35-test pair). If it ever fails in CI, diagnosing it is a prerequisite for another push.
+- The parser splits on JavaScript `\s`, which includes Unicode spaces such as a no-break space, so such a character between two addresses separates them instead of invalidating the list. This is lenient but safe, since every resulting entry is still validated as printable ASCII.
+- `delivery.ts` has `&&!` without a space; lint passes. Cosmetic only.
+- The baseline `npm run check` on the untouched tree was not run (the dependency install finished after editing began); the 4.4 evidence is the baseline, and the final tree passes with 340 tests (+55). CI is the independent confirmation.
+- The README states the Resend rule exactly as in the documentation checked on 2026-11-14 and keeps "Opening the pilot" as owner steps.
+- Real-device checks do not apply to this slice; opening the pilot (domain, delivery test, sender, flag, list) is PENDING for the owner and does not block the merge.
+
+**Criteria status.** 1-11: met. 12: pending the owner-approved push (CI on the final head, first attempt, both runs, "All 34 required PostgreSQL tests executed and passed", e2e and build). 13: PENDING for the owner by design.
 
 ### Required Corrections
+None. Conditions for the next stage (not corrections): (a) the Architect's final review and this review are committed in the worktree before the single push, by copying `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder; (b) one push, a draft PR, CI green on the final head in a single attempt on both runs; (c) the CI result is recorded in the PR description only, with no documentation-only commit afterwards; (d) merge to `main` and the automatic Vercel production deployment need the owner's explicit approval. The release is code-only with no migration and no production behavior change; the rollback target is the production deployment of `0b18ee2` (`6kx6RtfQTw6D84p2JJuRL1w9XJ9Z`); post-deploy checks are read-only (public assets and `/sw.js` unchanged, `/` unchanged, and one `POST /api/auth/sign-up/email` with a reserved `.test` address, a same-origin `Origin` header and a JSON body, expected to answer `403 SIGN_UP_RESTRICTED` with no account and no mail).
 
 ---
 

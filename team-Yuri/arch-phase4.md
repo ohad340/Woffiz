@@ -4,7 +4,9 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_MANAGER
+STATUS: APPROVED
+
+Slice 4.5 approved in final review on 2026-11-15 (see "Architect Review").
 
 Owner decisions recorded on 2026-11-14: E1 resolved as an explicit `EMAIL_SENDER_VERIFIED` flag (P1), and P4/P5 revised so that removal from the list blocks only new registration. No production environment change is authorized.
 
@@ -166,13 +168,88 @@ Recorded, not blocking:
 - The open plan.md decision "sending domain" remains the owner's action that actually opens the pilot. "Alert channel", "backups", "pilot recruitment" and "performance profile" do not affect 4.5.
 
 ## Architect Review
-ARCHITECT_REVIEW_STATUS: NOT_REVIEWED
+ARCHITECT_REVIEW_STATUS: APPROVED
 
 Current revision: slice 4.5. The final reviews of slices 4.4, 4.3 and 4.2 are in the closed records below.
 
 ### Review Notes
+Final review of slice 4.5, 2026-11-15.
+- Inputs: `team-Yuri/manager-phase4.md` ("Manager Review", MANAGER_REVIEW_STATUS: APPROVED, no corrections; shared folder) and the 4.5 section of `team-Yuri/dev-phase4.md` (committed in the worktree).
+- Branch `feature/phase-4-pilot-allowlist`, HEAD `6e3ae38`, base `0b18ee2` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.5`. Local only: not on the remote, no PR, no CI run yet.
+- Read with git: the full diffs of `src/server/email/config.ts`, `src/server/email/delivery.ts`, `src/components/auth/AuthForm.tsx` and `.env.example`, plus the evidence. Tests were not re-run by the Architect.
+
+**Scope.**
+- Outside `team-Yuri/`, the diff touches exactly `.env.example`, `README.md`, `docs/DECISIONS.md` (`P4-5`), `AuthForm.tsx`, `config.ts`, `config.test.ts`, `delivery.ts` and the new `test/integration/pilot-allowlist.test.ts`.
+- Not touched: `src/server/auth.ts`, `src/app/page.tsx`, `prisma/`, `public/`, `next.config.ts`, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`, `DESIGN_SYSTEM.md`.
+- No migration, no dependency.
+
+**Compliance with P1-P9 and E1-E2:**
+
+| Decision | Verdict | Evidence |
+|---|---|---|
+| P1 / E1 Activation | Compliant | On Resend, the list counts only when `EMAIL_SENDER_VERIFIED` trims and lower-cases to exactly `true` **and** `isSharedSender(EMAIL_FROM)` is false (`resend.dev`, `*.resend.dev` and an unparsable sender count as shared, which fails closed). The local outbox honors the list without the flag; `emailTransport` returns outbox only on a local machine. |
+| P2 Policy shape | Compliant | `pilot { tester, emails }`; priority open → active pilot → tester → closed. `disableSignUp` stays `kind === 'closed'`. Every gate goes through `signUpAllowedFor`. |
+| P3 Parsing | Compliant | Splits on `,`, `;` and whitespace. ASCII is checked on the entry as typed, before lower-casing. Lower-cased exact match, no folding, at most 254 characters per entry. Any bad entry, more than 200 distinct entries or more than 16 384 characters ignores the whole list. Unset, empty or separators-only means no list. Warnings carry counts only. |
+| P4 / E2 Delivery | Compliant | Shared sender and tester mode unchanged (tester only). Verified sender: allowed address **or** existing account (`user.findUnique` on the normalized email); a failing lookup fails closed; the neutral answer and the 1 s floor are unchanged. |
+| P5 Sign-in and recovery | Compliant | An address removed from the list still signs in and still receives reset and verification re-send mail. Its new sign-up answers identically to a never-seen address. |
+| P6 No enumeration | Compliant | Unlisted addresses get today's `403 SIGN_UP_RESTRICTED` and Hebrew line; `pilot` reuses the tester sentence; no list or count reaches the client. |
+| P7 No storage or migration | Compliant | Server environment only; never logged or rendered. |
+| P8 Never-verified follow-up | Compliant | Not touched; assigned to 4.6 in plan.md. |
+| P9 Nothing else changed | Compliant | Service worker, offline fallback, update flow, shell allowlist, account deletion, progression and media untouched. `MEDIA_REQUIRED` off, video paused. |
+
+**Rulings on the Developer's seven interpretations (the Manager accepted all), all acknowledged:**
+1. **ASCII check before lower-casing: acknowledged.** It is stricter and correct: it refuses the Kelvin sign and other look-alikes that lower-case to ASCII, and it meets P3's homograph intent.
+2. **Both warnings when both P1 conditions fail: acknowledged.** The owner sees every missing step. Text is fixed and holds no address.
+3. **Integration tests in a sibling file, `email-auth.test.ts` byte-identical: acknowledged.**
+4. **HTTP test uses different casing, not surrounding whitespace: acknowledged.** Better Auth rejects spaces with a 400 before our hook runs. Whitespace is covered at the unit level.
+5. **Database-hook test with `try`/`catch`: acknowledged, with the Manager's condition.** An earlier `.catch` form failed inconsistently and was not diagnosed. If the final form ever fails in CI, diagnosing it comes before another push.
+6. **One disposable row in the local test database from the manual flow: acknowledged.** Reserved `.test` address, local only.
+7. **`auth.ts` and `page.tsx` unchanged: acknowledged.** Both already route through `signUpPolicy`/`signUpAllowedFor` and treat every non-`closed` kind alike, so the policy constant in `auth.ts` picks up `pilot` without an edit.
+
+**Rulings on the Manager's I1-I9, all acknowledged:**
+- **I1, parser return shape and limits:** a `none | valid | invalid` union. The per-entry limit of 254 characters follows the email path limit, and the 16 384-character limit is checked before splitting. Within P3.
+- **I2, sender parse:** `Name <addr>` or a bare address, by the last `@`. `*.resend.dev` and an unparsable sender count as shared (fail closed). `notresend.dev` is correctly not shared.
+- **I3, warn-once:** one line per reason per process through a module-level set. The optional `warn` parameter is for tests only and does not change the default path.
+- **I4, delivery policy at send time:** the policy is computed in `sendAuthEmail` from the same environment as `auth.ts`, so it cannot diverge within a process. The account lookup fails closed.
+- **I5, Resend transport still required:** the pilot runs only on the Resend transport, which still requires `RESEND_API_KEY`, `EMAIL_FROM`, `TESTER_EMAIL` and `BETTER_AUTH_URL`. **Owner note: `TESTER_EMAIL` stays a required production variable even after the pilot opens.**
+- **I6, `deployed(env)` test pattern:** reuses the existing harness with a placeholder key and a mocked `deliver`. Nothing is sent or written, and production `auth.ts` behavior is unchanged.
+- **I7, `AuthForm` sentence:** `pilot` shows the tester line "בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות.", which is accurate for both.
+- **I8, no e2e addition:** acceptable. The e2e server keeps the `open` policy, the 20 HTTP-level integration cases cover the behavior, and one manual flow is recorded. No `playwright.config.ts` change.
+- **I9, README "Opening the pilot" checklist:** five owner steps in the E1 order (domain verified, delivery test, `EMAIL_FROM`, `EMAIL_SENDER_VERIFIED=true`, `PILOT_EMAILS`), each a separate approval followed by a redeploy, all PENDING.
+
+**The e2e failures are independent of 4.5.** The Developer had three tests that failed twice in suite runs and passed in isolation. The Manager measured them head to head on `main` `0b18ee2` (no 4.5 code) and on 4.5, with the same local database, one worker and 12 runs per test:
+- `auth.spec.ts` "register, onboard, refresh…": 8/12 failed on `main`, 7/12 on 4.5, with the same assertion and URL;
+- `ai-plan.spec.ts` "…rebuilt…": 2/12 failed on `main`, 0/12 on 4.5.
+
+They fail on `main` at the same or a higher rate. 4.5 touches neither flow, since the e2e server keeps `open`. CI on standard PostgreSQL is the gate. The persistent local flakiness of `auth.spec.ts` on PGlite remains the separately proposed follow-up, outside 4.5.
+
+**Production behavior: the release changes none.** Confirmed from the code:
+- In production `PILOT_EMAILS` is unset, so `activePilotList` returns null before parsing and without any warning.
+- The policy is `tester` exactly as before, and `signUpAllowedFor(tester)` behaves as before.
+- `sendAuthEmail` takes the unchanged tester-only branch, because the policy is not `pilot`.
+- `AuthForm` renders the same sentence for `tester`.
+- No environment variable was added or changed, and `.env.example` defaults to `false` and empty.
+- No migration; no change to `auth.ts`, `page.tsx`, the service worker or 4.2-4.4 behavior.
+
+The only runtime difference is one extra in-memory `signUpPolicy()` evaluation per send. Registration and mail stay tester-only until the owner performs the separately approved checklist steps.
+
+**Non-blocking observations (from the Manager, confirmed):**
+1. The parser splits on JavaScript `\s`, so a Unicode space such as a no-break space separates entries. This is lenient but safe, because every entry is still checked as printable ASCII.
+2. `&&!` without a space in `delivery.ts` is cosmetic; lint passes.
+3. No baseline `npm run check` was recorded on the untouched tree. The 4.4 evidence serves as the baseline, and CI is the independent confirmation.
+
+**Merge conditions:**
+- **C1 (open):** copy `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder and commit them in the worktree before the single push. Then one push and a draft PR. CI on the final head must be green in a single attempt on both runs: the build job, and the PostgreSQL job with "All 34 required PostgreSQL tests executed and passed" and e2e. The result goes in the PR description only. A CI failure reopens this review, including any failure of the database-hook test (interpretation 5).
+- **C2 (open, owner):** merging to `main` starts the automatic Vercel production deployment, so the merge approval is also the deployment approval.
+  - Code-only, no migration, **no production behavior change**. Rollback target: the production deployment of `0b18ee2` (`6kx6RtfQTw6D84p2JJuRL1w9XJ9Z`).
+  - Post-deploy checks are read-only: `/` and `/sw.js` unchanged, plus one same-origin `POST /api/auth/sign-up/email` with a reserved `.test` address, expected to answer `403 SIGN_UP_RESTRICTED` with no account and no mail.
+  - **No production environment variable is set as part of this release.**
+- **C3 (open, owner, does not block this merge):** opening the pilot, through the five README checklist steps, each separately approved.
+
+**Next slice (Architect decision): 4.6, pilot metrics, operational alerts and retention housekeeping** (including the never-verified-accounts purge, P8), per the approved plan. Its contract is designed after 4.5 is merged. The plan.md items open there are the **alert channel**, the **analytics retention** and the **never-verified retention period**, all owner decisions.
 
 ### Required Corrections
+None.
 
 ---
 
