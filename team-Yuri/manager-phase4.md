@@ -4,9 +4,11 @@
 PHASE=4
 
 ## Status
-STATUS: APPROVED
+STATUS: READY_FOR_DEVELOPER
 
-Scope of this revision: **slice 4.5 only** (pilot access allowlist), revision 1, 2026-11-14. Input: the 4.5 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions P1-P9, owner decisions E1-E2 resolved on 2026-11-14). Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.6-4.8 are not designed here. **No migration, no dependency, no production environment variable change.** Nothing in this document authorizes a push, a merge, a deployment or any production environment change.
+**Current revision: slice 4.5 revision 2 (R1, C1 corrective, test-only), 2026-11-15**, in "Revision 2 (R1): C1 corrective, test-only" below. Revision 1 (the 4.5 product code) was approved by the Manager and the Architect on 2026-11-15 and is not reopened. Revision 2 changes only `e2e/fixtures.ts` and one note in `docs/DECISIONS.md`. Nothing in revision 2 authorizes a push, a merge, a deployment or any production environment change.
+
+Scope of revision 1: **slice 4.5 only** (pilot access allowlist), revision 1, 2026-11-14. Input: the 4.5 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions P1-P9, owner decisions E1-E2 resolved on 2026-11-14). Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.6-4.8 are not designed here. **No migration, no dependency, no production environment variable change.** Nothing in this document authorizes a push, a merge, a deployment or any production environment change.
 
 ## Phase Goal
 The server can admit a fixed list of pilot owners to registration through a server-only `PILOT_EMAILS` allowlist next to `TESTER_EMAIL`, and the list is **inert** unless the owner has set `EMAIL_SENDER_VERIFIED=true` and `EMAIL_FROM` is outside `resend.dev` (locally, with the outbox, it is testable without the flag). Sign-in for existing accounts is unchanged; unlisted addresses get today's neutral answer; removing an address from the list blocks only a new registration. With the production environment untouched, **the release changes no behavior in production** (tester-only registration and mail, exactly as today).
@@ -161,8 +163,151 @@ Environment for the Resend cases: `RESEND_API_KEY` a non-real value, `EMAIL_FROM
 - **Shared test database and port 3100.** Several sessions use the local test database and the fixed e2e port; wait rather than collide. The manual flow uses another port.
 - **Artifacts are uncommitted in the shared folder** until the Developer commits copies in the worktree (M0).
 
+## Revision 2 (R1): C1 corrective, test-only
+
+### Goal
+Remove the e2e timing race that failed C1 on PR #8 (head `00fc050`). Before axe runs, the shared accessibility helper `expectHealthyPage` waits until every finite animation in the document has finished. This is test infrastructure only. The product, its animations and every axe rule stay exactly as they are.
+
+### Source references
+- `team-Yuri/arch-phase4.md`: "C1 failure and corrective scope (2026-11-15)" and "Required Corrections" R1 (items 1-5).
+- PR #8, CI runs `43760553797` (push) and `43760560631` (pull_request), first attempt, failed-job logs.
+- `DESIGN_SYSTEM.md` §10 (the 220 ms panel transition is allowed; infinite decorative motion is not).
+
+### Verified facts (read by the Manager in the 4.5 worktree at `00fc050`)
+- **F1 Helper.** `expectHealthyPage(page)` in `e2e/fixtures.ts` checks `lang`/`dir`, a heading and horizontal overflow, then runs `new AxeBuilder({ page }).analyze()` and asserts no serious or critical violation. Nothing waits for motion.
+- **F2 Call sites.** 25 calls in six specs: `account-deletion`, `admin-media`, `demo-video`, `offline`, `pwa` and `shell` (`grep -rn "expectHealthyPage(" e2e`, the definition excluded). The Architect's "30" is an estimate. Every call site goes through the helper, so changing the helper covers all of them and no spec needs to change.
+- **F3 The race.** `account-deletion.spec.ts` calls the helper right after `toBeVisible()` on the dialog. `Sheet.module.css` runs `rise` (opacity 0 → 1, `translateY(24px)`) for `--duration-panel` (220 ms, `src/styles/tokens.css:95`). The focused Cancel button also runs `--duration-button` (150 ms) transitions. Both are finite CSS animations or transitions, and `document.getAnimations()` returns both.
+- **F4 Infinite animations exist and must be excluded.** `Button.module.css:70` (`spin`, the loading spinner) and `Card.module.css:57` (`shimmer`, the loading skeleton) are `infinite`. Waiting for them would always time out.
+- **F5 Reduced motion.** `src/styles/base.css:102` disables motion under `prefers-reduced-motion: reduce`. The reduced-motion test (`account-deletion.spec.ts:45`) passed in every project in both CI runs.
+- **F6 No retries.** `playwright.config.ts` sets no `retries`, so a failure is a first-attempt failure, locally and in CI. This stays unchanged.
+- **F7 Style flush.** `document.getAnimations()` flushes pending style, so a CSS animation started by the dialog's `[open]` is already listed when the helper runs right after `toBeVisible()`.
+
+### Design of the change (`e2e/fixtures.ts` only)
+1. **A small internal function**, for example `waitForFiniteAnimations(page, timeoutMs = 2000)`, in `e2e/fixtures.ts`. It is not exported unless a spec needs it, and none should.
+2. **Condition:** the page is settled when every entry of `document.getAnimations()` satisfies at least one of these:
+   - `playState !== 'running'` (finished, idle/cancelled and paused animations do not block, so the wait cannot hang on them);
+   - it has no effect;
+   - its effect's `getComputedTiming().iterations` is `Infinity` (F4).
+   A pending start (`playState === 'running'` before its first frame) counts as running and is waited for.
+3. **Mechanism:** a condition wait, not a sleep. Use `page.waitForFunction(predicate, undefined, { timeout: timeoutMs })` with its default `requestAnimationFrame` polling. Alternatively, `page.evaluate` can await the `finished` promises of the finite running animations, re-check `getAnimations()` until none remain (an animation can start another one), and race the whole wait against the bound. Either is acceptable. In the second form, a cancelled animation rejects `finished` with `AbortError`, and that must count as done.
+4. **Bound and failure:** 2 000 ms in total for the whole wait. If the bound is reached, the helper throws an `Error` whose message starts with `expectHealthyPage: finite animations still running after 2000 ms` and names what is still running, collected in the page: the count, plus `animationName` for a `CSSAnimation`, `transitionProperty` for a `CSSTransition`, otherwise `id` or `'animation'`. The helper does not run axe on a moving page and does not continue silently.
+5. **Placement:** inside `expectHealthyPage`, immediately before the `AxeBuilder` call. The `lang`/`dir`/heading/overflow checks stay as they are and in the same order. The axe call, the impact filter and the assertion are byte-for-byte unchanged.
+6. **Not allowed (R1.2):**
+   - disabling, excluding or re-scoping any axe rule (including `color-contrast`), `withRules`/`disableRules`/`exclude`, or changing the impact filter;
+   - `test.retry`, `retries`, `test.slow`, raised test timeouts, `waitForTimeout` or any fixed delay;
+   - `emulateMedia({ reducedMotion })` outside the existing reduced-motion test, or injecting CSS that disables animations;
+   - any change to `src/` (including `Sheet.module.css`, `tokens.css` and `--duration-panel`), `public/`, `prisma/`, `playwright.config.ts`, `vitest.config.ts`, `package.json`, `package-lock.json`, `scripts/`, the 4.5 product files or any spec.
+   If the helper alone does not make a failing spec pass, **stop and report**. Do not edit the spec. The Architect allowed spec changes only if the Manager shows they are needed, and F2/F3 show they are not.
+
+### Ordered milestones (revision 2)
+| Order | Milestone | Acceptance signal |
+|---:|---|---|
+| R2.0 | Worktree and artifacts | Worktree `C:\Users\אוהד\Documents\Woffiz-4.5`, branch `feature/phase-4-pilot-allowlist`, HEAD `00fc050` = `origin/feature/phase-4-pilot-allowlist`, `origin/main` still `0b18ee2`. `arch-phase4.md`, `manager-phase4.md` and `plan.md` are copied byte for byte from the shared folder and committed (`cmp` shown). |
+| R2.1 | Helper wait | `e2e/fixtures.ts` changed as designed. Lint and typecheck are clean. |
+| R2.2 | Negative check | Recorded with and without the wait, and with a too-long animation. The scratch change is restored and `cmp`-identical. |
+| R2.3 | Repetition | `account-deletion.spec.ts` ×10 per project, on the first attempt. |
+| R2.4 | Full e2e and check | One full e2e run and `npm run check`, both reported as run. |
+| R2.5 | Decision note | One sentence appended to `P4-5` in `docs/DECISIONS.md`. |
+| R2.6 | Evidence | A new "4.5 corrective (R1)" section on top of `team-Yuri/dev-phase4.md`, earlier sections unchanged. |
+
+### Detailed plan
+**R2.0 Setup.**
+- Work only in `C:\Users\אוהד\Documents\Woffiz-4.5`. Do not switch the branch of the shared Woffiz folder or touch its `node_modules`.
+- Run `git fetch origin` and record `origin/main` and `origin/feature/phase-4-pilot-allowlist`. If either has moved, stop and report.
+- First commit: the three Team Yuri documents copied byte for byte from the shared folder.
+- **The branch now tracks the remote. Do not run `git push` in any form.**
+
+**Database and port safety** (unchanged from revision 1, M0 item 6):
+- Use only `TEST_DATABASE_URL`, after checking that it differs from `DATABASE_URL`. Start the local test database with `node_modules/.bin/prisma dev start woffiz-test --detach` if it is not running.
+- No Supabase connection, no `migrate reset`, no `db push`.
+- Reserved `.test` addresses only. Never a real address and never a real `RESEND_API_KEY`.
+- Port 3100 is shared with other sessions: wait for it rather than collide.
+- `npm run test:e2e` runs `prisma migrate deploy`, `next build` and `playwright test` with the arguments passed after `--`. Every e2e run therefore builds the current tree, which the negative check relies on.
+
+**R2.1 Change.** Implement the design above. Keep comments in English, short, and saying why: "axe measures colors as rendered; a fading panel is partly transparent".
+
+**R2.2 Negative check** (scratch only, never committed). The scratch value is **1500ms**, not the Architect's example of 2 s: a 2 s animation against a 2 s bound would put the "with the wait" case on the timeout edge. 1.5 s keeps it clearly inside the bound and still slow enough for axe to run mid-fade without the wait.
+1. Copy `src/styles/tokens.css` to the session scratchpad. In the worktree set `--duration-panel: 1500ms;`.
+2. **Without the wait:** temporarily restore the `00fc050` `e2e/fixtures.ts` (`git show 00fc050:e2e/fixtures.ts`, saving the new version aside first). Run `npm run test:e2e -- e2e/account-deletion.spec.ts -g "opens with focus on Cancel|administrator account" --repeat-each=3 --workers=1`. On Windows, quote the `-g` pattern so the shell does not split the `|`, and confirm that tests actually ran.
+   - Expected: `color-contrast` failures.
+   - Record the counts per project. If it does not fail, the check is inconclusive: **stop and report** instead of changing the value.
+3. **With the wait:** put the new `e2e/fixtures.ts` back (`cmp` against the saved copy) and run the same command. Expected: all pass.
+4. **Bounded failure:** set `--duration-panel: 5000ms;` and run the same command once with `--repeat-each=1`. Expected: the helper's own `expectHealthyPage: finite animations still running after 2000 ms` error, not an axe failure and not a pass.
+5. **Restore:** copy `tokens.css` back. Then show both:
+   - `cmp` between the restored file and the saved copy;
+   - `git diff --exit-code 00fc050 -- src` with exit 0.
+   Record each command and its result.
+
+**R2.3 Repetition.**
+- Run `npm run test:e2e -- e2e/account-deletion.spec.ts --repeat-each=10 --workers=1 --retries=0`. That is all three projects, every test in the spec, 10 times each.
+- Report the totals per project and per test.
+- The bar: **`:22` and `:114` pass in all 30 runs each (10 per project) on the first attempt.**
+- Report any other failure verbatim, with its assertion. A known PGlite registration flake (the `/onboarding` instead of `/home` redirect seen in revision 1) in the `owner` fixture is not caused by R1. Show that it reproduces at `00fc050` before calling it unrelated. Report every rerun as a rerun.
+
+**R2.4 Full suite and check.**
+- Run `npm run test:e2e` once, with no filter and no extra retries. Report the counts, every failure and every rerun as such. Local PGlite noise is expected as in revision 1; CI on standard PostgreSQL is the gate.
+- Run `npm run check` (typecheck, lint, unit, build) and confirm it is green. The unit count must equal the revision 1 count (340), because no unit test changes.
+
+**R2.5 Decision note.**
+- Append one sentence to the **Notes** column of the existing `P4-5` row in `docs/DECISIONS.md`. Keep it one row and a valid table: no new row, no line break inside the row.
+- Suggested text: "Test infrastructure (R1, 2026-11-15): `expectHealthyPage` waits up to 2 s for finite animations to finish before axe, because axe measures a fading panel's colors mid-transition; axe rules unchanged."
+- No product documentation, README or DESIGN_SYSTEM change.
+
+**R2.6 Commits.**
+- One commit for `e2e/fixtures.ts`, one for `docs/DECISIONS.md`, one for the evidence.
+- Commit messages in English.
+- No amend and no rebase of the pushed commits.
+
+### Acceptance / gating criteria (revision 2)
+1. `git diff 00fc050 --name-only` outside `team-Yuri/` is exactly `e2e/fixtures.ts` and `docs/DECISIONS.md`.
+2. `git diff 00fc050 -- src public prisma scripts playwright.config.ts vitest.config.ts package.json package-lock.json e2e/*.spec.ts` is empty.
+3. The helper waits only on running finite animations, has a 2 000 ms total bound, fails with the specified message at the bound, and uses no fixed delay. The axe call and assertion are unchanged.
+4. The negative check matches R2.2: fails without the wait, passes with it, gives the helper's own error at 5 s, and the restore is shown with `cmp` and `git diff --exit-code`.
+5. `account-deletion.spec.ts:22` and `:114` pass 10 of 10 per project on the first attempt.
+6. One full e2e run is reported, with reruns labelled as reruns.
+7. `npm run check` is green, with 340 unit tests.
+8. The `P4-5` note is present, the row is intact and the table is valid.
+9. Nothing is pushed, and no production environment is touched.
+10. **After reviews and with the owner's explicit push approval** (not part of the Developer's work):
+   - one push to PR #8;
+   - a fresh first-attempt CI run on the new head; the failed runs `43760553797` and `43760560631` are not re-run;
+   - green in both runs: build, "All 34 required PostgreSQL tests executed and passed", e2e;
+   - the result goes in the PR description only.
+   A new failure reopens the review.
+
+### Functional testability (revision 2)
+- Command-line flows: the negative-check runs, the 10× repetition and the full e2e run above.
+- Observable result: the account-deletion dialog's axe check is green on every repetition with real motion on, and it fails without the wait on a slowed panel. The steady-state product is unchanged: no file under `src/` differs from `00fc050`.
+
+### Required Developer evidence (revision 2, in the new top section of `team-Yuri/dev-phase4.md`)
+1. `PHASE=4`, slice 4.5 revision 2 (R1), worktree, branch, start HEAD `00fc050`, the `origin/main` and remote-branch hashes after `git fetch`, the artifact-copy commit with `cmp` results, and confirmation that the shared folder was not touched.
+2. The `e2e/fixtures.ts` diff in full, and the `docs/DECISIONS.md` diff.
+3. The negative check: every command, the counts per project for each of the three cases, the timeout message as printed, and the restore proof.
+4. The repetition: the command and the totals per project and per test.
+5. The full e2e run: the command, the totals, every failure with its assertion, and every rerun labelled as a rerun.
+6. `npm run check`: the command, the result and the unit count.
+7. The scope commands from criteria 1 and 2 with their (empty or exact) output.
+8. Known issues, interpretations made (each flagged), and the declaration. State explicitly: nothing pushed, no PR edit, no merge, no deployment, no production environment variable.
+
+### Out of scope (revision 2)
+- Any product, style, token or animation change.
+- Any other e2e flake, including the PGlite `auth.spec.ts` flake (separate follow-up).
+- Changes to CI or the workflow.
+- Re-review of the 4.5 product code.
+- The PR description, pushes, merge, deployment.
+- C2 and C3.
+
+### Risks / open questions (revision 2)
+- **Long-running finite animations elsewhere.** A future finite animation longer than 2 s on a page under test would fail the helper with a clear message. That is the intended signal, not a reason to raise the bound in this revision.
+- **The shared local database and port 3100.** Same as revision 1: wait rather than collide, and do not take a result from a run that did not execute.
+- **Owner decisions:** none block revision 2.
+
 ## Manager Review
-MANAGER_REVIEW_STATUS: APPROVED
+MANAGER_REVIEW_STATUS: NOT_REVIEWED
+
+Revision 2 (R1) is not reviewed yet. The review of revision 1 follows, unchanged (APPROVED, 2026-11-15).
+
+### Revision 1 review (APPROVED, 2026-11-15)
 
 Review of slice 4.5 (revision 1 of this design), 2026-11-15. Reviewed: branch `feature/phase-4-pilot-allowlist`, HEAD `6e3ae38`, base `origin/main` `0b18ee2` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.5`, evidence in the 4.5 section of `team-Yuri/dev-phase4.md`. Local only at the time of review: nothing pushed, no PR, nothing merged or deployed, no production environment variable touched.
 

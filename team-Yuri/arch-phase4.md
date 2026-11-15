@@ -6,7 +6,7 @@ PHASE=4
 ## Status
 STATUS: APPROVED
 
-Slice 4.5 approved in final review on 2026-11-15 (see "Architect Review").
+Slice 4.5 approved in final review on 2026-11-15 (see "Architect Review"). **Merge blocked:** C1 failed on PR #8 head `00fc050` (an e2e axe timing race in the 4.4 dialog tests). The test-only correction R1 is required before a new push (see "C1 failure and corrective scope").
 
 Owner decisions recorded on 2026-11-14: E1 resolved as an explicit `EMAIL_SENDER_VERIFIED` flag (P1), and P4/P5 revised so that removal from the list blocks only new registration. No production environment change is authorized.
 
@@ -248,8 +248,43 @@ The only runtime difference is one extra in-memory `signUpPolicy()` evaluation p
 
 **Next slice (Architect decision): 4.6, pilot metrics, operational alerts and retention housekeeping** (including the never-verified-accounts purge, P8), per the approved plan. Its contract is designed after 4.5 is merged. The plan.md items open there are the **alert channel**, the **analytics retention** and the **never-verified retention period**, all owner decisions.
 
+### C1 failure and corrective scope (2026-11-15)
+C1 failed and this review was reopened, as stated above. Inputs:
+- PR #8 (draft), head `00fc050`, CI runs `43760553797` (push) and `43760560631` (pull_request), first attempt;
+- the failed-job logs, read with `gh`;
+- `origin/main` `0b18ee2`, read-only.
+
+**Findings.**
+- Build, integration, "All 34 required PostgreSQL tests executed and passed" and the database-hook test (interpretation 5) passed in both runs. Only e2e failed.
+- Every failure is an axe `color-contrast` violation on the footer button labels of the 4.4 account-deletion dialog, in two tests: `e2e/account-deletion.spec.ts:22` (dialog opens…) and `:114` (administrator explanation).
+- The failing set differs between the two runs on the same commit. Push run: tablet and desktop, both tests. Pull-request run: mobile `:114` only. **It is a timing race, not a deterministic defect.**
+- The reduced-motion test (`:45`, the same dialog with the animation disabled) passed in every project in both runs.
+- The same tests passed on `main` in PR #7's CI and on the `0b18ee2` push run.
+- Cause: `expectHealthyPage` runs axe right after the dialog becomes visible, while the `Sheet` `rise` animation (`opacity 0 → 1`, `translateY`, `--duration-panel` 220 ms) is still running. Partly transparent text yields a computed contrast below the threshold.
+- The steady-state dialog is compliant: the same check passes whenever the animation has ended, and a contrast that is low only during a 220 ms fade-in is not a WCAG defect of the product.
+- **4.5 is not the cause.** Its diff touches neither `src/components/ui`, `src/components/account`, `e2e/` nor `playwright.config.ts`. The flake is latent on `main` and would hit any later PR as well.
+
+**Decision (Architect): fix it as a test-only correction inside the 4.5 PR (R1 below), not in product code and not in a separate PR.**
+- **Inside 4.5:** the same justified exception as the Phase 3 test fix carried by the 4.2 PR (`f38ed53`). The flake blocks C1. Main carries it, so merging 4.5 with the fix also makes `main` green. A separate PR would need its own CI, merge and automatic production deployment for a test-only change.
+- **In the shared helper, not one spec:** any `expectHealthyPage` call made while a panel transition, the update banner or another finite animation runs has the same race. Fixing only `account-deletion.spec.ts` would leave the latent flake for other specs.
+- **Not in product code:** the `Sheet` animation is DESIGN_SYSTEM §10's allowed 220 ms panel transition, and the product is compliant at rest. Changing `Sheet.module.css`, `--duration-panel` or the dialog to satisfy a test would be the wrong fix.
+
+**Code approval unchanged.** The 4.5 product code (`6e3ae38` code commits) is not affected and needs no re-review. The P1-P9/E1-E2 verdicts stand, and the release still changes no production behavior.
+
 ### Required Corrections
-None.
+**R1 (C1 corrective, test-only; Manager revision 2 of slice 4.5, then Developer):**
+1. **Change:** in `e2e/fixtures.ts`, `expectHealthyPage` waits, before running axe, until every **finite** animation in the document has finished: `document.getAnimations()`, filtered to those whose effect has a finite `iterations`, awaiting their `finished`. The wait is bounded (on the order of 2 s). If finite animations are still running at the bound, the helper fails with a clear message; it does not run axe on a moving page and it does not skip silently. Infinite animations are excluded from the wait (DESIGN_SYSTEM forbids them, and `map.spec.ts` already asserts there are none on the map).
+2. **Not allowed:** disabling or excluding the `color-contrast` rule or any axe rule; adding retries, `test.retry` or timeouts that only mask the race; emulating reduced motion globally; fixed sleeps; any change to `src/`, `Sheet.module.css`, `--duration-panel`, `playwright.config.ts`, `vitest.config.ts`, `package.json`, `package-lock.json` or the 4.5 product files. The only file in scope is `e2e/fixtures.ts`, plus at most the two failing specs if the Manager shows that the helper alone cannot cover them.
+3. **Proof required in `dev-phase4.md` (4.5 corrective section):**
+   - **Negative check:** with the `Sheet` animation temporarily lengthened locally (for example `--duration-panel` set to 2 s in a scratch change), the two tests fail axe without the wait and pass with it. The scratch change is restored and shown `cmp`-identical, and is not committed.
+   - **Repetition:** `e2e/account-deletion.spec.ts` repeated locally at least 10 times per project with the wait, all green on the first attempt per run. Report reruns as reruns.
+   - The full e2e suite once, with reruns reported as such (local PGlite noise as before).
+   - `npm run check` green.
+   - A diff showing `e2e/fixtures.ts` as the only code change.
+4. **Then:** Manager review of R1, and a short Architect confirmation of scope; no re-review of 4.5 code. Copy the artifacts byte for byte into the worktree and commit. Then, **with the owner's explicit approval of another push**, one push to PR #8 and a **fresh first-attempt** CI run on the new head. The failed runs are not re-run. Both runs must be green: build; "All 34 required PostgreSQL tests executed and passed"; e2e. The result goes in the PR description only. A new failure reopens this review again.
+5. **Record:** a one-line note in `docs/DECISIONS.md` `P4-5` (or a short test-infrastructure note there) that the accessibility helper waits for finite animations before axe. No product documentation change.
+
+Merge conditions after R1: C1 as above; C2 (owner approval of merge and the automatic Vercel deployment, rollback target `0b18ee2`, no production environment variable set) and C3 unchanged.
 
 ---
 
