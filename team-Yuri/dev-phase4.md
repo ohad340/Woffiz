@@ -1,5 +1,169 @@
 # Developer Phase 4
 
+## 4.5 corrective (R1)
+
+### Phase Identifier
+PHASE=4. Slice 4.5, **revision 2 (R1, C1 corrective, test-only)**, from `team-Yuri/manager-phase4.md` "Revision 2 (R1): C1 corrective, test-only" (2026-11-15) and `team-Yuri/arch-phase4.md` "C1 failure and corrective scope" / "Required Corrections" R1.
+
+### Status
+STATUS (slice 4.5 revision 2): COMPLETE (local; nothing pushed, no PR edit, nothing merged or deployed)
+
+### Setup (R2.0)
+- Worktree `C:\Users\אוהד\Documents\Woffiz-4.5`, branch `feature/phase-4-pilot-allowlist`, start HEAD `00fc050`.
+- `git fetch origin` before starting and again at the end: `origin/main` = `0b18ee25e83ba1d51c1efd3a7649faa5962b2262`; `origin/feature/phase-4-pilot-allowlist` = `00fc0506c59e901c3d5ec7474a28dce28fe8d6e4` (= start HEAD). Neither moved.
+- First commit `bddf03a`: `arch-phase4.md`, `manager-phase4.md` and `plan.md` copied from the shared folder; `cmp` after the copy → all three identical (`plan.md` was already identical, so the commit contains two files).
+- Commits: `bddf03a` artifacts, `8e82633` `e2e/fixtures.ts`, `54ca247` `docs/DECISIONS.md`, then the commit of this file. `git status -sb` → `[ahead 3]` before this file; **nothing pushed**.
+- **Shared folder:** branch `feature/phase-4-install-update` and its `node_modules` untouched; only reads ran there (`cat`, `grep`, `git status`). Its `git status --short` at the end equals the one at the start.
+- Local test database: `woffiz-test` was not running; started with `node_modules/.bin/prisma dev start woffiz-test --detach` (port 51218). `TEST_DATABASE_URL` is set and differs from `DATABASE_URL` (checked; `scripts/test-e2e.mjs` checks it again). Port 3100 was free before each run. Reserved `.test` addresses only; no Supabase, no `migrate reset`, no `db push`.
+
+### Change (R2.1)
+`e2e/fixtures.ts` (the only code change), full diff against `00fc050`:
+
+```diff
+@@ -84,6 +84,31 @@ export const test = base.extend<Fixtures>({
+ 
+ export { expect }
+ 
++/**
++ * Names of the finite animations still running in the page (runs in the browser).
++ * A pending start already reports `running`. Infinite ones (the loading spinner and skeleton) never finish, so they are skipped.
++ */
++function runningFiniteAnimations(): string[] {
++  return document
++    .getAnimations()
++    .filter((a) => a.playState === 'running' && a.effect !== null && a.effect.getComputedTiming().iterations !== Infinity)
++    .map((a) => (a instanceof CSSAnimation ? a.animationName : a instanceof CSSTransition ? a.transitionProperty : a.id || 'animation'))
++}
++
++/**
++ * Waits until no finite animation is running, because axe measures colors as rendered and a fading panel is partly transparent.
++ * Bounded: at the bound it fails with what is still moving instead of running axe on a moving page.
++ */
++async function waitForFiniteAnimations(page: Page, timeoutMs = 2000) {
++  try {
++    await page.waitForFunction(`(${runningFiniteAnimations.toString()})().length === 0`, undefined, { timeout: timeoutMs })
++  } catch (error) {
++    const running = await page.evaluate(runningFiniteAnimations).catch(() => [] as string[])
++    if (running.length === 0) throw error
++    throw new Error(`expectHealthyPage: finite animations still running after ${timeoutMs} ms: ${running.length} (${running.join(', ')})`)
++  }
++}
++
+ /** Hebrew RTL, a heading, no horizontal overflow and no serious or critical axe violations. */
+ export async function expectHealthyPage(page: Page) {
+   await expect(page.locator('html')).toHaveAttribute('lang', 'he')
+@@ -91,6 +116,7 @@ export async function expectHealthyPage(page: Page) {
+   await expect(page.locator('h1').first()).toBeAttached()
+   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+   expect(overflow).toBeLessThanOrEqual(0)
++  await waitForFiniteAnimations(page)
+   const results = await new AxeBuilder({ page }).analyze()
+   const serious = results.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')
+   expect(serious.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(', ')}`)).toEqual([])
+```
+
+- Mechanism: design item 3, first form: `page.waitForFunction` with its default `requestAnimationFrame` polling, 2 000 ms bound, no fixed delay. Settled = every `document.getAnimations()` entry is not `running`, has no effect, or has `iterations === Infinity`; a pending start reports `running` and is waited for.
+- At the bound: the names are collected in the page and the helper throws `expectHealthyPage: finite animations still running after 2000 ms: <count> (<names>)`. If nothing is running any more by then, or the page is gone, the original Playwright error is rethrown (still a failure, never a silent pass).
+- The `lang`/`dir`/heading/overflow checks, the axe call, the impact filter and the assertion are byte-for-byte unchanged. No spec, config or `src/` file changed. `waitForFiniteAnimations` is not exported.
+- `npx tsc --noEmit -p .` → exit 0; `npx eslint e2e/fixtures.ts` → exit 0 (both also inside `npm run check` below).
+
+`docs/DECISIONS.md` (R2.5), `git diff --word-diff=plain 00fc050 -- docs/DECISIONS.md`: one changed line (the `P4-5` row); the only added words, appended to its Notes cell:
+
+```text
+{+Test infrastructure (R1, 2026-11-15): `expectHealthyPage` waits up to 2 s for finite animations to finish before axe, because axe measures a fading panel's colors mid-transition; axe rules unchanged.+}
+```
+
+The row stays one line; its pipe count is 6 before and after (the added sentence contains no `|`), the file stays 179 lines.
+
+### Negative check (R2.2, scratch only, never committed)
+Saved first in the session scratchpad: `tokens.css.orig` (copy of `src/styles/tokens.css`) and `fixtures.ts.new` (the new `e2e/fixtures.ts`).
+
+Command in every case (the `-g` pattern carries double quotes so `cmd` does not split the `|`):
+`npm run test:e2e -- e2e/account-deletion.spec.ts -g '"opens with focus on Cancel|administrator account"' --repeat-each=3 --workers=1` (case C: `--repeat-each=1`). Each run rebuilds the tree (`next build`).
+
+| Case | Scratch state | Result |
+|---|---|---|
+| (attempt, not counted) | `--duration-panel: 1500ms`, `git show 00fc050:e2e/fixtures.ts > e2e/fixtures.ts` | No test ran: the unquoted `-g` pattern was split by `cmd` (`'administrator' is not recognized as an internal or external command`, exit 255 after the build). Rerun with the quoted pattern below. |
+| A. without the wait | `1500ms`, `00fc050` helper (`git diff --quiet 00fc050 -- e2e/fixtures.ts` → equal) | **Running 18 tests: 18 failed.** Per project: mobile-360 6/6 failed, tablet-768 6/6, desktop-1280 6/6 (`:22` ×3 and `:114` ×3 each). Every failure is the helper's axe assertion at `fixtures.ts:96`, `color-contrast` on the footer labels, e.g. `"color-contrast: button[data-delete-cancel=\"\"] > ._8RiFmG_label > span"` and `"color-contrast: ._8RiFmG_full > ._8RiFmG_label > span"` (18 `color-contrast` lines, 18 `toEqual` errors). |
+| B. with the wait | `1500ms`; `cp fixtures.ts.new e2e/fixtures.ts`, `cmp` → identical, `git diff --quiet HEAD -- e2e/fixtures.ts` → equal to `8e82633` | **Running 18 tests: 18 passed (3.4 m).** Per project 6/6 (`:22` 3/3, `:114` 3/3). |
+| C. bounded failure | `--duration-panel: 5000ms`, new helper | **Running 6 tests: 6 failed**, each (mobile, tablet, desktop × `:22`, `:114`) with the helper's own error: `Error: expectHealthyPage: finite animations still running after 2000 ms: 1 (_7Yhcpq_rise)` (6 times). 0 `color-contrast` lines, no axe failure, no pass. |
+
+Restore:
+- `cp tokens.css.orig src/styles/tokens.css`; `cmp tokens.css.orig src/styles/tokens.css` → exit 0;
+- `git diff --exit-code 00fc050 -- src` → exit 0; `--duration-panel: 220ms;` back at `tokens.css:95`; `git status --short` showed only the then-uncommitted `docs/DECISIONS.md`.
+
+### Repetition (R2.3)
+Command: `npm run test:e2e -- e2e/account-deletion.spec.ts --repeat-each=10 --workers=1 --retries=0` (all 6 tests × 3 projects × 10 = 180).
+
+| Run | Result |
+|---|---|
+| First run (2026-11-15 23:33 → 2026-11-16 16:45, wall clock **17.2 h**) | **178 passed, 2 failed**, both tablet-768: repeat 4 of `:114` (`Test timeout of 30000ms exceeded while setting up "owner"` at `apiRequestContext.post` `/api/onboarding/complete`, `fixtures.ts:59`, test duration **1.6 h**) and repeat 5 of `:22` (`locator.click: Target page, context or browser has been closed` at `account-deletion.spec.ts:17`, the opener click before the dialog opens, test duration **8.8 h**). Neither reached `expectHealthyPage`. The Windows System log shows the machine in Modern Standby from 23:46:55 to 01:25:18 (Kernel-Power 506/507, = 1.6 h) and asleep from 07:42:23 to 16:32 (Kernel-Power 42, Power-Troubleshooter 1 at 16:32:12, = 8.8 h). Wall-clock test timeouts across standby/sleep: the run is invalid, not a test result. Every other count was 10/10. |
+| **Rerun** (keep-awake on, 16:45:44 → 17:14:13) | **180 passed (27.9 m), 0 failed**, first attempt (`--retries=0`, the config has no retries). Per project and per test: mobile-360, tablet-768 and desktop-1280 each `:22` 10/10, `:45` 10/10, `:53` 10/10, `:67` 10/10, `:85` 10/10, `:114` 10/10. |
+
+Bar: `:22` and `:114` passed 30 of 30 each (10 per project) on the first attempt in the rerun.
+
+### Full e2e (R2.4)
+
+| Run | Command | Result |
+|---|---|---|
+| Full run (17:14:33 → 17:37:32) | `npm run test:e2e` (no filter, no retries; default 4 workers) | **235 tests: 167 passed, 60 failed, 8 did not run** (22.0 m). 0 helper-bound errors, 0 `color-contrast`. Errors: 39 `Test timeout of 30000ms exceeded`, `net::ERR_ABORTED` on `goto`/`reload` (8), `net::ERR_NETWORK_IO_SUSPENDED` (1), API timeouts in fixtures, a `verify-email` 500, 3 `P2028` lines in the server log. The run overlapped Modern Standby from 17:12:36 to 17:24:40 (Kernel-Power 506/507, despite the idle keep-awake), and failures continued after it under 4 workers on PGlite. Not usable as a result. |
+| **Rerun 1** (17:38:20 → 17:58:50) | `npm run test:e2e -- --workers=2` (the revision 1 setting) | **235 tests: 201 passed, 28 failed, 6 did not run** (19.8 m). 10 `P2028` lines. 0 helper-bound errors, 0 `color-contrast`, **no failure inside `expectHealthyPage`**. Every failure is a server or database error: `/api/onboarding/complete` not OK (`fixtures.ts:60`, 10: account-deletion `:67` mobile, map `:4` and `:33` mobile, offline `:73` mobile and `:120` tablet, shell `/review?state=empty` and `:46` mobile, pwa `:316` tablet, ...); sign-up not OK (`fixtures.ts:46`, 4: home `:18`, loop `:75` and `:93`, map `:4`, desktop); `verification link answered 500 at /api/auth/verify-email` (home `:3` desktop); `Expected: 404 Received: 500` (loop `:102` desktop); a Prisma `RequestHandler` error in `e2e/seed-media.ts` (admin-media `:61` tablet); and app states that need those writes (`toHaveURL /home` received `/onboarding` in auth `:39` ×3 and ai-plan `:27` mobile; missing `התרגיל הותאם` in ai-plan `:102` ×3; missing `המשך המסלול עודכן.` in ai-plan `:126` mobile and tablet; missing `התרגול נשמר. השלב הנוכחי נשאר פתוח` in loop `:6` tablet and desktop; admin heading missing in admin-media `:61` desktop; a test timeout in demo-video `:181` desktop, after which the serial file stopped: 6 did not run). |
+| **Rerun 2** after restarting the test database (`prisma dev stop woffiz-test`, then `start --detach`), 18:00:28 → 18:05:55 | `npm run test:e2e -- --last-failed --workers=1` | **34 tests (the 28 failed and the 6 that did not run): 34 passed (5.0 m)**, 0 `P2028`. |
+
+Combined, every one of the 235 tests passed at least once. The full-suite runs did not pass in one go locally. The failures are the local PGlite database under parallel load (`P2028`, 500s, failing writes), in flows R1 does not touch, and none is in the accessibility helper. This matches revision 1 (13 failures with `P2028`, cleared by a restart and `--last-failed`), with more failures here after a long day of runs on the same database instance. I did not run the full suite at `00fc050` to prove that independence; CI on standard PostgreSQL is the gate.
+
+### `npm run check`
+`npm run check` (typecheck, lint, unit, build) → exit 0. **Test Files 19 passed (19), Tests 340 passed (340)**, equal to revision 1. `next build` compiled successfully.
+
+### Scope commands
+- `git diff 00fc050 --name-only` → `docs/DECISIONS.md`, `e2e/fixtures.ts`, `team-Yuri/arch-phase4.md`, `team-Yuri/manager-phase4.md` (plus this file once committed). Outside `team-Yuri/`, exactly `docs/DECISIONS.md` and `e2e/fixtures.ts`.
+- `git diff 00fc050 -- src public prisma scripts playwright.config.ts vitest.config.ts package.json package-lock.json 'e2e/*.spec.ts' | wc -c` → `0` (empty).
+
+### Implemented Milestones (revision 2)
+
+| Milestone | Completed | Notes |
+|---|---:|---|
+| R2.0 Worktree and artifacts | Yes | `bddf03a`, `cmp` identical, remotes unmoved |
+| R2.1 Helper wait | Yes | `8e82633`; tsc and eslint clean |
+| R2.2 Negative check | Yes | A 18/18 fail (`color-contrast`), B 18/18 pass, C 6/6 helper error; restore proven |
+| R2.3 Repetition | Yes | First run invalid (machine standby/sleep, 2 failures outside the helper); rerun 180/180 |
+| R2.4 Full e2e and check | Yes, with failures reported | Full run and rerun 1 failed on PGlite (above); rerun 2 cleared them; `npm run check` green, 340 |
+| R2.5 Decision note | Yes | `54ca247` |
+| R2.6 Evidence | Yes | this section |
+
+### Files Changed (revision 2)
+
+| File | Change Summary | Reason |
+|---|---|---|
+| `team-Yuri/arch-phase4.md`, `team-Yuri/manager-phase4.md` | Byte-for-byte copies from the shared folder | R2.0 |
+| `e2e/fixtures.ts` | `expectHealthyPage` waits up to 2 s for finite animations before axe | R1.1 |
+| `docs/DECISIONS.md` | One sentence appended to the `P4-5` Notes cell | R1.5 |
+| `team-Yuri/dev-phase4.md` | This section | Evidence |
+
+Dependencies installed: none. Documentation: `docs/DECISIONS.md` only, as required by R1.5; no README, product documentation or DESIGN_SYSTEM change (test infrastructure only, no user-visible behavior).
+
+### Functional Testability Evidence
+
+| Field | Value |
+|---|---|
+| Method | CLI (Playwright e2e) |
+| Steps | Negative check A/B/C, the ×10 repetition and the full suite, as above |
+| Expected Result | With a slowed panel the axe check fails without the wait, passes with it, and gives the helper's own error past the bound; at real speed the dialog tests pass on every repetition; no `src/` file differs from `00fc050` |
+| Actual Result | PASS (repetition from the rerun; full suite needed reruns, reported above) |
+
+### Known Issues / Interpretations
+- **Local PGlite noise** in the full suite (above): 60, then 28 failures before a restart cleared them. Not caused by R1; not proven against `00fc050`.
+- **Machine standby/sleep** invalidated the first repetition and part of the first full run. The idle keep-awake does not prevent Modern Standby entered otherwise.
+- (Interpretation, flagged) Full-suite rerun 1 used `--workers=2`, the revision 1 setting, after the default-worker run failed under standby and load; the design asks for no filter and no extra retries, which both reruns respect.
+- (Interpretation, flagged) On a timeout with nothing left running (or a closed page), the helper rethrows Playwright's own error instead of the custom message, because the custom message would name no animation; it is still a failure.
+- (Interpretation, flagged) The predicate is passed to `waitForFunction` as a string built from `runningFiniteAnimations.toString()`, so the same in-page function serves the wait and the error names without duplicating the filter.
+- The CSS-modules build hashes animation names (`_7Yhcpq_rise` for `rise`); the message shows the computed name.
+
+### Developer Declaration (revision 2)
+Implemented only Manager revision 2: `e2e/fixtures.ts` and one sentence in `docs/DECISIONS.md` `P4-5`, plus the artifact copies and this evidence. No axe rule, impact filter, retry, timeout, reduced-motion emulation, injected CSS, spec, config, dependency or `src/` change. The scratch `tokens.css` and old helper were restored and never committed. **Nothing pushed (in any form), no PR edit, no merge, no deployment, no production environment variable touched.** The earlier sections below are unchanged.
+
+---
+
 ## Phase Identifier
 PHASE=4
 
