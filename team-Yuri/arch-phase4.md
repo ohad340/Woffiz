@@ -6,7 +6,7 @@ PHASE=4
 ## Status
 STATUS: APPROVED
 
-Slice 4.5 approved in final review on 2026-11-15 (see "Architect Review"). **Merge blocked:** C1 failed on PR #8 head `00fc050` (an e2e axe timing race in the 4.4 dialog tests). The test-only correction R1 is required before a new push (see "C1 failure and corrective scope").
+Slice 4.5 approved in final review on 2026-11-15 (see "Architect Review"). **Merge blocked:** C1 failed on PR #8 head `00fc050` (an e2e axe timing race in the 4.4 dialog tests). The test-only correction R1 is required before a new push (see "C1 failure and corrective scope"). R1 scope confirmed by the Architect on 2026-11-16 (see "R1 scope confirmation"); C1 still requires a green fresh CI run after an owner-approved push.
 
 Owner decisions recorded on 2026-11-14: E1 resolved as an explicit `EMAIL_SENDER_VERIFIED` flag (P1), and P4/P5 revised so that removal from the list blocks only new registration. No production environment change is authorized.
 
@@ -285,6 +285,25 @@ C1 failed and this review was reopened, as stated above. Inputs:
 5. **Record:** a one-line note in `docs/DECISIONS.md` `P4-5` (or a short test-infrastructure note there) that the accessibility helper waits for finite animations before axe. No product documentation change.
 
 Merge conditions after R1: C1 as above; C2 (owner approval of merge and the automatic Vercel deployment, rollback target `0b18ee2`, no production environment variable set) and C3 unchanged.
+
+### R1 scope confirmation (CONFIRMED, 2026-11-16)
+Short scope confirmation required by R1 step 4. The 4.5 product code is not re-reviewed.
+- Inputs: `team-Yuri/manager-phase4.md` "Revision 2 review" (APPROVED, 2026-11-16, no corrections; shared folder) and the "4.5 corrective (R1)" section of `team-Yuri/dev-phase4.md` (`STATUS (slice 4.5 revision 2): COMPLETE`).
+- Commits `bddf03a..e1f5cda` on `feature/phase-4-pilot-allowlist`, start `00fc050`, worktree `C:\Users\אוהד\Documents\Woffiz-4.5`. `origin/feature/phase-4-pilot-allowlist` is still `00fc050`: nothing pushed.
+
+**Checked by the Architect:**
+- `git diff 00fc050..e1f5cda --name-only`: outside `team-Yuri/` exactly `e2e/fixtures.ts` and `docs/DECISIONS.md`. No spec, `src/`, `Sheet.module.css`, token, config, package or 4.5 product file changed.
+- `e2e/fixtures.ts`: 26 added lines, 0 removed. The wait runs immediately before `AxeBuilder`, over running animations with a finite `iterations`, bounded at 2 000 ms, polled (no fixed sleep), and fails with its own message at the bound. No axe rule disabled, no retry, no global reduced motion. Matches R1 items 1-2.
+- `docs/DECISIONS.md`: one sentence appended to the `P4-5` Notes cell. Matches item 5.
+- Evidence matches item 3, as verified independently by the Manager: negative check 18/18 failed without the wait and 18/18 passed with it (1 500 ms panel), 6/6 failed with the helper's own bound error at 5 000 ms; restore `cmp`-identical and not committed; repetition rerun 180/180 on the first attempt (the standby-invalidated first run is labelled invalid, not counted); full-suite PGlite failures reported and labelled as reruns, with no failure in `expectHealthyPage`; `npm run check` green (19 files, 340 tests).
+- `arch-phase4.md` and `plan.md` in the worktree HEAD are byte-identical to the shared folder before this addendum. `manager-phase4.md` and this file now differ and must be copied again.
+
+**Non-blocking note:** R1 item 1's rationale "DESIGN_SYSTEM forbids infinite animations" is too broad. The app has infinite loading animations (spinner, skeleton), as the helper's comment states. Excluding them from the wait is still correct, because they never finish and do not fade content. No change needed.
+
+**Verdict: R1 scope CONFIRMED.** Next, in order:
+1. Copy `arch-phase4.md`, `manager-phase4.md` and `plan.md` byte for byte from the shared folder into the worktree and commit (no other change).
+2. With the owner's explicit approval, one push to PR #8 and a fresh first-attempt CI run on the new head, under R1 step 4. The failed runs are not re-run.
+3. C1 is met only when both runs are green. C2 and C3 unchanged. This confirmation authorizes no push, merge, deployment or production environment change.
 
 ---
 

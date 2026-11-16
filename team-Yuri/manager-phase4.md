@@ -4,9 +4,9 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_DEVELOPER
+STATUS: APPROVED
 
-**Current revision: slice 4.5 revision 2 (R1, C1 corrective, test-only), 2026-11-15**, in "Revision 2 (R1): C1 corrective, test-only" below. Revision 1 (the 4.5 product code) was approved by the Manager and the Architect on 2026-11-15 and is not reopened. Revision 2 changes only `e2e/fixtures.ts` and one note in `docs/DECISIONS.md`. Nothing in revision 2 authorizes a push, a merge, a deployment or any production environment change.
+**Current revision: slice 4.5 revision 2 (R1, C1 corrective, test-only), 2026-11-15; Manager review APPROVED on 2026-11-16**, in "Revision 2 (R1): C1 corrective, test-only" below. Revision 1 (the 4.5 product code) was approved by the Manager and the Architect on 2026-11-15 and is not reopened. Revision 2 changes only `e2e/fixtures.ts` and one note in `docs/DECISIONS.md`. Nothing in revision 2 authorizes a push, a merge, a deployment or any production environment change.
 
 Scope of revision 1: **slice 4.5 only** (pilot access allowlist), revision 1, 2026-11-14. Input: the 4.5 contract in `team-Yuri/arch-phase4.md` (STATUS: READY_FOR_MANAGER, decisions P1-P9, owner decisions E1-E2 resolved on 2026-11-14). Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`) are merged and deployed; their designs and reviews are kept below as closed records and are not reopened. Slices 4.6-4.8 are not designed here. **No migration, no dependency, no production environment variable change.** Nothing in this document authorizes a push, a merge, a deployment or any production environment change.
 
@@ -303,9 +303,87 @@ Remove the e2e timing race that failed C1 on PR #8 (head `00fc050`). Before axe 
 - **Owner decisions:** none block revision 2.
 
 ## Manager Review
-MANAGER_REVIEW_STATUS: NOT_REVIEWED
+MANAGER_REVIEW_STATUS: APPROVED
 
-Revision 2 (R1) is not reviewed yet. The review of revision 1 follows, unchanged (APPROVED, 2026-11-15).
+Current: review of revision 2 (R1), below. The review of revision 1 follows it, unchanged (APPROVED, 2026-11-15).
+
+### Revision 2 review (APPROVED, 2026-11-16)
+Review of slice 4.5 revision 2 (R1, C1 corrective, test-only).
+- Reviewed: commits `bddf03a..e1f5cda` on `feature/phase-4-pilot-allowlist`, start `00fc050`, worktree `C:\Users\אוהד\Documents\Woffiz-4.5`.
+- Evidence: the "4.5 corrective (R1)" section of `team-Yuri/dev-phase4.md`.
+- At the time of review: `origin/main` `0b18ee2` and `origin/feature/phase-4-pilot-allowlist` `00fc050`, both unmoved. The local branch is 4 commits ahead. Nothing pushed, no PR edit, nothing merged or deployed, no production environment variable touched.
+
+**Checklist (`developer-review-checklist.md`):**
+- Present and consistent: phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope, known issues and declaration.
+- No reject condition applies.
+
+**Independent verification by the Manager (not copied from the evidence):**
+- **Artifacts.** `arch-phase4.md`, `manager-phase4.md` and `plan.md` in `bddf03a` are byte-identical to the shared folder (`git show … | cmp`).
+- **Scope.** `git diff 00fc050 --name-only` lists:
+  - outside `team-Yuri/`: exactly `docs/DECISIONS.md` and `e2e/fixtures.ts`;
+  - inside: `arch-phase4.md`, `manager-phase4.md` and `dev-phase4.md`.
+  The path-filtered diff over `src public prisma scripts playwright.config.ts vitest.config.ts package.json package-lock.json e2e/*.spec.ts` is 0 bytes.
+- **The `fixtures.ts` diff, read in full.** It is 26 added lines and 0 removed.
+  - The pre-existing helper lines, the axe call, the impact filter and the assertion are unchanged.
+  - `waitForFiniteAnimations` is called immediately before `AxeBuilder`.
+  - The condition matches design item 2: `running`, with an effect, finite `iterations`.
+  - The bound is 2 000 ms through `page.waitForFunction` with default `requestAnimationFrame` polling. There is no fixed delay.
+  - The custom message has the specified prefix.
+  - The function is not exported.
+- **`docs/DECISIONS.md`.**
+  - One line is changed, the `P4-5` row, with the sentence appended to its Notes cell.
+  - The row has the same pipe count before and after (6), so the table stays valid.
+- **`dev-phase4.md`.** The diff against `00fc050` is 164 additions and 0 deletions in a single top hunk, so the earlier records are unchanged.
+- **Commands run by the Manager in the worktree,** after starting the local test database (`woffiz-test`; `TEST_DATABASE_URL` host differs from `DATABASE_URL`; port 3100 free):
+  - `npm run check` → exit 0. Test Files 19/19, **Tests 340/340**, `next build` compiled.
+  - `npm run test:e2e -- e2e/account-deletion.spec.ts -g "opens with focus on Cancel|administrator account" --repeat-each=3 --workers=1 --retries=0` at real animation speed → **Running 18 tests: 18 passed (3.0 m)**, that is `:22` and `:114` × 3 in each of the three projects, on the first attempt.
+
+**1. The negative check proves the fix and the bound.**
+- **A, without the wait, 1 500 ms panel:** 18 of 18 failed, all `color-contrast` on the footer labels. These are the same selectors as the CI failures.
+- **B, with the wait, same panel:** 18 of 18 passed.
+- **C, 5 000 ms panel:** 6 of 6 failed with the helper's own `expectHealthyPage: finite animations still running after 2000 ms: 1 (_7Yhcpq_rise)`, with no axe failure and no pass. This also shows that the string-built predicate survives Playwright's transpilation and names the right animation.
+- **Restore:** `cmp` of `tokens.css` and `git diff --exit-code 00fc050 -- src` exit 0, confirmed by the Manager's empty path-filtered diff.
+- The first attempt, which never ran a test because the shell split the `-g` pattern, is reported and not counted.
+
+**2. Invalidated first repetition: accepted as invalid, not as a result.**
+- It took 17.2 h of wall clock. Its only two failures (tablet `:114` repeat 4 and `:22` repeat 5) are a fixture setup timeout and a closed page, both before `expectHealthyPage`.
+- Their test durations (1.6 h and 8.8 h) match the Modern Standby and sleep windows in the Windows System log (Kernel-Power 506/507 and 42).
+- The rerun with keep-awake passed **180 of 180** on the first attempt (`--retries=0`), including `:22` and `:114` 10 of 10 in each project. Criterion 5 is met by the rerun, and the invalid run is correctly labelled.
+
+**3. Full-suite PGlite failures cleared by reruns: accepted as local database noise, not caused by R1.**
+- The first full run (60 failed, 8 not run) overlapped Modern Standby.
+- Rerun 1 (`--workers=2`) had 28 failed and 6 not run, with 10 `P2028` lines. Every failure is a server or database error (failing `/api/onboarding/complete` and sign-up writes, `verify-email` 500, a Prisma error in the media seed) or a state that depends on such a write.
+- After a database restart, `--last-failed` passed all 34.
+- In all runs there were **0 `color-contrast` failures, 0 helper-bound errors and no failure inside `expectHealthyPage`**.
+- R1 changes only a wait before axe, so it cannot cause write failures in onboarding or sign-up. This is the same pattern revision 1 recorded and measured on `main`.
+- The Developer did not run the full suite at `00fc050`. That is acceptable here: criterion 6 requires reporting and labelling, both done, and the gate is CI on standard PostgreSQL, which passed every non-e2e step on `00fc050`.
+
+**4. Interpretations, Manager position:**
+- `--workers=2` for full-suite rerun 1: accepted. The design limits filters and retries, not workers, and this is the revision 1 setting.
+- Rethrowing Playwright's own timeout error when nothing is running any more, or the page is closed: accepted. It is still a failure, and the custom message would have nothing to name.
+- The predicate passed as a string built from `runningFiniteAnimations.toString()`: accepted. One filter serves the wait and the message, and case C proves it works after transpilation.
+
+**Non-blocking observations (recorded, not corrections):**
+- The overflow check runs before the wait, as the design placed it. The panel's `translateY` lives in the top layer and does not change `scrollWidth`. No CI or local failure involved overflow.
+- The local full suite on PGlite gets worse after long sessions on one database instance. This belongs to the separately proposed PGlite follow-up, outside 4.5.
+- The idle keep-awake did not prevent Modern Standby. Future long local runs should be watched, and a run that spans a standby window must not be counted, as was done here.
+
+**Criteria status (revision 2):**
+- 1-9: met. Criterion 5 is met through the rerun, and criterion 6 is reported with reruns labelled.
+- 10: pending. It needs the Architect's short scope confirmation, then the owner's explicit approval of another push.
+
+### Required Corrections
+None.
+
+Conditions for the next stage (not corrections):
+- (a) The Architect confirms R1's scope briefly; the 4.5 product code is not re-reviewed.
+- (b) `arch-phase4.md`, `manager-phase4.md` and `plan.md` are copied byte for byte from the shared folder and committed in the worktree before the push.
+- (c) With the owner's explicit approval: one push to PR #8 and a **fresh first-attempt** CI run on the new head. The failed runs `43760553797` and `43760560631` are not re-run.
+- (d) Both runs must be green: build, "All 34 required PostgreSQL tests executed and passed", and e2e. If the database-hook test fails, it is diagnosed before any further push.
+- (e) The result goes in the PR description only.
+- (f) A new failure reopens the review.
+
+C2 is unchanged: merge, together with the automatic Vercel deployment, needs a separate owner approval. The rollback target is `0b18ee2` (`6kx6RtfQTw6D84p2JJuRL1w9XJ9Z`), post-deploy checks are read-only, and no production environment variable is set. C3 is unchanged.
 
 ### Revision 1 review (APPROVED, 2026-11-15)
 
