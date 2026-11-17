@@ -4,7 +4,278 @@
 PHASE=4
 
 ## Status
-STATUS: APPROVED
+STATUS: READY_FOR_MANAGER
+
+Slice 4.6 contract written on 2026-11-17. Owner decisions F1-F3 approved on 2026-11-17 as recommended (see "Owner Decisions (slice 4.6)"): alert email to `ALERT_EMAIL` with the admin page as fallback, 365-day snapshot retention, 14-day never-verified retention.
+
+Slice 4.5 is approved, merged and deployed (see "Slice 4.5 record", "Release record"). Nothing in this contract authorizes a migration, a merge, a deployment, a production environment change or the deletion of real data.
+
+Revision for **slice 4.6** (pilot metrics, operational alerts and retention housekeeping), 2026-11-17. Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`), 4.4 (`0b18ee2`) and 4.5 (`265f006`, PR #8) are approved, merged and deployed. Their contracts and final reviews are kept below as closed records and are not reopened.
+
+## Phase Goal
+Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/plan.md`. 4.1-4.5 are done. This revision details **slice 4.6 only**. 4.7 and 4.8 get their own contracts later.
+
+**Slice 4.6 goal:** the owner can see how the pilot is going and learns about operational failures without watching logs, while the app keeps no personal data longer than it needs to.
+- An ADMIN-only page `/admin/metrics` shows aggregate pilot metrics derived from data the app already stores, plus open alerts and the state of housekeeping.
+- Server errors, authentication-mail failures, generation failures and AI budget exhaustion raise deduplicated alerts that carry no personal data.
+- One daily scheduled housekeeping run enforces every retention rule: the existing 30-day job-payload rule (unchanged), the existing counter pruning, the new operational tables, the aggregate snapshots, and the purge of never-verified accounts after an owner-approved period.
+- The purge of never-verified accounts is built and tested in 4.6, but in production it runs only after a separate owner approval (O9). Until then it only counts the eligible accounts.
+
+## Source References
+- `team-Yuri/plan.md` (APPROVED):
+  - slice 4.6;
+  - owner decision 4: "Pilot analytics are first-party in the app's own database. No third party, no cookies, no extra cost.";
+  - principle "Derive before collecting";
+  - open questions "Alert channel" and "Retention period for analytics events".
+- PRD.md §8 (deletion and the 30-day failed-job payload retention, owner-approved 2026-11-12), §10 (privacy, secrets) and the pilot paragraph (measure onboarding-to-first-practice conversion, active practice days, day-7 return, repeated difficulty per level, mastery-report frequency and video issues; "spending alerts").
+- ROADMAP.md Phase 4: "minimal privacy-conscious analytics, deletion and operational alerts"; review of activation, day-7 return and stalled levels.
+- `docs/DECISIONS.md` P4-4 (account deletion, B3 payload retention) and P4-5 (allowlist; P8 assigned the never-verified purge to 4.6).
+- Code baseline `origin/main` `265f006`, read-only:
+  - `prisma/schema.prisma`: `User.emailVerified`, `User.createdAt`, `Puppy.onboardedAt`, `Attempt` (`outcome`, `mode`, `createdAt`), `MasteryEvent.confirmedAt`, `Plan`/`Level` (`position`, `topic`, `state`), `GenerationJob` (`status`, `errorCode`, `finishedAt`, `payloadJson`), `AiUsageDay`, `EmailRateLimit`, `Verification`;
+  - `src/server/ai/jobs.ts`: `pruneJobPayloads` (30 days by `createdAt`), called only opportunistically from `startJob`; error codes `quota-account`, `quota-calls`, `attempts-exhausted`, `deadline`, `internal`, `lease-expired`;
+  - `src/server/ai/quota.ts`: `pruneAiUsage` (7 days), `keyOf`, the system-wide `ai-calls` counter, `deleteRequestUnits`;
+  - `src/server/email/delivery.ts` (`sendAuthEmail`, delivery failures logged without address; `pruneRateLimits` at 1 % of requests), `transport.ts` (`deliver`, 10 s timeout), `config.ts` (`emailTransport`, `signUpPolicy`);
+  - `src/server/auth.ts`: `requireEmailVerification: true`, `autoSignInAfterVerification: true`, link TTL 1 h (`AUTH_LINK_TTL_SECONDS`), verification is a token, not a `verification` row; a reset request stores the user id as a `verification` value;
+  - `src/server/account-deletion.ts` (P4-4 transaction, lock order job -> plan -> puppy -> user);
+  - `src/server/http.ts` (`postRoute` and `adminRoute`, the only `INTERNAL` 500 branches), `src/server/admin.ts` (`assertAdmin`), `src/server/session.ts` (`requireAdminOrNotFound`), `src/app/admin/layout.tsx`;
+  - `vercel.json` (no crons), `.env.example`, `test/integration/data-api-lock.test.ts`, `scripts/required-pg-tests.json`.
+- Platform documentation checked on 2026-11-17:
+  - Vercel Cron Jobs: on Hobby at most once per day, invoked anywhere within the scheduled hour, included in all plans. Best-effort delivery, so a run can be missed or delivered twice. No retry on failure. Production deployments only. `CRON_SECRET` is sent as `Authorization: Bearer …`. Cron definitions follow an Instant Rollback. Cron Jobs are marked legacy in favor of Vercel Schedules.
+  - Next.js `after()`: stable since 15.1, usable in Route Handlers, runs after the response through `waitUntil` on Vercel, also when the handler throws, if it was registered before the throw.
+  - Resend free plan: 100 emails per day and 3 000 per month, shared by all mail; over quota is a `429` with no queueing.
+
+## Current-state findings that shape the design
+1. **Every PRD pilot metric except "video issues" can be derived from existing tables.** Onboarding (`Puppy.onboardedAt`), practice (`Attempt`), difficulty (`Attempt.outcome` per `Level`), mastery (`MasteryEvent`) and generation health (`GenerationJob`) are already stored. Only "returned without practicing" has no source. Recording it would mean tracking visits, so return is defined by practice (O2). Video issues are not measurable: the pilot runs without videos (owner decision 2).
+2. **Derived metrics follow the account.** When an account is deleted (P4-4), its rows go and the live metrics drop it. That is correct for privacy, but the pilot results report (4.8) would lose history. A daily snapshot of aggregate integers only, with no account ids, keeps trends without keeping personal data (O3).
+3. **Server errors and mail failures have no stored source.** They exist only as `console.error` lines. Alerting on them needs a minimal event row with no payload (O4).
+4. **`pruneJobPayloads` runs only when a generation starts.** If nobody generates, payloads older than 30 days stay. The approved 30-day policy is honored only while traffic exists. A daily run closes this gap without changing the rule.
+5. **Never-verified accounts cannot sign in, so they cannot delete themselves.** Their rows (address, password hash) stay for ever today. Accounts created before verification became mandatory may be unverified and still hold data (a puppy, sessions). An automatic purge must not touch them (O8).
+6. **Verification is a signed token checked against the user row, and it signs the user in.** A purge that races a verification must leave either a verified account or no account, never a session for a deleted user (O8).
+7. **Hobby scheduling is daily and imprecise.** Alerts cannot depend on the schedule. They are evaluated when the failure happens (inline, after the response), and the daily run is the backstop.
+8. **The only mail channel is Resend, on the shared sender.** It delivers only to the Resend account's own address, which is `TESTER_EMAIL`, so an owner alert can work today without a domain. Its quota is shared with authentication mail.
+
+## Architectural Decisions
+
+| Decision | Rationale | Consequence |
+|---|---|---|
+| O1. **Metrics are derived at read time from product tables, ADMIN-only, aggregates only.** One server module (`src/server/metrics/`) computes a typed, fixed-shape result. One page, `/admin/metrics`, renders it under the existing admin layout (`requireAdminOrNotFound`: verified session plus a database ADMIN role, everyone else gets the 404). `force-dynamic` and `Cache-Control: private, no-store`. No API endpoint, no CLI, no export in 4.6. | "Derive before collecting." One access path is the smallest attack surface. A page is enough for the owner and for 4.8. | No new collection for metrics. The page shows nothing about a single account: no id, email, name, puppy name, profile, exercise text, payload or idempotency key, and no per-account rows. |
+| O2. **Metric definitions (fixed; the Manager may refine the SQL, not the meaning).**<br>- **Cohort:** accounts with role OWNER only. ADMIN accounts and their puppies are excluded everywhere.<br>- **Day:** a calendar day in `Asia/Jerusalem`.<br>- **M1 Funnel:** registered → verified → onboarded (`onboardedAt` set) → first practice (at least one CURRENT attempt). Each stage is a count, with its share of the previous stage, plus the median hours from `onboardedAt` to the first CURRENT attempt.<br>- **M2 Active practice days:** distinct days with at least one attempt (any mode) per onboarded owner, over the last 7 and 28 days. Shown as median, number of owners with ≥ 3 days in the last 7, and number with 0.<br>- **M3 Day-7 return:** of owners whose onboarding day + 13 has passed, the number with at least one attempt on days 7-13 after the onboarding day (day 0).<br>- **M4 Repeated difficulty per level:** per level position, the number of owners with ≥ 2 STRUGGLING CURRENT attempts on that level, and the most frequent topic. **Stalled:** owners whose ACTIVE plan's current level has no mastery and no attempt in the last 7 days.<br>- **M5 Mastery reports:** mastery confirmations in the last 7 and 28 days; median days from the first CURRENT attempt on a level to its mastery; confirmations per active owner-week.<br>- **M6 Generation health:** jobs in the last 7 days by status; failures by error code; per-account quota refusals (`quota-account`); budget refusals (`quota-calls`). `payloadJson` is never read.<br>- **Video issues:** shown as "not measured in the pilot: no demonstration videos". | The PRD measures, made precise enough to test. Practice-based return avoids visit tracking. | Every number shows its denominator ("2 of 3"). With 20-30 owners, percentages alone would mislead. |
+| O3. **Daily aggregate snapshot `PilotMetricDay`.** One row per day: `day` (date, primary key), `schemaVersion`, `computedAt`, `metricsJson`. The JSON is the M1-M6 result for that day, validated by a strict schema of integers and decimals only, with no strings except fixed codes. Written only by the housekeeping run, for the previous day, as an idempotent upsert. Missing days of the last 7 are backfilled. Days older than that are never recomputed, because the underlying data may have been deleted. Kept for **F2**. | Keeps trends after deletions (finding 2) without personal data. | Account deletion needs no change: a snapshot holds no account id and cannot be linked back. README states that aggregate counts can outlive an account. |
+| O4. **Operational events `OpsEvent`:** `id`, `kind`, `createdAt`, nothing else. Kinds:<br>- `SERVER_ERROR`: the `INTERNAL` branch of `postRoute` and `adminRoute`, excluding the deleted-account branch and every `AppError`, plus uncaught server errors through Next.js `onRequestError` in `instrumentation.ts` (Node.js runtime only; the Manager verifies the API on Next 16.4.3);<br>- `AUTH_EMAIL_FAILED`: `sendAuthEmail` catches a `deliver` failure. A policy skip is not a failure;<br>- `HOUSEKEEPING_FAILED`: a housekeeping step failed.<br>Recording never throws, never awaits beyond one insert, and logs only a fixed line on failure. Recording inside the ops code never records `SERVER_ERROR` (no recursion). Kept 30 days. | Finding 3. A row with only a kind and a time is not personal data. | The request path changes only by one insert on an error branch, which is already failing. Success paths are untouched. |
+| O5. **Generation and budget signals are derived from `GenerationJob` and `AiUsageDay`, not hooked into generation code.** `jobs.ts`, `onboarding.ts`, `revision.ts` and `quota.ts` are not modified.<br>- **Generation failure:** a job closed FAILED with `errorCode` in `attempts-exhausted`, `deadline`, `internal` or `lease-expired`, counted by `finishedAt`.<br>- **Budget:** today's system-wide `ai-calls` counter, read by its recomputed key, against `AI_DAILY_CALLS_MAX`; or any `quota-calls` failure today.<br>- `quota-account`, `STALE` and `REJECTED` are normal product outcomes. They appear in M6, never as alerts.<br>The three generation routes register `after(() => evaluateAlerts('generation'))` before their work starts. | Generation logic stays untouched (plan constraint). The data already exists. | An index on `GenerationJob` for the failure count is added only if the Manager shows the query needs one. |
+| O6. **Alert rules (Architect defaults, code constants, documented):**<br>- `server-errors`: ≥ 3 `SERVER_ERROR` in 60 min;<br>- `auth-email`: ≥ 2 `AUTH_EMAIL_FAILED` in 60 min;<br>- `generation-failures`: ≥ 3 generation failures in 60 min;<br>- `ai-budget-warning`: the `ai-calls` counter reaches 80 % of the daily maximum (once per UTC day);<br>- `ai-budget-exhausted`: the counter reaches the maximum, or a `quota-calls` failure (once per UTC day);<br>- `housekeeping`: any failed step.<br>Evaluation runs inline after the response (`after()`) when an event is recorded or a generation route finishes, and in every housekeeping run. A missed or late daily run is shown on the page (last successful run older than 36 h). It cannot alert, because nothing would run to send it. | Pilot volume is small, so low absolute thresholds catch real faults. PRD "spending alerts". | Thresholds change only by a reviewed code change, recorded in `P4-6`. |
+| O7. **Deduplication, delivery and failure handling.**<br>- **Storage:** `OpsAlert` holds `id`, `rule`, `dedupKey` (the rule; rule + UTC day for budget rules), `openedAt`, `lastEventAt`, `eventCount`, `lastNotifiedAt`, `notifyStatus` (`SENT`, `FAILED`, `SKIPPED`, `SUPPRESSED`, `NOT_CONFIGURED`, `GAVE_UP`), `notifyAttempts`, `resolvedAt`.<br>- **One open alert per `dedupKey`:** partial unique index where `resolvedAt IS NULL`. Opening is a single `INSERT … ON CONFLICT DO NOTHING RETURNING`, so across instances only the inserter notifies.<br>- **Reminder:** while the alert is open, at most one reminder per 24 h, claimed by one conditional `UPDATE … RETURNING`.<br>- **Auto-resolve:** a windowed alert resolves when it has had no matching event for 6 h (checked inline and daily). Resolution sends nothing.<br>- **Global cap:** at most 10 alert emails per UTC day, counted from `OpsAlert`. Over the cap the status is `SUPPRESSED`. This protects the 100-per-day Resend quota for authentication mail.<br>- **Retries:** a send failure becomes `FAILED`. It is retried by the next evaluation or housekeeping run, at most 3 attempts, then `GAVE_UP`. The page shows every status.<br>- Resolved alerts are kept 90 days.<br>- **Isolation:** nothing in alerting throws into a request, changes a response or delays it. | Exactly-once notification under concurrency, bounded mail volume, honest failure states. | The page is always the fallback channel, whatever F1 decides. |
+| O8. **Never-verified purge: eligibility and race safety.**<br>- **Eligible** = `emailVerified = false`, role OWNER, `createdAt` older than **F3**, **no `Puppy` row** and **no unexpired session**. Legacy unverified accounts with data are never purged automatically; the page shows their count for the owner.<br>- **One short transaction per account:** `SELECT … FROM "user" WHERE id = $1 AND <eligibility> FOR UPDATE SKIP LOCKED`. The puppy and session conditions are re-checked under the lock, and a row lost to a concurrent writer is skipped. Then delete, scoped to that user and in this order: `verification` where `value = userId`; `session`; `account`; `IdempotencyKey`; the account's `AiUsageDay` request keys (`deleteRequestUnits`); then `DELETE FROM "user" WHERE id = $1 AND "emailVerified" = false`, which must remove exactly one row, or the transaction rolls back.<br>- **Race behavior:**<br>  - a verification that commits first leaves the account verified and skipped;<br>  - a verification that runs while the purge holds the lock finds no user afterwards, and its session insert fails on the foreign key, so no session and no user remain;<br>  - the purge never waits (`SKIP LOCKED`).<br>- **Batch:** at most 100 accounts per run. The run logs only counts. `account-deletion.ts` is not modified or shared. | Finding 5 and finding 6. A user lock taken first is the same last step as P4-4's lock order. An unverified account without a puppy has no plan, job or attempt rows. | `EmailRateLimit` hashes are a residue pruned within 24 h, as in P4-4. Someone holding an old link after a purge can register again while their address is allowed. README states it. |
+| O9. **Purge activation is a separate production approval.** The purge deletes only when the server-only `NEVER_VERIFIED_PURGE` is exactly `on`. Otherwise the step is a dry run: it records the eligible count in the run and shows it on the page. Retention periods are code constants (F2, F3, and the Architect's 30/90-day values), not environment values. | The first production purge deletes real data, so the owner sees the dry-run count before approving it. | Production steps: deploy, review the dry-run count, then a separate approval to set the flag and redeploy. |
+| O10. **Daily housekeeping run.**<br>- **Route:** `GET /api/cron/housekeeping`, `force-dynamic`, a bounded `maxDuration`. Vercel Cron in `vercel.json` runs it once per day (proposed `0 1 * * *` UTC, about 03:00-04:59 in Israel).<br>- **Authorization:** `Authorization: Bearer <CRON_SECRET>`, compared in constant time. If `CRON_SECRET` is unset or does not match, the answer is 401, nothing runs and nothing is recorded.<br>- **Steps,** each isolated so a failure does not stop the others: `pruneJobPayloads` (unchanged, now guaranteed daily), `pruneAiUsage` (unchanged), `pruneRateLimits` (unchanged), prune `OpsEvent` (30 days), resolved `OpsAlert` (90 days), `HousekeepingRun` (90 days) and `PilotMetricDay` (F2), the never-verified purge or dry run (O8-O9), write and backfill `PilotMetricDay` (O3), evaluate alerts and retry failed notifications (O6-O7).<br>- **`HousekeepingRun`:** `id`, `trigger`, `startedAt`, `finishedAt`, `stepsJson` with per-step status and counts and an error class only, no messages. A partial unique index allows one unfinished run. An unfinished run older than 15 min is closed as abandoned before a new one starts.<br>- Every step is idempotent and reconciling, so a duplicate or missed delivery is harmless. | Finding 4 and finding 7. The Vercel documentation requires idempotency and a lock. The lock lives in PostgreSQL, so no new service is needed. | One daily function invocation. Cron Jobs are marked legacy: the Manager confirms that a `vercel.json` cron still deploys on Hobby, or names the equivalent Schedules configuration. Either way, no paid feature. |
+| O11. **Alert delivery channel = F1.** If F1 is email, a new `sendOpsAlert` uses the existing `deliver` and a new fixed template to the server-only `ALERT_EMAIL`.<br>- **Content:** rule, count, window, threshold, first and last event time, `VERCEL_ENV`, and a link to `/admin/metrics` built from `BETTER_AUTH_URL`. No address, id, error message, stack or request data.<br>- **Shared sender:** delivered only if `ALERT_EMAIL` equals `TESTER_EMAIL`, the only address Resend delivers to. Otherwise `SKIPPED`, with a fixed log line.<br>- **Verified sender (P4-5 active):** any valid address.<br>- **Local outbox:** a file, as for authentication mail.<br>- `ALERT_EMAIL` unset gives `NOT_CONFIGURED` and the page only. | Reuses the one integration the plan assumed (A4). No new service, account or cost. | The authentication-mail gating (P4-5) is not touched. Alert mail is a separate function with a fixed recipient. |
+| O12. **Everything else unchanged:** authentication and its configuration, the allowlist (P4-5), account deletion (P4-4) and its dialog, service worker, offline fallback, update flow, shell cache allowlist, progression, generation logic, media, `MEDIA_REQUIRED` (off) and video production (paused). | Scope discipline. | — |
+
+## Constraints / Non-Negotiables
+- No personal data in metrics output, snapshots, ops events, alerts, alert mail or logs: no email, name, id, puppy name, profile, exercise content, AI payload, password, token, cookie, IP, user agent or request body.
+- First-party only: no third-party analytics, cookies, client-side tracking, beacons or persistent client storage. Metrics need no client code beyond rendering the page.
+- Progression invariants unchanged. Metrics and housekeeping read product data. The only product rows they delete are those of eligible never-verified accounts (O8) and the payload columns already covered by B3.
+- The 30-day job-payload rule (B3) and the immediate removal on account deletion (P4-4) keep exactly their current meaning and code.
+- Every new table enables RLS and revokes `anon` and `authenticated` (`data-api-lock` test).
+- Hebrew RTL admin UI from existing components and tokens (Card, Badge, the admin table and `tableWrap`), no charts, no animation. Honest empty states. Axe clean and no overflow at 360, 768 and 1280 px.
+- Retention values are code constants recorded in `P4-6`. Changing them is a reviewed code change.
+
+## Technical Boundaries / Out of Scope
+- Visit, page-view or session tracking; the "returned without practicing" metric.
+- Video-issue metrics (no videos in the pilot).
+- An API, CSV export or CLI for metrics; charts; per-account drill-down.
+- Purging expired sessions or verification rows of verified accounts (a possible later housekeeping item, not 4.6).
+- Pager, SMS, Slack or other third-party alert channels, Vercel log drains or paid observability.
+- Any change to authentication, the allowlist, account deletion, the service worker or generation logic.
+- 4.7 work (drills, backups, performance) and 4.8 work (devices, usability, report).
+
+## Dependencies and Interfaces
+
+### Expected files (slice 4.6)
+- `prisma/schema.prisma` and one additive migration: `OpsEvent`, `OpsAlert`, `HousekeepingRun`, `PilotMetricDay`, their enums and indexes, RLS enabled and `anon`/`authenticated` revoked.
+- `src/server/metrics/` (pilot metrics and snapshot schema), `src/server/ops/` (events, alert rules and evaluation, alert mail), `src/server/housekeeping/` (run lease, steps, never-verified purge).
+- `src/app/admin/metrics/page.tsx`, and admin navigation and page titles as needed (the layout title currently says "ניהול מדיה").
+- `src/app/api/cron/housekeeping/route.ts`; `vercel.json` (`crons`).
+- `src/instrumentation.ts` (`onRequestError`, Node.js runtime only).
+- Small hooks:
+  - the `INTERNAL` branches in `src/server/http.ts`;
+  - the delivery-failure branch in `src/server/email/delivery.ts`;
+  - `after()` registration in the three generation route files.
+- An alert template next to `src/server/email/templates.ts`.
+- Tests: `test/integration/` (metrics, ops alerts, housekeeping, never-verified purge, required PostgreSQL concurrency cases added to `scripts/required-pg-tests.json`), unit tests for pure parts, `e2e/admin-metrics.spec.ts`.
+- Docs: README, `.env.example`, `docs/DECISIONS.md` `P4-6`, one PRD sentence with the approved retention periods (F2, F3).
+
+### Interfaces
+- New server-only environment variables:
+  - `CRON_SECRET` (required for the scheduled run);
+  - `ALERT_EMAIL` (if F1 is email);
+  - `NEVER_VERIFIED_PURGE` (`on` enables deletion).
+  None is ever sent to the browser, logged or rendered.
+- `GET /api/cron/housekeeping`: bearer-authorized, returns a JSON summary of step statuses and counts only.
+- `/admin/metrics`: ADMIN-only server page, 404 for everyone else.
+
+## Data / State Considerations
+- **Four additive tables, no change to existing columns.** The 4.5 code ignores them, so the migration can be applied before the deployment.
+- **What each table holds:** `OpsEvent` and `OpsAlert` hold codes, counts and times. `HousekeepingRun` holds step statuses and counts. `PilotMetricDay` holds aggregates. None references a user.
+- **Retention:**
+
+| Data | Kept | Mechanism |
+|---|---|---|
+| `GenerationJob.payloadJson` | 30 days (B3, unchanged); deleted with the account (P4-4, unchanged) | existing `pruneJobPayloads`, now daily |
+| `AiUsageDay` | 7 days (unchanged) | existing `pruneAiUsage`, now daily |
+| `EmailRateLimit` | 24 h (unchanged) | existing `pruneRateLimits`, now daily |
+| `OpsEvent` | 30 days | housekeeping |
+| `OpsAlert` (resolved) | 90 days | housekeeping |
+| `HousekeepingRun` | 90 days | housekeeping |
+| `PilotMetricDay` | **365 days (F2)** | housekeeping |
+| Never-verified accounts | **14 days (F3)** after creation, then purged (only with `NEVER_VERIFIED_PURGE=on`) | housekeeping (O8-O9) |
+| Live metrics | as long as the underlying account data | derived at read time |
+
+## Security / Privacy Considerations
+- **Access:**
+  - the metrics page is reachable only through `requireAdminOrNotFound`, with the role read from the database;
+  - the cron route only with the bearer secret;
+  - there is no other entry point.
+- **Fixed shapes:** the metrics result and the snapshot schema are fixed. A test serializes both after seeding distinctive strings (email, name, puppy name, profile text, exercise text, payload text) and asserts that none appears.
+- **Mail:** alert mail and every new log line use fixed text with codes and counts only.
+- **Cron secret:** compared in constant time. Its absence fails closed (401).
+- **Purge:** irreversible, so it is gated (O9). Its eligibility excludes any account with data or an active session. A test enumerates every `public` table against the purge (deleted, not user-scoped, or excluded by eligibility), in both directions, as the 4.4 inventory guard does.
+
+## Testing and Lint Expectations
+`npm run check` green (typecheck, lint, unit, build). Integration suites green locally, and the required PostgreSQL cases executed and passed in CI. Full e2e green at 360, 768 and 1280 px with axe. Every negative check is recorded and its scratch change restored `cmp`-identical, as in earlier slices.
+
+**Unit**
+- Metric math on fixed inputs:
+  - the Asia/Jerusalem day boundaries, including a DST change;
+  - the day 7-13 window and its denominator;
+  - medians with even and odd counts;
+  - empty cohorts.
+- Alert rule evaluation: thresholds, windows, the once-per-UTC-day keys and the 6 h auto-resolve.
+- Snapshot schema: rejects strings and unknown keys.
+- Alert template: contains no input except codes, counts, times and the link.
+- Cron authorization: unset secret, wrong secret, wrong length and the right secret.
+
+**Integration (PGlite locally, PostgreSQL in CI)**
+- **Metrics:**
+  - known seeds give exact M1-M6 values;
+  - ADMIN accounts are excluded;
+  - a deleted account disappears from live metrics but not from an earlier snapshot;
+  - the privacy serialization test (above).
+- **Page access:** OWNER, unverified, signed-out and revoked-ADMIN requests to `/admin/metrics` get the 404. A current ADMIN gets the page.
+- **Ops events:**
+  - each `SERVER_ERROR` source records one row;
+  - an `AppError` records none;
+  - the deleted-account branch records none;
+  - a delivery failure records one `AUTH_EMAIL_FAILED`;
+  - a recording failure (table unavailable) leaves the original response unchanged.
+- **Alerts:**
+  - threshold crossing opens one alert and one notification;
+  - below the threshold nothing happens;
+  - reminder after 24 h only;
+  - auto-resolve after 6 h quiet;
+  - daily cap gives `SUPPRESSED`;
+  - delivery failure gives `FAILED`, then a retry, then `GAVE_UP` after 3;
+  - shared sender with a different `ALERT_EMAIL` gives `SKIPPED`;
+  - unset gives `NOT_CONFIGURED`;
+  - budget warning and exhaustion fire once per UTC day from the real `ai-calls` counter.
+- **Housekeeping:**
+  - each step's retention boundary (just inside and just outside);
+  - payload pruning gives the same result as today;
+  - one failing step does not stop the others and records `HOUSEKEEPING_FAILED`;
+  - a second run while one is unfinished is refused;
+  - an abandoned run older than 15 min is closed;
+  - a repeated run is a no-op;
+  - snapshot upsert and 7-day backfill.
+- **Never-verified purge:**
+  - eligible accounts are deleted with all dependent rows;
+  - not purged: verified, ADMIN, too recent, has a puppy, has an unexpired session;
+  - dry run (flag not `on`) deletes nothing and reports the count;
+  - inventory guard in both directions;
+  - verifying with an old link after a purge yields no user and no session, and registering again works where allowed.
+
+**Required PostgreSQL concurrency (added to `scripts/required-pg-tests.json`)**
+1. A verification `UPDATE` holding the user row (separate connection, uncommitted): the purge skips the account, and after the commit the account stays verified.
+2. The purge holding the user row (test seam after the lock), with a real verification request through Better Auth on another connection: after the commit there is no user and no session, and the verification request failed without a 500 storm. The Manager states the exact expected response.
+3. 10 concurrent purge invocations over N eligible accounts: each account is deleted exactly once, the deleted counts sum to N, and there are no errors.
+4. 10 concurrent alert evaluations over the same threshold crossing: one `OpsAlert` row, one notification.
+5. 5 concurrent housekeeping starts: one run executes, the others are refused.
+- **Negative checks:** with `SKIP LOCKED` removed, case 1 waits. With the partial unique index on open alerts removed, case 4 sends more than one notification. Both are restored afterwards.
+
+**E2E (`e2e/admin-metrics.spec.ts` and existing suites)**
+- An ADMIN opens `/admin/metrics` and sees seeded aggregates, an empty-state variant, an open alert and the housekeeping section. `expectHealthyPage` passes at 360, 768 and 1280 px, with keyboard focus order and no overflow from the tables.
+- An OWNER gets the 404.
+- Triggering a local generation failure three times (the fake generator in `fail` mode) opens an alert, and the local outbox receives one alert file with no personal data.
+- The existing suites (auth, account deletion, PWA, offline) pass unchanged.
+
+## Functional Testability
+- Page/screen the user can open: `/admin/metrics` as ADMIN (local, seeded).
+- User-visible behavior: aggregate funnel, practice, return, difficulty, mastery and generation numbers with denominators; open alerts with their notification status; last housekeeping run; eligible never-verified count and whether the purge is enabled.
+- Command-line flow: `curl -H "Authorization: Bearer <local test secret>" http://localhost:3000/api/cron/housekeeping` returns the step summary. Without the header it returns 401.
+- Minimal end-to-end flow: force three local generation failures and see one alert on the page and one alert file in the local outbox. Seed an unverified account older than F3, run housekeeping with the flag off (counted, kept), then on (deleted, dependent rows gone).
+- Expected observable result: as above, with no personal data in the page source, the outbox file or the logs.
+
+## Handoff Notes for Manager
+- Base the branch on `main` `265f006`, in a new branch and worktree. Bring over the updated artifacts from the shared folder byte for byte.
+- **Verify against current official docs and name the exact APIs:**
+  - Next.js 16.4.3 `after()` and `onRequestError`;
+  - the `vercel.json` cron (or Schedules) configuration on Hobby;
+  - Better Auth 1.7.14 `verify-email` behavior when the user row is gone, which sets the expected response in concurrency case 2;
+  - whether PGlite supports `AT TIME ZONE 'Asia/Jerusalem'`. If not, compute days in TypeScript with the same results.
+- **Define in the design:**
+  - the exact metric SQL;
+  - the snapshot schema;
+  - the OpsEvent sources;
+  - the after-response wiring in the three generation routes;
+  - the housekeeping step order and bounds;
+  - the purge seam;
+  - the page layout from existing components.
+- **Hold to:** no change to the files listed in O5 and O12 beyond the named hooks.
+- **Production actions are not part of implementation.** List them for the owner in the order of "Production actions (slice 4.6)".
+
+## Owner Decisions (slice 4.6)
+**Approved by the owner on 2026-11-17, all three as recommended.** The approval sets the values below. It does not authorize the migration, any environment variable (`CRON_SECRET`, `ALERT_EMAIL`, `NEVER_VERIFIED_PURGE`), the merge, the deployment or any purge of real accounts; those remain the separate steps of "Production actions (slice 4.6)".
+- **F1:** email through Resend to the server-only `ALERT_EMAIL`, with `/admin/metrics` as the fallback (O11).
+- **F2:** `PilotMetricDay` snapshots kept **365 days**.
+- **F3:** never-verified accounts purged **14 days** after creation, once `NEVER_VERIFIED_PURGE=on` is separately approved.
+
+| # | Decision | Recommendation (approved) | Alternatives (not chosen) |
+|---|---|---|---|
+| F1 | **Alert channel** | Email through the existing Resend integration to a server-only `ALERT_EMAIL`, with the `/admin/metrics` page as the fallback. While the shared sender is in use, `ALERT_EMAIL` must be the Resend account address (`TESTER_EMAIL`). No cost. At most 10 alert emails a day, within the free quota shared with authentication mail. | (b) Page only: no push, the owner must look. (c) A third-party channel: a new account and data processor, possible cost, out of the plan's "no new services". |
+| F2 | **Analytics retention** (`PilotMetricDay` aggregate snapshots; live metrics simply follow the account data) | **365 days.** Snapshots hold no personal data, and a year covers the pilot, the 4.8 report and the Phase 5 launch decision. | 180 days; or until 90 days after the pilot results report. |
+| F3 | **Never-verified account retention** (after creation; then purged, once `NEVER_VERIFIED_PURGE=on` is separately approved) | **14 days.** The link lasts 1 h and can be re-sent at any time, so 14 days leaves ample time. After a purge the person can simply register again while their address is allowed. | 7 days (less data kept); 30 days (more forgiving). |
+
+## Production actions (slice 4.6)
+None is authorized by this contract. Each is a separate owner approval, in this order, after the code is approved:
+1. Apply the additive migration with `prisma migrate deploy` by hand (never in the build). It is backward compatible with the 4.5 code.
+2. Set `CRON_SECRET` (random, at least 16 header-safe characters) and, if F1 is email, `ALERT_EMAIL`, for Production.
+3. Merge and deploy. The deployment registers the daily cron (production only). After the first run, check the cron log and the page.
+4. Review the dry-run count of eligible never-verified accounts on the page. Then a separate approval to set `NEVER_VERIFIED_PURGE=on` and redeploy. From then on, purged accounts cannot be restored.
+
+Costs: none expected. One function invocation a day on Hobby; a few small tables on the Supabase free tier; alert mail within the Resend free quota. Rollback: deploy the previous release (`265f006`, `dpl_Akza3ACdCrzeBDg4GdKPh38tvwuG`). Its cron definitions (none) come back with an Instant Rollback, and the additive tables can stay. A purge is not undone by a rollback.
+
+## Architect Review
+ARCHITECT_REVIEW_STATUS: NOT_REVIEWED
+
+### Review Notes
+Slice 4.6 has not been implemented yet.
+
+### Required Corrections
+None yet.
+
+---
+
+## Slice 4.5 record (APPROVED, merged in `265f006`; closed, not reopened)
+The text below is the slice 4.5 contract, its corrective scope and its final Architect review exactly as approved, with headings demoted one level and its status lines qualified as slice 4.5. The release record comes first.
+
+### Release record (2026-11-17)
+- PR #8 merged: approved head `2b4f0ae`, merge commit `265f006` on `main`. Production deployment `dpl_Akza3ACdCrzeBDg4GdKPh38tvwuG`.
+- CI on `main`, first attempt, green: build; 340 unit tests; 225 integration tests passed, 1 skipped; "All 34 required PostgreSQL tests executed and passed"; 235 e2e tests passed. C1 is met.
+- Public post-deploy checks passed. **PENDING:** the production sign-up check expecting `403 SIGN_UP_RESTRICTED` was not run (the permission system blocked it). It must be run before the pilot opens.
+- No production environment variable changed. Registration stays tester-only and the pilot is not open.
+- Rollback target: `0b18ee2`, deployment `dpl_6kx6RtfQTw6D84p2JJuRL1w9XJ9Z`.
+
+### Status
+STATUS (slice 4.5): APPROVED
 
 Slice 4.5 approved in final review on 2026-11-15 (see "Architect Review"). **Merge blocked:** C1 failed on PR #8 head `00fc050` (an e2e axe timing race in the 4.4 dialog tests). The test-only correction R1 is required before a new push (see "C1 failure and corrective scope"). R1 scope confirmed by the Architect on 2026-11-16 (see "R1 scope confirmation"); C1 still requires a green fresh CI run after an owner-approved push.
 
@@ -12,7 +283,7 @@ Owner decisions recorded on 2026-11-14: E1 resolved as an explicit `EMAIL_SENDER
 
 Revision for **slice 4.5** (pilot access allowlist), 2026-11-14. Slices 4.2 (`7bc45f8`), 4.3 (`ad6b55a`) and 4.4 (`0b18ee2`, PR #7) are approved, merged and deployed. Their contracts and final reviews are kept below as closed records and are not reopened.
 
-## Phase Goal
+### Phase Goal
 Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/plan.md`. 4.1-4.4 are done. This revision details **slice 4.5 only**; 4.6-4.8 get their own contract later.
 
 **Slice 4.5 goal:** the server can admit a fixed list of pilot owners to registration through a server-only `PILOT_EMAILS` allowlist, next to `TESTER_EMAIL`.
@@ -22,7 +293,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 - **The allowlist is inert unless the owner has set `EMAIL_SENDER_VERIFIED=true` and `EMAIL_FROM` is outside `resend.dev`**, so the pilot cannot open by accident before the sending domain is verified and tested (P1).
 - Locally, with the outbox transport, the allowlist is fully testable without Resend.
 
-## Source References
+### Source References
 - `team-Yuri/plan.md` (APPROVED). Slice 4.5, and owner decision 3: "Pilot access is a server-side email allowlist now; a verified sending domain comes later. Opening the pilot to non-tester addresses is blocked until the owner has a domain verified in Resend."
 - PRD.md §1 (test phase limited to one tester address; registration and authentication mail) and §10 (server-only secrets).
 - README "Email" and "Deployment": the shared `onboarding@resend.dev` sender only delivers to the Resend account's own address; production variables; the "a verified sending domain is needed before anyone else can register" note.
@@ -36,14 +307,14 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
   - `test/integration/email-auth.test.ts` (tester-phase suite), `src/server/email/config.test.ts`;
   - `.env.example`.
 
-## Current-state findings that shape the design
+### Current-state findings that shape the design
 1. Registration and mail share one decision: `emailTransport()` gives `resend` only when `TESTER_EMAIL` is set, and `sendAuthEmail` refuses every other recipient on Resend. **Admitting an address to registration without also admitting it to delivery would create accounts that can never be verified.** Delivery must therefore cover every allowed address, and, per the owner (P4), existing accounts as well.
 2. The shared `onboarding@resend.dev` sender delivers only to the Resend account's own address. On that sender a pilot address can register but never receive its verification link. So the allowlist has a meaning only once `EMAIL_FROM` uses another, verified domain.
 3. The policy is computed once per server instance (`const policy = signUpPolicy()` in `auth.ts`), and Vercel applies environment changes only to new deployments. **Changing `PILOT_EMAILS` in production therefore requires a redeploy.**
 4. The non-allowed answer today is an explicit `403 SIGN_UP_RESTRICTED` with the Hebrew line above. It reveals whether an address may register, but never whether an account exists. The owner asked to keep this ("as today").
 5. `onExistingUserSignUp` re-sends verification for an unverified account. A person who never verified is therefore not locked out: registering again, while still allowed, re-sends the link.
 
-## Architectural Decisions
+### Architectural Decisions
 
 | Decision | Rationale | Consequence |
 |---|---|---|
@@ -57,7 +328,7 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 | P8. **Never-verified accounts follow-up goes to 4.6, not 4.5.** Purging accounts that never verified is a scheduled retention job with a retention period (an owner decision), next to the existing 30-day payload pruning and the analytics retention that 4.6 must decide anyway. 4.5 changes nothing for them: they are not locked out (finding 5, and under P4 the verification re-send for an existing account is delivered even after removal from the list). | 4.5 stays a pure gate change. Purging is deletion of personal data and needs its own contract and retention decision. | Recorded in plan.md as a 4.6 item. 4.5's README states that unverified accounts are not purged yet. |
 | P9. **Everything else unchanged:** service worker, offline fallback, owner-activated update, shell allowlist, account deletion (4.4), progression, media, `MEDIA_REQUIRED` (off) and video production (paused). | Scope discipline. | — |
 
-## Constraints / Non-Negotiables
+### Constraints / Non-Negotiables
 - `PILOT_EMAILS` is server-only. It never appears in client bundles, responses, logs or the UI, and it is never committed with real addresses (only empty or `example.test` values in `.env.example` and tests).
 - The pilot cannot open unless `EMAIL_SENDER_VERIFIED` is true **and** the sender is outside `resend.dev` (P1). Both default to closed. No production environment variable is added or changed as part of implementation.
 - Fail closed on any malformed or oversized list (P3).
@@ -65,15 +336,15 @@ Deliver the remaining ROADMAP Phase 4 work as the ordered slices of `team-Yuri/p
 - No migration, no dependency, no change to the 4.2-4.4 behavior.
 - Real addresses are never used in tests. Only `*.test` / `example.test` addresses.
 
-## Technical Boundaries / Out of Scope
+### Technical Boundaries / Out of Scope
 - Configuring or verifying the Resend sending domain, the delivery test, and changing production `EMAIL_FROM`, `EMAIL_SENDER_VERIFIED` or `PILOT_EMAILS` (owner actions, each a separate approval).
 - An admin UI or database table for the list; invitations or invite links; per-address expiry; revoking access of existing accounts.
 - Purging never-verified accounts (4.6, P8).
 - Analytics and alerts (4.6), drills (4.7), device matrix and usability (4.8).
 
-## Dependencies and Interfaces
+### Dependencies and Interfaces
 
-### Expected files (slice 4.5)
+#### Expected files (slice 4.5)
 Modified:
 - `src/server/email/config.ts`: the `pilot` policy, the parser (P3) and the activation rule (P1); `signUpAllowedFor` for `pilot`.
 - `src/server/email/delivery.ts`: P4 (revised): tester-only on the shared sender; allowed-or-existing-account on the verified sender.
@@ -87,25 +358,25 @@ Modified:
 
 Not touched: `prisma/`, `public/sw.js`, `public/offline.html`, `next.config.ts`, the account-deletion code, media code, `package.json`, `package-lock.json`, `playwright.config.ts`, `vitest.config.ts`.
 
-### Interfaces
+#### Interfaces
 - Environment: `EMAIL_SENDER_VERIFIED` (server-only, optional, default false; only `true` enables). `PILOT_EMAILS` (server-only, optional). Grammar: entries separated by `,`, `;` or whitespace; each a valid ASCII email; at most 200 distinct entries; at most 16 KB.
 - No new HTTP route. `POST /api/auth/sign-up/email` behavior per policy:
   - allowed new address: generic success, verification mail sent;
   - allowed existing address: generic success, re-send only if unverified (unchanged);
   - not allowed: `403 SIGN_UP_RESTRICTED`, no mail, no row.
 
-## Data / State Considerations
+### Data / State Considerations
 - No schema change, no migration.
 - The list is read once per server instance (finding 3). A change takes effect on the next deployment.
 - No personal data is stored beyond what registration already stores.
 
-## Security / Privacy Considerations
+### Security / Privacy Considerations
 - Two independent enforcement points stay in place (the `before` hook and `databaseHooks.user.create.before`), both through `signUpAllowedFor`. Direct API calls are covered by the same code.
 - Mail reaches only the tester on the shared sender. On the verified sender it reaches allowed addresses and existing accounts only (P4). The pilot cannot open without the explicit flag and a non-`resend.dev` sender (P1).
 - Logs carry counts and fixed text only, never addresses or the list.
 - Membership disclosure (the 403 tells a caller whether an address may register) is accepted "as today". It never reveals account existence.
 
-## Testing and Lint Expectations
+### Testing and Lint Expectations
 Automated (Developer, recorded in `dev-phase4.md`):
 - `npm run check` passes.
 - **Unit (`config.test.ts`), parser:**
@@ -139,20 +410,20 @@ Automated (Developer, recorded in `dev-phase4.md`):
 - E2E: the existing suites stay green (the e2e server keeps the `open` policy). No `playwright.config.ts` change.
 - CI green on the final head, as before. No new PostgreSQL-only test is expected.
 
-## Functional Testability
+### Functional Testability
 - Command-line flow: run the local production build with the outbox transport (P1 local exception, no flag needed), `PILOT_EMAILS="pilot1@example.test"` and without `LOCAL_SIGNUP`. Registering `pilot1@example.test` writes a verification message to the outbox. Registering `other@example.test` shows "בשלב הבדיקה ההרשמה פתוחה רק לכתובות מאושרות." and writes nothing.
 - API: the same through `POST /api/auth/sign-up/email`.
 - Page: `/` (registration form) in pilot mode shows the restricted-registration line.
 - Expected result: as above, asserted by integration tests and recorded once manually in the evidence.
 
-## Handoff Notes for Manager
+### Handoff Notes for Manager
 - Detail slice 4.5 only. Base `main` `0b18ee2`, new branch and worktree. Bring over the updated artifacts from the shared folder.
 - Apply E1 as decided by the owner: `EMAIL_SENDER_VERIFIED` (default false) **and** a sender outside `resend.dev` (P1); P4 and P5 as revised. The local-outbox exception in P1 is an Architect interpretation for testability; keep it local-only.
 - Confirm how a test can build a Better Auth instance with a pilot policy without changing production `auth.ts` behavior. A small factory is acceptable if the default export behaves identically.
 - Verify the Resend sender rule against current Resend documentation: the shared `resend.dev` sender delivers only to the account's own address.
 - Production `EMAIL_FROM`, `EMAIL_SENDER_VERIFIED` and `PILOT_EMAILS` changes are owner actions with separate approvals, in the P1 order (domain verified, delivery test, sender, flag, list) with a redeploy. The README "Opening the pilot" checklist lists them.
 
-## Owner Decisions (slice 4.5)
+### Owner Decisions (slice 4.5)
 
 Resolved by the owner on 2026-11-14:
 
@@ -167,12 +438,12 @@ Recorded, not blocking:
 - **Never-verified accounts follow-up: assigned to 4.6** (P8). Its retention period is an owner decision there.
 - The open plan.md decision "sending domain" remains the owner's action that actually opens the pilot. "Alert channel", "backups", "pilot recruitment" and "performance profile" do not affect 4.5.
 
-## Architect Review
+### Architect Review
 ARCHITECT_REVIEW_STATUS: APPROVED
 
 Current revision: slice 4.5. The final reviews of slices 4.4, 4.3 and 4.2 are in the closed records below.
 
-### Review Notes
+#### Review Notes
 Final review of slice 4.5, 2026-11-15.
 - Inputs: `team-Yuri/manager-phase4.md` ("Manager Review", MANAGER_REVIEW_STATUS: APPROVED, no corrections; shared folder) and the 4.5 section of `team-Yuri/dev-phase4.md` (committed in the worktree).
 - Branch `feature/phase-4-pilot-allowlist`, HEAD `6e3ae38`, base `0b18ee2` (unchanged on the remote), worktree `C:\Users\אוהד\Documents\Woffiz-4.5`. Local only: not on the remote, no PR, no CI run yet.
@@ -248,7 +519,7 @@ The only runtime difference is one extra in-memory `signUpPolicy()` evaluation p
 
 **Next slice (Architect decision): 4.6, pilot metrics, operational alerts and retention housekeeping** (including the never-verified-accounts purge, P8), per the approved plan. Its contract is designed after 4.5 is merged. The plan.md items open there are the **alert channel**, the **analytics retention** and the **never-verified retention period**, all owner decisions.
 
-### C1 failure and corrective scope (2026-11-15)
+#### C1 failure and corrective scope (2026-11-15)
 C1 failed and this review was reopened, as stated above. Inputs:
 - PR #8 (draft), head `00fc050`, CI runs `43760553797` (push) and `43760560631` (pull_request), first attempt;
 - the failed-job logs, read with `gh`;
@@ -271,7 +542,7 @@ C1 failed and this review was reopened, as stated above. Inputs:
 
 **Code approval unchanged.** The 4.5 product code (`6e3ae38` code commits) is not affected and needs no re-review. The P1-P9/E1-E2 verdicts stand, and the release still changes no production behavior.
 
-### Required Corrections
+#### Required Corrections
 **R1 (C1 corrective, test-only; Manager revision 2 of slice 4.5, then Developer):**
 1. **Change:** in `e2e/fixtures.ts`, `expectHealthyPage` waits, before running axe, until every **finite** animation in the document has finished: `document.getAnimations()`, filtered to those whose effect has a finite `iterations`, awaiting their `finished`. The wait is bounded (on the order of 2 s). If finite animations are still running at the bound, the helper fails with a clear message; it does not run axe on a moving page and it does not skip silently. Infinite animations are excluded from the wait (DESIGN_SYSTEM forbids them, and `map.spec.ts` already asserts there are none on the map).
 2. **Not allowed:** disabling or excluding the `color-contrast` rule or any axe rule; adding retries, `test.retry` or timeouts that only mask the race; emulating reduced motion globally; fixed sleeps; any change to `src/`, `Sheet.module.css`, `--duration-panel`, `playwright.config.ts`, `vitest.config.ts`, `package.json`, `package-lock.json` or the 4.5 product files. The only file in scope is `e2e/fixtures.ts`, plus at most the two failing specs if the Manager shows that the helper alone cannot cover them.
@@ -286,7 +557,7 @@ C1 failed and this review was reopened, as stated above. Inputs:
 
 Merge conditions after R1: C1 as above; C2 (owner approval of merge and the automatic Vercel deployment, rollback target `0b18ee2`, no production environment variable set) and C3 unchanged.
 
-### R1 scope confirmation (CONFIRMED, 2026-11-16)
+#### R1 scope confirmation (CONFIRMED, 2026-11-16)
 Short scope confirmation required by R1 step 4. The 4.5 product code is not re-reviewed.
 - Inputs: `team-Yuri/manager-phase4.md` "Revision 2 review" (APPROVED, 2026-11-16, no corrections; shared folder) and the "4.5 corrective (R1)" section of `team-Yuri/dev-phase4.md` (`STATUS (slice 4.5 revision 2): COMPLETE`).
 - Commits `bddf03a..e1f5cda` on `feature/phase-4-pilot-allowlist`, start `00fc050`, worktree `C:\Users\אוהד\Documents\Woffiz-4.5`. `origin/feature/phase-4-pilot-allowlist` is still `00fc050`: nothing pushed.
