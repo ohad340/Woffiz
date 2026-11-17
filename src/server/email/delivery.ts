@@ -1,7 +1,17 @@
-import { emailTransport, normalizeEmail } from './config'
+import { prisma } from '../db'
+import { emailTransport, normalizeEmail, signUpAllowedFor, signUpPolicy } from './config'
 import { pruneRateLimits, takeRateLimit, type Limit } from './rate-limit'
 import { renderAuthEmail, type AuthEmailKind } from './templates'
 import { deliver, EmailDeliveryError } from './transport'
+
+/** Better Auth stores the lower-cased address, which is also how `recipient` is normalized. A failing lookup is "no account". */
+async function accountExists(recipient: string): Promise<boolean> {
+  try {
+    return (await prisma.user.findUnique({ where: { email: recipient }, select: { id: true } })) !== null
+  } catch {
+    return false
+  }
+}
 
 /**
  * Sends one authentication email. It never throws: a failure is logged (without the address, link or
@@ -12,11 +22,23 @@ export async function sendAuthEmail(kind: AuthEmailKind, to: string, url: string
   const transport = emailTransport()
   const recipient = normalizeEmail(to)
 
-  // Test phase: real mail goes only to TESTER_EMAIL. Other addresses get the same neutral answer as an
-  // unknown address, so a response never reveals which accounts exist.
-  if (transport.kind === 'resend' && recipient !== transport.tester) {
-    console.warn(`[email] ${kind} not sent: recipient is not TESTER_EMAIL (test phase)`)
-    return
+  if (transport.kind === 'resend') {
+    const policy = signUpPolicy()
+    if (policy.kind === 'pilot') {
+      // Verified sender (docs/DECISIONS.md P4-5): the registration gate decides who gets an account, delivery decides who
+      // gets mail. An allowed address, or an address that already has an account (so removing someone from the list never
+      // locks an existing owner out of recovery), receives mail; anyone else is skipped, fail closed. The answer to the
+      // caller is unchanged, so a response never reveals which accounts exist.
+      if (!signUpAllowedFor(policy, recipient) &&!(await accountExists(recipient))) {
+        console.warn(`[email] ${kind} not sent: recipient is not allowed and has no account (pilot)`)
+        return
+      }
+    } else if (recipient !== transport.tester) {
+      // Test phase: real mail goes only to TESTER_EMAIL. Other addresses get the same neutral answer as an
+      // unknown address, so a response never reveals which accounts exist.
+      console.warn(`[email] ${kind} not sent: recipient is not TESTER_EMAIL (test phase)`)
+      return
+    }
   }
 
   try {
