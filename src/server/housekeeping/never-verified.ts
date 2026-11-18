@@ -49,7 +49,7 @@ export async function purgeNeverVerified({
         const locked = await tx.$queryRaw<{ id: string }[]>`
           SELECT u.id FROM "user" u
           WHERE u.id = ${id} AND u."emailVerified" = false AND u.role = 'OWNER' AND u."createdAt" < ${cutoff}
-          FOR UPDATE OF u SKIP LOCKED`
+          FOR UPDATE OF u` // SCRATCH N1 (never merged): SKIP LOCKED removed
         if (locked.length === 0) return false // lost to a concurrent writer, or no longer eligible
         await afterLock?.(id)
         const [blockers] = await tx.$queryRaw<{ puppies: number; sessions: number }[]>`

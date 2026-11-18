@@ -251,6 +251,7 @@ describe.skipIf(!REAL_POSTGRES)('ops and housekeeping on standard PostgreSQL', (
     await locked.promise
     const purge = purgeNeverVerified({ enabled: true })
     const outcome = await Promise.race([purge, sleep(2_000).then(() => 'still waiting after 2 s' as const)])
+    console.log(`[N1] case 1 outcome within 2 s: ${JSON.stringify(outcome)}`)
     release.open()
     await holder
     await purge.catch(() => {})
@@ -316,7 +317,15 @@ describe.skipIf(!REAL_POSTGRES)('ops and housekeeping on standard PostgreSQL', (
     vi.stubEnv('ALERT_EMAIL', 'ops-alerts@example.test')
     const now = new Date()
     await insertEvents('SERVER_ERROR', 3, now)
-    await Promise.all(Array.from({ length: 10 }, () => evaluateAlerts('server-error', { now })))
+    // SCRATCH N2 (never merged): run without the partial unique index, then recreate it exactly as the migration does.
+    await prisma.$executeRawUnsafe('DROP INDEX "OpsAlert_one_open_per_key"')
+    try {
+      await Promise.all(Array.from({ length: 10 }, () => evaluateAlerts('server-error', { now })))
+    } finally {
+      await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX "OpsAlert_one_open_per_key" ON "OpsAlert" ("dedupKey") WHERE "resolvedAt" IS NULL')
+    }
+    const restored = await prisma.$queryRaw<{ indexdef: string }[]>`SELECT indexdef FROM pg_indexes WHERE indexname = 'OpsAlert_one_open_per_key'`
+    console.log(`[N2] alerts=${await prisma.opsAlert.count({ where: { rule: 'SERVER_ERRORS' } })} notifications=${alertFiles(outbox).length} index-restored=${JSON.stringify(restored.map((r) => r.indexdef))}`)
     const alerts = await prisma.opsAlert.findMany({ where: { rule: 'SERVER_ERRORS' } })
     expect(alerts).toHaveLength(1)
     expect(alerts[0]).toMatchObject({ resolvedAt: null, notifyAttempts: 1, notifyStatus: 'SENT' })
