@@ -1,5 +1,191 @@
 # Developer Phase 4
 
+## 4.6
+
+### Phase Identifier
+PHASE=4. Slice 4.6 (pilot metrics, operational alerts and retention housekeeping), revision 1, from `team-Yuri/manager-phase4.md` (STATUS: READY_FOR_DEVELOPER, milestones M0-M9, refinements G1-G10) and the 4.6 contract in `team-Yuri/arch-phase4.md` (O1-O12, owner decisions F1-F3).
+
+### Status
+STATUS (slice 4.6): COMPLETE locally, with two items that can only run on standard PostgreSQL and are **pending CI** (not claimed): the five required concurrency cases (including the observation of case 2) and negative checks N1/N2. Nothing pushed, merged or deployed. No production environment change. No real data touched.
+
+### Setup (M0)
+- Worktree `C:\Users\אוהד\Documents\Woffiz-4.6`, branch `feature/phase-4-ops-housekeeping`, base `main` `265f006`. Artifacts were committed by the Manager in `b3000b3`; `cmp` against the shared folder → `arch-phase4.md`, `manager-phase4.md`, `plan.md` and `PHASE.md` identical.
+- `npm ci` in the worktree only. The shared folder's branch (`feature/phase-4-install-update`) and `node_modules` were not touched; its `git status --short` at the end equals the start snapshot.
+- **Own local test database**, so no other session's database is touched: `prisma dev --name woffiz-46-test` (PGlite, PostgreSQL 17.5), TCP port 51230. The worktree `.env` (gitignored, copied from the 4.5 worktree) points `TEST_DATABASE_URL` there; it differs from `DATABASE_URL`. A second throw-away instance `woffiz-46-fresh` checked the migration on an empty database and was removed afterwards. No Supabase, no `migrate reset`, no `db push`. Reserved `.test` addresses only.
+- No standard PostgreSQL server is available on this machine (no `psql`, `pg_ctl`, Docker or PostgreSQL install).
+- **Baseline on `b3000b3`:**
+  - `npm run check`: unit 19 files, **340 passed**. The first build stopped once with a Next.js "SecurityFatalError" upgrade notice; the plain retry `npm run build` exited 0. That notice repeats on some later builds and is reported to the owner. No upgrade was run (out of scope).
+  - `npm run test:integration`: 153 passed, 36 failed in 4 files (`ai-limits`, `auth`, `onboarding`, `data-api-lock`), all `Connection terminated unexpectedly` / `Server has closed the connection` (PGlite dropped). After restarting the test database, the 4 files re-ran **36/36 passed** (2 skipped, live model). Baseline is therefore clean apart from the documented PGlite noise.
+- Keep-awake was enabled (`session_idle`) after one integration run was stretched to 8 hours by Windows sleep (3 timeouts, all passing on rerun).
+
+### Commits
+`a965abf` schema and migration; `92cc339` server modules, hooks, cron route, `vercel.json`, unit tests; `296a9b5` admin page and navigation; `26c904d` tests (integration, required list, e2e, test infrastructure); `5851c3f` docs; then the commit of this section. **Nothing pushed.**
+
+### Implementation summary per milestone
+| Milestone | Done | Notes |
+|---|---:|---|
+| M1 Schema and migration | Yes | `prisma/migrations/20261117120000_ops_metrics_housekeeping`: four enums, four tables (`OpsEvent`, `OpsAlert`, `HousekeepingRun`, `PilotMetricDay`) exactly as the design, three indexes, `OpsAlert_one_open_per_key` and `HousekeepingRun_one_unfinished` partial unique indexes, the RLS/revoke `DO` block copied verbatim. No existing model or migration changed. |
+| M2 Events and hooks | Yes | `ops/events.ts` (`recordOpsEvent`: one insert raced against 2 s, never throws, fixed line `[ops] event not recorded: <kind>`), `ops/defer.ts` (`runAfterResponse` wraps Next.js `after`, test sink `setDeferredSinkForTests`), `ops/control-flow.ts`. Hooks: both `INTERNAL` branches of `http.ts`, the delivery-failure branch of `sendAuthEmail`, `src/instrumentation.ts` `onRequestError` (Node.js only, control-flow digests ignored, dynamic import), and `runAfterResponse(() => evaluateAlerts('generation'))` in the three generation routes (schema, handler and `maxDuration = 300` unchanged). |
+| M3 Metrics | Yes | `metrics/{queries,aggregate,schema,days,index}.ts`: Q1-Q4 as designed, strict `PilotMetricsV1`, `ilDay`/`ilDayStartUtc`. |
+| M4 Alerts and mail | Yes | `ops/{rules,budget,evaluate,alert-mail,time}.ts`, template `email/ops-alert-template.ts`. Open via `INSERT … ON CONFLICT DO NOTHING RETURNING` (no conflict target), claim under `pg_advisory_xact_lock(hashtext('woffiz-ops-alert-mail'))` with the daily cap of 10, send outside the transaction, statuses `SENT`/`FAILED`/`GAVE_UP`/`SUPPRESSED`/`SKIPPED`/`NOT_CONFIGURED`, sweep (auto-resolve, retries, reminders, max 5). |
+| M5 Housekeeping, purge, cron | Yes | `housekeeping/{retention,authorize,never-verified,steps,run}.ts`, `GET /api/cron/housekeeping` (`force-dynamic`, `maxDuration = 60`, 401/200/409, `private, no-store`), `vercel.json` `crons` `0 1 * * *` (`regions` and `git` unchanged). |
+| M6 Admin page | Yes | `/admin/metrics` with the ten blocks of the design; layout title `ניהול`, `AdminNav` (client, `usePathname`, `aria-current`), `/admin/media` title `ניהול מדיה`. |
+| M7 Tests | Yes (PostgreSQL cases pending CI) | See below. |
+| M8 Docs | Yes | README, `.env.example`, `docs/DECISIONS.md` P4-6, PRD §8, `DESIGN_SYSTEM.md` §14. |
+| M9 Evidence | Yes | This section. |
+
+### Files changed (63 files: 40 added, 23 modified; `git diff --stat b3000b3..HEAD` → 3717 insertions, 10 deletions)
+- **M1:** `prisma/schema.prisma`, `prisma/migrations/20261117120000_ops_metrics_housekeeping/migration.sql`.
+- **M2/M4:** new `src/server/ops/{events,defer,control-flow,rules,budget,evaluate,alert-mail,time,index}.ts`, `src/instrumentation.ts`, `src/server/email/ops-alert-template.ts`; modified `src/server/http.ts`, `src/server/email/delivery.ts`, `src/app/api/onboarding/complete/route.ts`, `src/app/api/plan/adapt/route.ts`, `src/app/api/plan/revise/route.ts`. G7: `src/server/email/transport.ts` (type only), `src/server/email/config.ts` (additive `verifiedSender`).
+- **M3:** new `src/server/metrics/{queries,aggregate,schema,days,index}.ts`.
+- **M5:** new `src/server/housekeeping/{retention,authorize,never-verified,steps,run}.ts`, `src/app/api/cron/housekeeping/route.ts`; modified `vercel.json`.
+- **M6:** new `src/app/admin/metrics/page.tsx`, `src/components/admin/AdminNav.tsx`; modified `src/app/admin/layout.tsx`, `src/app/admin/media/page.tsx`, `src/components/admin/labels.ts`, `src/components/admin/admin.module.css` (navigation rule only, see "Flagged interpretations").
+- **M7:** unit `src/server/metrics/{aggregate,days,schema}.test.ts`, `src/server/ops/{rules,control-flow}.test.ts`, `src/server/email/ops-alert-template.test.ts`, `src/server/housekeeping/authorize.test.ts`; integration `test/integration/{ops-metrics,ops-alerts,housekeeping,never-verified}.test.ts` plus helpers `ops-seed.ts`, `ops-helpers.ts`; e2e `e2e/admin-metrics.spec.ts`, `e2e/seed-ops.ts`; test infrastructure `playwright.config.ts` (two env values), `test/integration/setup.ts` (three deletions), `test/integration/helpers.ts` (four tables added to the reset list), `test/integration/account-deletion.test.ts` (G8), `scripts/required-pg-tests.json` (34 → 39).
+- **M8:** `README.md`, `.env.example`, `docs/DECISIONS.md`, `PRD.md`, `DESIGN_SYSTEM.md`.
+- **Dependencies:** none added or changed (`package.json` and `package-lock.json` untouched).
+
+### Unit tests and lint (`npm run check`)
+| Field | Value |
+|---|---|
+| Command | `npm run check` (typecheck, `eslint .`, `vitest run`, `prisma generate && next build`) |
+| Result | **PASS**, exit 0: unit 26 files, **382 passed** (340 + 42 new); build lists `ƒ /admin/metrics` and `ƒ /api/cron/housekeeping`. The first attempt stopped at the Next.js security notice (unit 382/382 already passed); the identical retry exited 0. |
+| Lint | `eslint .` inside `npm run check`: no findings. |
+
+### Integration (`npm run test:integration`, PGlite)
+- **Full run** on the final code: 21 files, **144 passed**, 81 failed, 42 skipped, 863 s. All 81 failures are in 8 files that failed within milliseconds after PGlite dropped its connection (`Server has closed the connection.` ×3, `Connection terminated unexpectedly` ×1): `ops-alerts`, `media-lifecycle`, `ops-metrics`, `media-catalog`, `onboarding`, `auth`, `never-verified`, `data-api-lock`. The other 10 files passed, `housekeeping.test.ts` and `account-deletion.test.ts` (with G8) among them.
+- **Labelled rerun (PGlite noise):** after restarting `woffiz-46-test`, the 8 files → **81 passed, 7 skipped**, 0 failed. Total: **225 passed, 42 skipped, 0 failed** (267). The 42 skipped are the 37 skipped on the baseline (standard-PostgreSQL-only cases and the live-model test) plus the 5 new PostgreSQL cases.
+- **New suites, each also run on its own:** `ops-metrics` 6/6, `ops-alerts` 17/17, `housekeeping` + `never-verified` 13 passed, 5 skipped (the PostgreSQL cases).
+- **Behaviors covered** (M7 list):
+  - exact M1-M6 on a fixed seed with the 21:30/22:30 UTC attempts around the 2026-03-27 DST change;
+  - ADMIN data excluded;
+  - the legacy unverified owner counted as registered and in M6 only (see "Flagged interpretations");
+  - a deleted owner leaves live metrics but not an earlier snapshot;
+  - privacy of the result, snapshots and run records;
+  - one `SERVER_ERROR` from `postRoute`, `adminRoute` and `onRequestError`, none for `AppError`, the deleted-account branch, control-flow digests or the edge runtime;
+  - one `AUTH_EMAIL_FAILED` on a delivery failure, none on a policy skip;
+  - a recording failure leaves the response byte-identical, and the log has only `[api] unexpected error` and `[ops] event not recorded: SERVER_ERROR`;
+  - thresholds and the window edge, a fourth event adds no mail;
+  - the reminder (none at 23 h 59 min, one at 24 h);
+  - auto-resolve after 6 h;
+  - the 11th mail `SUPPRESSED`;
+  - `FAILED` → retry at 5 min → `GAVE_UP` at 3;
+  - `SKIPPED` with the fixed line and no `fetch`, and `NOT_CONFIGURED`;
+  - budget warning and exhaustion once per UTC day from real `takeCallUnit` units (the ops reader equals the quota counter), resolved the next UTC day, and from a `quota-calls` job;
+  - **G1/G2:** three onboarding completions with `AI_FAKE_MODE=fail` through the real route → one alert and one outbox file with no seeded data;
+  - every retention boundary just inside and just outside;
+  - payload pruning identical to `pruneJobPayloads`;
+  - a failing step → `partial`, `HOUSEKEEPING_FAILED`, the alert opens, and the next ok run resolves it;
+  - `already-running`, `abandoned` after 15 min, the repeated run a no-op in counts, snapshot upsert and backfill;
+  - the route answers 401 ×4, 200 (`MANUAL`/`CRON` trigger) and 409;
+  - the purge deletes the dependents, keeps the five protected kinds, the dry-run modes and the run with the switch off and on (log line counts only);
+  - the purge inventory guard in both directions;
+  - the old link after a purge → `302` `Location: /verify-email?verified=1&error=USER_NOT_FOUND`, no session cookie, no row, and registering again works (V4 a, observed).
+
+### Required PostgreSQL cases and negative checks
+- The five cases exist under `describe.skipIf(!REAL_POSTGRES)('ops and housekeeping on standard PostgreSQL', …)` in `test/integration/housekeeping.test.ts`. A script compared the list with the test names → `true 5`. `scripts/required-pg-tests.json` lists **39** names, so the CI line becomes "All 39 required PostgreSQL tests executed and passed".
+- **Locally they are skipped (PGlite serves one connection), not passed. Status: PENDING CI** after an owner-approved push.
+- **Case 2:** observed response **not yet available**. The test prints one line `[case 2] waited-on-lock=… status=… body-length=… set-cookie=[names]` into the CI log and asserts V4 b (`500`, empty body, no session-token cookie, no user, no session, `deleted = 1`). If CI shows anything else, the Developer stops and reports; `auth.ts` stays untouched.
+- **N1** (remove `SKIP LOCKED`, case 1 must exceed its 2 s bound) and **N2** (drop `OpsAlert_one_open_per_key`, case 4 must send more than one notification): **PENDING**. They need standard PostgreSQL, which is not available here. They are not claimed.
+
+### Measurement (M1): EXPLAIN of the generation-failure count, 5 000 jobs
+Scratch script on the local test database (PGlite 17.5, 5 032 jobs, deleted again afterwards), `EXPLAIN (ANALYZE, BUFFERS)` of the alert query, three runs: `Seq Scan on "GenerationJob"`, rows removed by filter 5029, **Execution Time 4.231 ms, 3.685 ms, 3.815 ms**, all under the 5 ms bound. **No index added.**
+
+### Migration checks (acceptance 2)
+- Applied with `prisma migrate deploy` on the test database migrated to `265f006` ("Applying migration `20261117120000_ops_metrics_housekeeping`").
+- Applied on a fresh empty database: all 8 migrations; tables without RLS: `[]`; both partial indexes present with the expected definitions; `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma` → "This is an empty migration."
+- `data-api-lock` green (rerun above).
+
+### E2E (`npm run test:e2e -- --workers=2`, 360/768/1280)
+- **Full run:** **235 passed, 7 failed** (20.0 min). All 7 failures followed server-side PGlite protocol errors (`bind message supplies 3 parameters, but prepared statement "" requires 0`, 500s in verification and sign-up): `admin-metrics:58` ×2 (registration 500 before any metrics code ran), `admin-media:61`, `loop:6`, `loop:102`, `map:4`, `map:24`.
+- **Labelled rerun** after restarting the database, `--workers=1`: all 7 passed, in two invocations because an aborted attempt rewrote the last-failed list (4 passed, then 1 + 2 passed). Total **242 passed, 0 failed**, no retries configured.
+- `admin-metrics.spec.ts` (7 tests) on its own: 7/7. Covered:
+  - signed-out and OWNER 404, with no `SERVER_ERROR` recorded;
+  - the ADMIN view with the funnel denominators, Hebrew title, `aria-current`, `Cache-Control` including `no-store`, `expectHealthyPage` (lang/dir, h1, no overflow, axe serious/critical none) at all three widths, and Tab reaching every table region;
+  - desktop only: empty states, then three seeded failures plus one cron call (401 without the bearer, 200 with it), giving one alert row with status `נשלחה`, the run and its 10 steps, the 36 h badge gone, and exactly one new `ops-alert` file without the owner's email or puppy name.
+- Existing suites (auth, account deletion, PWA, offline, admin media, loop, map) pass unchanged.
+
+### Functional proof (local server on port 3200, test values only, scratch script)
+- `GET /api/cron/housekeeping` without the header → `401 {"error":"UNAUTHORIZED"}`, `cache-control: private, no-store`.
+- With the bearer: `200 {"outcome":"ok","steps":[job-payloads ok null, ai-usage ok null, rate-limits ok null, ops-events ok 0, ops-alerts ok 0, housekeeping-runs ok 0, metric-days ok 0, never-verified ok 1, snapshots ok 8, alerts ok null]}`. A concurrent second call → `409 {"outcome":"already-running"}`.
+- An unverified account created 15 days ago: kept with the switch off (dry run count 1). After a restart with `NEVER_VERIFIED_PURGE=on`, the run reports `never-verified ok 1` and the account is deleted.
+- `/admin/metrics` as ADMIN at 360 px: `200`, `cache-control: private, no-cache, no-store, max-age=0, must-revalidate`; as OWNER: `404`. Screenshot reviewed: Cards in one column, wide tables scroll inside their region, no page overflow. Text excerpt:
+  - "התראות פתוחות" lists "כשלי יצירת תוכניות (generation-failures) … 6 נשלחה" and "תקציב הבינה המלאכותית היומי מוצה (ai-budget-exhausted) … 194 נשלחה";
+  - "הרצה אחרונה: 18.11.2026, 19:17 (ידנית) הצליחה";
+  - "חשבונות שלא אומתו וזכאים למחיקה: 1";
+  - "ספירה בלבד: המחיקה לא הופעלה".
+- **Why there were two alerts:**
+  - The budget alert is correct: the shared test database holds a `quota-calls` failure from today's test runs, and the rule fires on any such failure of the UTC day.
+  - The count of 6 includes the e2e run's three seeded failures inside the same 60 min window.
+- **Alert file** (`kind: ops-alert`, `to: ops-alerts@example.test`, subject `Woffiz: התראה תפעולית (generation-failures)`). Text:
+  ```text
+  התראה תפעולית
+
+  כלל: כשלי יצירת תוכניות (generation-failures)
+  מספר אירועים: 3 ב-60 הדקות האחרונות (סף: 3)
+  אירוע ראשון: 18.11.2026, 18:52
+  אירוע אחרון: 18.11.2026, 18:52
+  סביבה: local
+
+  לדף מדדי הפיילוט:
+  http://localhost:3200/admin/metrics
+  ```
+- **Privacy grep** for the seeded owner email, name and puppy name: page HTML none, alert files none, both server logs none. The new log lines in the server logs were only `[housekeeping] never-verified: mode=dry-run eligible=1 deleted=0 skipped=0 legacyWithData=0` (×2: the run and the page's live count) and `mode=delete … deleted=1`.
+- During one e2e rerun the database was down (ECONNREFUSED). The server log then showed only the fixed lines `[ops] event not recorded: SERVER_ERROR` and `[ops] alert evaluation failed` after the original error, which confirms the isolation.
+
+### Scope compliance (acceptance 1)
+```text
+$ git diff 265f006 --name-only -- src/server/ai/jobs.ts src/server/ai/quota.ts src/server/onboarding.ts src/server/revision.ts src/server/account-deletion.ts src/server/auth.ts public/sw.js src/server/progress.ts
+(empty)
+$ git diff 265f006 --name-only -- prisma/migrations | grep -v 20261117120000
+(empty)
+```
+- Secrets: `.env.example` values are empty. Test values (`e2e-cron-secret-…`, `ops-alerts@example.test`) appear only in `playwright.config.ts` and test files.
+- No production action. No push.
+
+### Documentation
+- `README.md`: new "Operations" section, covering the page, rules, mail channel and statuses, cron and the local `curl`, the retention table, the purge, "aggregate counts can outlive an account", the old-link behavior, the uncovered sources (G10) and the owner's production steps. The slice 4.5 note about never-verified accounts was updated.
+- `.env.example`: `CRON_SECRET`, `ALERT_EMAIL` and `NEVER_VERIFIED_PURGE`, empty, with comments.
+- `docs/DECISIONS.md`: row `P4-6`, one line, 4 columns, status "Confirmed (owner F1-F3, 2026-11-17)".
+- `PRD.md` §8: one sentence.
+- `DESIGN_SYSTEM.md` §14: the "Admin metrics" row.
+
+### Flagged interpretations (for Manager and Architect review)
+1. **Legacy unverified owners in M6.** Q4 as designed filters on `role = 'OWNER'` only, so a legacy unverified owner's job counts in M6. G4 excludes these accounts from M1 after "registered" and from M2-M5, and says nothing about M6. Implemented exactly as the SQL and asserted in the test.
+2. **Timestamps passed to SQL.** All timestamps go to SQL as ISO `::timestamptz AT TIME ZONE 'UTC'` (`ops/time.ts` `utcTs`), compared with the naive UTC columns directly. The purge design says "passed as `Date`"; the meaning is the same.
+3. **Retry and reminder timing.** A retry is due at exactly 5 min and a reminder at exactly 24 h (inclusive, `<=`), so that the design's tests "a retry after 5 min" and "one at 24 h" hold at the exact instant. The design's SQL wrote `<`.
+4. **The sweep and `now`.** The sweep also claims a **first** notification that was never claimed (an opener that died before claiming). The conditional claim keeps it exactly once, and the N2 check still applies. `evaluateAlerts(trigger, { now })` takes an optional `now` used by tests only.
+5. **Event count of an open windowed alert.** When an open windowed alert is over the threshold, `eventCount` is refreshed as the matching events since one window before it opened. Below the threshold only `lastEventAt` moves, as designed.
+6. **Snapshot count on a repeated run.** A repeated run reports `snapshots = 1`, because Israel yesterday is re-upserted with the same values. All deletion counts are 0, and backfilled days are untouched (`computedAt` unchanged).
+7. **The housekeeping run's lease.** It uses `INSERT … ON CONFLICT DO NOTHING RETURNING` against `HousekeepingRun_one_unfinished`, which has the same meaning as "a unique violation returns already-running".
+8. **Logging and test seams.**
+   - The page's live never-verified count (`purgeNeverVerified({ enabled: false })`) also logs the counts line.
+   - `recordOpsEvent`'s failure line carries the kind (`[ops] event not recorded: SERVER_ERROR`).
+   - A failed alert send logs `[ops] alert mail failed: <rule> attempt <n>`: codes and counts only.
+9. **Files beyond the design's list:**
+   - `src/components/admin/admin.module.css`: one rule for `nav.row > a`, a 44 px touch area and the current link in bold. No new token.
+   - `test/integration/helpers.ts`: the reset list gains the four tables.
+   - New test helpers `ops-seed.ts` and `ops-helpers.ts`.
+   - `e2e/seed-ops.ts` command `reset-ops` also removes its own earlier seeded jobs (prefix `e2e-ops-`). Without it, a second local run inside 60 min would see the first run's failures.
+   - The desktop-only e2e test uses `test.slow()`: one full run with eight snapshots on PGlite exceeds 30 s.
+10. **The 4.4 inventory guard.** It gains one assertion showing that an extra unclassified table still fails it.
+
+### Known issues
+- **PGlite under load:**
+  - long or parallel runs drop connections or corrupt the extended protocol;
+  - each occurrence was recovered by restarting `woffiz-46-test` and re-running the affected files or tests, labelled above;
+  - CI uses standard PostgreSQL.
+- **Next.js build notice:** `npm run build` sometimes stops once with a Next.js "SecurityFatalError" notice recommending an upgrade; a plain retry continues. Not acted on; reported to the owner.
+- **Pending CI:** the five required cases, case 2's observation, and N1/N2.
+
+### Declaration
+Slice 4.6 is implemented per the Manager design and verified locally:
+- `npm run check` exit 0 (382 unit tests);
+- integration 225 passed (one labelled PGlite rerun);
+- e2e 242 passed (one labelled PGlite rerun);
+- the migration checked twice, the functional proof and the privacy grep done.
+
+The required PostgreSQL cases and N1/N2 are pending the CI run of an owner-approved push and are not claimed. No push, merge, deployment, production environment change or deletion of real data.
+
 ## 4.5 corrective (R1)
 
 ### Phase Identifier
