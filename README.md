@@ -87,7 +87,7 @@ The code for the pilot allowlist is in place and **changes nothing in production
 4. Set `EMAIL_SENDER_VERIFIED=true`.
 5. Set `PILOT_EMAILS` (grammar in `.env.example`).
 
-Good to know: the list is consulted only when an account is created. Removing an address blocks only a new registration; the existing account keeps signing in and can still reset its password and re-send verification. A change of `PILOT_EMAILS` needs a redeploy. If any entry is malformed, or there are more than 200 entries or 16 KB, the whole list is ignored (registration stays tester-only) and the server log says so once, with counts and never an address. The list is never logged, rendered or sent to the browser. Accounts that never verified their address are not purged yet (planned for slice 4.6); they are not locked out either.
+Good to know: the list is consulted only when an account is created. Removing an address blocks only a new registration; the existing account keeps signing in and can still reset its password and re-send verification. A change of `PILOT_EMAILS` needs a redeploy. If any entry is malformed, or there are more than 200 entries or 16 KB, the whole list is ignored (registration stays tester-only) and the server log says so once, with counts and never an address. The list is never logged, rendered or sent to the browser. Accounts that never verified their address are not locked out; once the owner enables the never-verified purge (see "Operations" below), they are deleted 14 days after creation.
 
 ## Account deletion (Phase 4, slice 4)
 
@@ -110,6 +110,89 @@ npm run test:e2e                  # Playwright at 360/768/1280: registration + e
 Locally, if PGlite drops connections under parallel load (`ConnectionClosed`, `P2028`), restart it (`npm run db:test:stop && npm run db:test:dev`) and use `npm run test:e2e -- --workers=2`. No test ever sends real email.
 
 **Concurrency and row-locking tests run only on standard PostgreSQL.** PGlite serves one connection, so locally they are skipped and reported as skipped, not passed. The GitHub Actions workflow (`.github/workflows/ci.yml`) runs them against a `postgres:17` service with `TEST_DB_KIND=postgres`. That job runs on `ubuntu-24.04` rather than `ubuntu-latest`, because on the Ubuntu 26.04 runner apt could not resolve the Ubuntu package hosts while installing the Playwright browser dependencies.
+
+## Operations (pilot metrics, alerts, housekeeping) (Phase 4, slice 6)
+
+Decisions and constants: `docs/DECISIONS.md` P4-6. Nothing here sends anything outside the app's own email channel, and nothing is collected beyond what the app already stores.
+
+- **Pilot metrics page, `/admin/metrics`.** Only a signed-in, verified account whose role is ADMIN in the database right now can open it; everyone else gets the normal 404 page. It is never cached (`Cache-Control: private, no-store`). It shows aggregate numbers only, each with its denominator ("2 מתוך 3"), for OWNER accounts only, by Israel calendar day:
+  - the joining funnel and the median hours to the first practice;
+  - active practice days;
+  - day-7 return;
+  - repeated difficulty per level position and stalled owners;
+  - mastery reports;
+  - generation health.
+
+  Demonstration videos are shown as "not measured in the pilot". It also lists open alerts with their notification status, the last housekeeping run, the never-verified purge state and the last 14 daily snapshots. Nothing on the page identifies an account.
+- **Alert rules** (code constants, changed only by a reviewed code change):
+
+  | Rule | Fires when |
+  |---|---|
+  | `server-errors` | at least 3 server errors in 60 min (an unexpected 500 in a project API route, or an uncaught page or route error) |
+  | `auth-email` | at least 2 failed verification or reset emails in 60 min |
+  | `generation-failures` | at least 3 failed generations in 60 min (any failure except the two daily limits) |
+  | `ai-budget-warning` | the system-wide model calls of the UTC day reach 80 % of `AI_DAILY_CALLS_MAX` |
+  | `ai-budget-exhausted` | the calls reach the maximum, or a request was refused for the budget today |
+  | `housekeeping` | a step of the daily run failed |
+
+  There is at most one open alert per rule (per UTC day for the two budget rules). A windowed alert closes after 6 h without a new event; a budget alert closes when its UTC day ends; the housekeeping alert closes after the next fully successful run. Closing sends nothing.
+- **Alert email.** Alert emails go to the server-only `ALERT_EMAIL` through the existing delivery: Resend in a deployment, the local outbox on a developer machine. The email holds the rule, counts, window, threshold, first and last event times, the environment and a link to `/admin/metrics`, never an address, id, message or request data. The rules:
+  - At most one reminder per 24 h while an alert stays open.
+  - At most 10 alert emails per UTC day in total, to protect the Resend quota that authentication mail shares.
+  - A failed send is retried after 5 min, at most 3 attempts.
+  - On the shared `resend.dev` sender, Resend delivers only to the account owner, so `ALERT_EMAIL` must equal `TESTER_EMAIL`; otherwise nothing is sent.
+
+  The page shows each notification status:
+
+  | Status | Meaning |
+  |---|---|
+  | `SENT` | sent |
+  | `FAILED` | failed, will be retried |
+  | `GAVE_UP` | three failed attempts |
+  | `SUPPRESSED` | the daily cap was reached |
+  | `SKIPPED` | shared sender and another address |
+  | `NOT_CONFIGURED` | `ALERT_EMAIL` unset or invalid; the page is the only channel |
+- **Daily housekeeping.** Vercel Cron (`vercel.json`, production deployments only) calls `GET /api/cron/housekeeping` once a day at `0 1 * * *` UTC, sometime between about 03:00 and 04:59 in Israel. It needs the header `Authorization: Bearer <CRON_SECRET>`; without `CRON_SECRET`, or with any other header, it answers 401 and does nothing. Answers:
+  - `200` with `{ outcome: "ok" | "partial", steps: [{ step, status, count }] }`;
+  - `409` while another run is unfinished.
+
+  Every step is idempotent, so a missed or doubled cron delivery is harmless. A missed run is not alerted; instead the page shows a warning once the last successful run is older than 36 h. To run it locally against your own dev server:
+
+  ```bash
+  curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/housekeeping
+  ```
+- **Retention, enforced by the daily run:**
+
+  | Data | Kept |
+  |---|---|
+  | Failed-generation payloads | 30 days (unchanged, now guaranteed daily) |
+  | Daily AI counters | 7 days |
+  | Email rate-limit counters | 24 h |
+  | Operational events | 30 days |
+  | Resolved alerts | 90 days |
+  | Housekeeping run records | 90 days |
+  | Daily aggregate snapshots | 365 days |
+  | Never-verified accounts | 14 days after creation, once the purge is enabled (below) |
+
+  Aggregate counts in the daily snapshots can outlive an account: a deleted account disappears from the live numbers, but an earlier day's totals stay. They hold no account id and cannot be linked back.
+- **Never-verified purge.** An account becomes eligible 14 days after creation when all of these hold:
+  - it never verified its address;
+  - it is an OWNER account;
+  - it has no puppy;
+  - it has no unexpired session.
+
+  Older unverified accounts that hold data (a puppy) are never purged automatically; the page shows how many there are. Until the owner sets `NEVER_VERIFIED_PURGE=on`, the run only counts eligible accounts and the page says "ספירה בלבד". Setting it is a separate production approval: deleted accounts cannot be restored. After a purge, an old verification link shows the "invalid link" screen, and the person can register again while their address is allowed.
+- **Error sources that do not raise an event (by design):**
+  - the account-deletion route's own error branch;
+  - Better Auth's internal errors (it answers its own 500);
+  - errors in the browser.
+
+  They still appear in the server log.
+- **Production steps (owner, none run by the code), in order:**
+  1. Apply the migration by hand with `prisma migrate deploy`.
+  2. Set `CRON_SECRET` (random, at least 16 header-safe characters) and `ALERT_EMAIL` for Production.
+  3. Merge and deploy, then check the cron log and the page after the first run.
+  4. Review the dry-run count on the page, then, as a separate approval, set `NEVER_VERIFIED_PURGE=on` and redeploy.
 
 ## Layout
 
