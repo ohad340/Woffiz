@@ -52,3 +52,60 @@ export const VERIFICATION_LABELS: Record<string, string> = {
   'extracted-text': 'הטקסט המלא של המקור חולץ בכלי ונקרא במלואו בידי העוזר, לא בידי הבעלים. הבעלים עדיין לא קרא אותו.',
   'owner-read': 'נקרא במלואו בידי הבעלים',
 }
+
+// ----- Pilot metrics page (slice 4.6; docs/DECISIONS.md P4-6). Keys are the stored codes. -----
+
+export const RULE_LABELS: Record<string, string> = {
+  'server-errors': 'שגיאות שרת',
+  'auth-email': 'כשלי שליחת מייל אימות או איפוס',
+  'generation-failures': 'כשלי יצירת תוכניות',
+  'ai-budget-warning': 'תקציב הבינה המלאכותית היומי קרוב למיצוי',
+  'ai-budget-exhausted': 'תקציב הבינה המלאכותית היומי מוצה',
+  housekeeping: 'שלב בניקוי היומי נכשל',
+}
+
+export const NOTIFY_LABELS: Record<string, string> = {
+  SENT: 'נשלחה',
+  FAILED: 'השליחה נכשלה, תנוסה שוב',
+  GAVE_UP: 'השליחה נכשלה שלוש פעמים',
+  SUPPRESSED: 'לא נשלחה: המכסה היומית מוצתה',
+  SKIPPED: 'לא נשלחה: השולח המשותף שולח רק לכתובת הבודק',
+  NOT_CONFIGURED: 'לא הוגדרה כתובת להתראות',
+  PENDING: 'בשליחה',
+}
+
+export const STEP_LABELS: Record<string, string> = {
+  'job-payloads': 'מחיקת תוכן של משימות יצירה (אחרי 30 יום)',
+  'ai-usage': 'מוני השימוש בבינה המלאכותית (7 ימים)',
+  'rate-limits': 'מוני הגבלת המיילים (24 שעות)',
+  'ops-events': 'אירועים תפעוליים (30 יום)',
+  'ops-alerts': 'התראות שנסגרו (90 יום)',
+  'housekeeping-runs': 'רישומי הרצות ניקוי (90 יום)',
+  'metric-days': 'תמונות יומיות (365 יום)',
+  'never-verified': 'חשבונות שלא אומתו (14 יום)',
+  snapshots: 'כתיבת תמונות יומיות',
+  alerts: 'בדיקת התראות',
+}
+
+export const STEP_STATUS_LABELS: Record<string, string> = { ok: 'הצליח', failed: 'נכשל', skipped: 'דולג' }
+
+export const RUN_OUTCOME_LABELS: Record<string, string> = { ok: 'הצליחה', partial: 'הצליחה חלקית', running: 'רצה עכשיו', abandoned: 'ננטשה' }
+
+export const TRIGGER_LABELS: Record<string, string> = { CRON: 'מתוזמנת', MANUAL: 'ידנית' }
+
+export const GENERATION_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'ממתינה',
+  SUCCEEDED: 'הצליחה',
+  FAILED: 'נכשלה',
+  REJECTED: 'נדחתה בבדיקת התוכן',
+  STALE: 'התיישנה',
+}
+
+export const FAILURE_CLASS_LABELS: Record<string, string> = {
+  provider: 'תקלה אצל ספק הבינה המלאכותית',
+  deadline: 'חריגה מהזמן המוקצב',
+  'attempts-exhausted': 'מוצו הניסיונות',
+  internal: 'שגיאה פנימית',
+  'lease-expired': 'העבודה ננטשה באמצע',
+  other: 'אחר',
+}

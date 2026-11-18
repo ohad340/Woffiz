@@ -1,4 +1,7 @@
 import { prisma } from '../db'
+import { runAfterResponse } from '../ops/defer'
+import { evaluateAlerts } from '../ops/evaluate'
+import { recordOpsEvent } from '../ops/events'
 import { emailTransport, normalizeEmail, signUpAllowedFor, signUpPolicy } from './config'
 import { pruneRateLimits, takeRateLimit, type Limit } from './rate-limit'
 import { renderAuthEmail, type AuthEmailKind } from './templates'
@@ -45,6 +48,10 @@ export async function sendAuthEmail(kind: AuthEmailKind, to: string, url: string
     await deliver({ kind, to: recipient, url, ...renderAuthEmail(kind, url) }, transport)
   } catch (error) {
     console.error(`[email] ${kind} delivery failed: ${error instanceof EmailDeliveryError ? error.message : 'unexpected error'}`)
+    runAfterResponse(async () => {
+      await recordOpsEvent('AUTH_EMAIL_FAILED')
+      await evaluateAlerts('auth-email')
+    })
   }
 }
 

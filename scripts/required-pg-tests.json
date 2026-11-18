@@ -34,7 +34,12 @@
     "account deletion on standard PostgreSQL a deletion queued behind the plan lock holds no puppy lock, so progression and deletion never deadlock (both orders)",
     "account deletion on standard PostgreSQL onboarding racing the deletion never leaves a puppy for the deleted user",
     "account deletion on standard PostgreSQL two concurrent deletions of the same account: one succeeds, the other answers UNAUTHENTICATED, no deadlock",
-    "account deletion on standard PostgreSQL a job created after the first lock pass cannot deadlock the deletion: the NOWAIT re-lock rolls back and the retry succeeds"
+    "account deletion on standard PostgreSQL a job created after the first lock pass cannot deadlock the deletion: the NOWAIT re-lock rolls back and the retry succeeds",
+    "ops and housekeeping on standard PostgreSQL a verification holding the user row makes the purge skip the account, which stays verified",
+    "ops and housekeeping on standard PostgreSQL the purge holding the user row makes a concurrent verification fail with one 500 and leaves no user and no session",
+    "ops and housekeeping on standard PostgreSQL ten concurrent purges over many eligible accounts delete each account exactly once",
+    "ops and housekeeping on standard PostgreSQL ten concurrent alert evaluations over one threshold crossing open one alert and send one notification",
+    "ops and housekeeping on standard PostgreSQL five concurrent housekeeping starts run once and refuse the others"
   ],
   "allowedToSkip": [
     "live model creates, adapts and revises a plan through the real provider"

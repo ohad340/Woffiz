@@ -459,3 +459,80 @@ model MediaReview {
 
   @@index([mediaVersionId, kind, createdAt])
 }
+
+// ----- Phase 4, slice 6: operations -----
+// Operational tables (docs/DECISIONS.md P4-6). None references an account: codes, counts and times only.
+
+enum OpsEventKind {
+  SERVER_ERROR
+  AUTH_EMAIL_FAILED
+  HOUSEKEEPING_FAILED
+}
+
+enum OpsAlertRule {
+  SERVER_ERRORS       @map("server-errors")
+  AUTH_EMAIL          @map("auth-email")
+  GENERATION_FAILURES @map("generation-failures")
+  AI_BUDGET_WARNING   @map("ai-budget-warning")
+  AI_BUDGET_EXHAUSTED @map("ai-budget-exhausted")
+  HOUSEKEEPING        @map("housekeeping")
+}
+
+enum OpsNotifyStatus {
+  SENT
+  FAILED
+  SKIPPED
+  SUPPRESSED
+  NOT_CONFIGURED
+  GAVE_UP
+}
+
+enum HousekeepingTrigger {
+  CRON
+  MANUAL
+}
+
+// One operational failure: a kind and a time, nothing else. Kept 30 days.
+model OpsEvent {
+  id        String       @id @default(uuid()) @db.Uuid
+  kind      OpsEventKind
+  createdAt DateTime     @default(now())
+
+  @@index([kind, createdAt])
+}
+
+// At most one open alert per dedupKey (partial unique index "OpsAlert_one_open_per_key" in the migration).
+// notifyStatus is null only while a claimed notification is being sent. Resolved alerts are kept 90 days.
+model OpsAlert {
+  id             String           @id @default(uuid()) @db.Uuid
+  rule           OpsAlertRule
+  dedupKey       String
+  openedAt       DateTime         @default(now())
+  lastEventAt    DateTime
+  eventCount     Int
+  lastNotifiedAt DateTime?
+  notifyStatus   OpsNotifyStatus?
+  notifyAttempts Int              @default(0)
+  resolvedAt     DateTime?
+
+  @@index([resolvedAt, openedAt])
+}
+
+// One daily housekeeping run: step statuses and counts only (one unfinished run at a time). Kept 90 days.
+model HousekeepingRun {
+  id         String              @id @default(uuid()) @db.Uuid
+  trigger    HousekeepingTrigger
+  startedAt  DateTime            @default(now())
+  finishedAt DateTime?
+  stepsJson  Json                @default("{}")
+
+  @@index([startedAt])
+}
+
+// Aggregate pilot metrics of one Israel day (src/server/metrics/schema.ts): integers, decimals and topic codes only. Kept 365 days.
+model PilotMetricDay {
+  day           DateTime @id @db.Date
+  schemaVersion Int
+  computedAt    DateTime @default(now())
+  metricsJson   Json
+}

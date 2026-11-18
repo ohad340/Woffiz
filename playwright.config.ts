@@ -48,6 +48,10 @@ export default defineConfig({
       MEDIA_LOCAL_DIR: 'e2e/.media',
       // Short-lived playback links, so the expired-link spec does not have to wait ten minutes.
       MEDIA_URL_TTL_S: '8',
+      // Slice 4.6 test values only (admin-metrics.spec.ts): the housekeeping route's bearer and the local alert address.
+      // NEVER_VERIFIED_PURGE stays unset, so the purge only counts.
+      CRON_SECRET: 'e2e-cron-secret-e2e-cron-secret',
+      ALERT_EMAIL: 'ops-alerts@example.test',
     },
   },
 })

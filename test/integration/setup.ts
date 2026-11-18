@@ -33,3 +33,7 @@ delete process.env.GEMINI_API_KEY
 delete process.env.ANTHROPIC_API_KEY
 delete process.env.AI_FAKE_MODE
 delete process.env.AI_TEST_MEDIA
+// Slice 4.6: the cron secret, the alert address and the purge switch are stubbed per test, never taken from .env.
+delete process.env.CRON_SECRET
+delete process.env.ALERT_EMAIL
+delete process.env.NEVER_VERIFIED_PURGE

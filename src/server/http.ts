@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from './db'
 import { AppError } from './errors'
+import { runAfterResponse } from './ops/defer'
+import { evaluateAlerts } from './ops/evaluate'
+import { recordOpsEvent } from './ops/events'
 import { requireAdminFromRequest, requireUserFromRequest, type SessionUser } from './session'
 
 /**
@@ -41,6 +44,10 @@ export async function adminRoute(request: Request, handler: (ctx: { user: Sessio
       return NextResponse.json({ error: error.code, message: error.hebrew, detail: error.message }, { status: error.status, headers })
     }
     console.error('[api] unexpected error', error)
+    runAfterResponse(async () => {
+      await recordOpsEvent('SERVER_ERROR')
+      await evaluateAlerts('server-error')
+    })
     return NextResponse.json({ error: 'INTERNAL', message: 'משהו השתבש. נסו שוב בעוד רגע.' }, { status: 500, headers })
   }
 }
@@ -90,6 +97,10 @@ export function postRoute<S extends z.ZodType>(schema: S, handler: Handler<z.inf
         return NextResponse.json({ error: gone.code, message: gone.hebrew }, { status: gone.status, headers: { 'Cache-Control': 'private, no-store' } })
       }
       console.error('[api] unexpected error', error)
+      runAfterResponse(async () => {
+        await recordOpsEvent('SERVER_ERROR')
+        await evaluateAlerts('server-error')
+      })
       return NextResponse.json(
         { error: 'INTERNAL', message: 'משהו השתבש. נסו שוב בעוד רגע.' },
         { status: 500, headers: { 'Cache-Control': 'private, no-store' } },

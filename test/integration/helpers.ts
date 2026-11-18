@@ -5,6 +5,10 @@ import { completeOnboarding, saveOnboardingDraft } from '@/server/onboarding'
 export const REAL_POSTGRES = process.env.TEST_DB_KIND === 'postgres'
 
 const TABLES = [
+  'OpsEvent',
+  'OpsAlert',
+  'HousekeepingRun',
+  'PilotMetricDay',
   'MediaReview',
   'MediaVersion',
   'TechniqueSuspensionEvent',

@@ -238,6 +238,7 @@ Verify keyboard flow, screen reader announcements, contrast and reduced motion.
 | Install guidance | Intro line only until the browser is detected (no loading text) | Not applicable | One case: installed, “התקנה” button, iOS steps or browser-menu instructions | Prompt dismissed or unsupported: browser-menu instructions with the honest “not supported” statement |
 | App update | No banner (no waiting version, first install, or “אחר כך” on this page load) | “לעדכן עכשיו” shows “מעדכנים…” and is disabled | One reload under the new version; no banner | No takeover within 10 s: one reload anyway |
 | Account deletion | “מחיקת החשבון” opens the dialog; the field is empty and “מחיקה לצמיתות” is disabled | “מוחקים…”, no duplicate submit | Full navigation to the welcome page with “החשבון נמחק.”; every device signed out | Wrong password: inline error, field cleared and focused, nothing deleted. Too many attempts or no connection: explained, nothing deleted. Administrator: the explanation instead of the form |
+| Admin metrics | Honest empty states per section (“אין התראות פתוחות.”, no run yet, no snapshots yet); an empty denominator shows “—”, never NaN or 0% | Server render (no client loading state) | Aggregates with denominators in Cards and scrollable tables, alert and run statuses as Badges | The existing error boundary |
 
 Offline page: `public/offline.html` must work with no network, so it is self-contained. It copies the
 token values it uses into its own `:root` (kept identical to `src/styles/tokens.css` by `src/lib/offline-page.test.ts`),
