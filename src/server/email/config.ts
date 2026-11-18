@@ -107,6 +107,9 @@ export function isSharedSender(from: string): boolean {
 /** The owner's explicit confirmation that the sending domain is verified and a delivery test succeeded. */
 const senderVerified = (env: Env) => env.EMAIL_SENDER_VERIFIED?.trim().toLowerCase() === 'true'
 
+/** Verified sender (P4-5): the owner's confirmation AND a sender outside the shared resend.dev domain. Used by alert mail (P4-6). */
+export const verifiedSender = (env: Env = process.env) => senderVerified(env) && !isSharedSender(env.EMAIL_FROM?.trim() ?? '')
+
 /** One line per reason per process, so the per-request calls (welcome page, every send) do not flood the log. */
 const warned = new Set<string>()
 export type Warn = (reason: string, message: string) => void

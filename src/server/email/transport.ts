@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { EmailTransport } from './config'
 import type { AuthEmailKind } from './templates'
 
-export type OutgoingEmail = { kind: AuthEmailKind; to: string; subject: string; html: string; text: string; url: string }
+export type OutgoingEmail = { kind: AuthEmailKind | 'ops-alert'; to: string; subject: string; html: string; text: string; url: string }
 
 /** A delivery failure. Its message never contains the recipient, the link or a key: it may be logged. */
 export class EmailDeliveryError extends Error {
