@@ -104,7 +104,7 @@ No new runtime services. Phase 4 extends the existing Next.js App Router app, Pr
 | 4.3 | Public shell asset caching | **Done** (merged `ad6b55a`, P4-3) |
 | 4.4 | Account deletion | **Done** (merged `0b18ee2`, PR #7, P4-4) |
 | 4.5 | Pilot access allowlist | **Done** (merged `265f006`, PR #8, P4-5; pilot not open) |
-| 4.6 | Pilot metrics, operational alerts and retention housekeeping | In design (arch-phase4.md READY_FOR_MANAGER; owner decisions F1-F3 approved 2026-11-17) |
+| 4.6 | Pilot metrics, operational alerts and retention housekeeping | Architect review APPROVED 2026-11-18 (branch `feature/phase-4-ops-housekeeping`, head `51592f0`, not pushed); merge conditions C1-C4 pending CI after an owner-approved push; no production action taken |
 | 4.7 | Operations drills: content rollback, backup restoration, spending limits, performance and accessibility measurement | Planned |
 | 4.8 | Pilot readiness: device matrix, PRD §11 end to end, usability sessions, results report | Planned (largely owner-run) |
 
@@ -180,4 +180,6 @@ Extend the existing app; no new hosted services. The service worker remains a si
 | Mobile performance test profile (device, network throttling) for LCP/INP | Targets are meaningless without an agreed profile | Owner/Architect, in arch-phase4.md |
 | Pilot recruitment, size and timing; who runs usability sessions | 4.8 scheduling and the results report | Owner, before 4.8 |
 | Verified sending domain: which domain and when | Blocks opening the pilot to non-tester addresses | Owner, before opening the pilot |
+| Next.js security patch: `next build` on 16.4.3 sometimes stops with a `SecurityFatalError` notice; secondary sources report patched versions 16.4.5 / 15.5.29 (2026-11-03 release). Production runs 16.4.3 | Production security exposure, independent of 4.6; may also stop a CI build | Owner: approve a separate dependency-only change from `main` (version verified against the official advisory by the Manager), preferably before opening the pilot. Not combined with 4.6 |
+| Alert claim gap (4.6 Manager observation (a)): a sender dying after claiming attempt 3 leaves that alert silent until it resolves | Minor; every rule resolves within a day | Follow-up when the alert module is next changed: null status at attempt 3 older than 5 min becomes `GAVE_UP` |
 | Retention period for analytics events and failed-job payloads (PRD proposes 30 days for payloads) | Privacy commitments in 4.4 and 4.6 | Payloads resolved 2026-11-12 (B3 in arch-phase4.md: at most 30 days; deleted accounts immediately). **Analytics resolved 2026-11-17 (F2 in arch-phase4.md): aggregate snapshots kept 365 days. Never-verified accounts (F3): purged 14 days after creation, once the purge is separately enabled in production.** |

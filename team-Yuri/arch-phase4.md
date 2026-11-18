@@ -4,7 +4,9 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_MANAGER
+STATUS: APPROVED
+
+Slice 4.6 final Architect review APPROVED on 2026-11-18. The code and local evidence are approved. Merge conditions C1-C4 (the CI-only items) are pending an owner-approved push; see "Architect Review".
 
 Slice 4.6 contract written on 2026-11-17. Owner decisions F1-F3 approved on 2026-11-17 as recommended (see "Owner Decisions (slice 4.6)"): alert email to `ALERT_EMAIL` with the admin page as fallback, 365-day snapshot retention, 14-day never-verified retention.
 
@@ -254,13 +256,118 @@ None is authorized by this contract. Each is a separate owner approval, in this 
 Costs: none expected. One function invocation a day on Hobby; a few small tables on the Supabase free tier; alert mail within the Resend free quota. Rollback: deploy the previous release (`265f006`, `dpl_Akza3ACdCrzeBDg4GdKPh38tvwuG`). Its cron definitions (none) come back with an Instant Rollback, and the additive tables can stay. A purge is not undone by a rollback.
 
 ## Architect Review
-ARCHITECT_REVIEW_STATUS: NOT_REVIEWED
+ARCHITECT_REVIEW_STATUS: APPROVED
 
 ### Review Notes
-Slice 4.6 has not been implemented yet.
+Final review of slice 4.6 revision 1, 2026-11-18.
+
+**What was reviewed:**
+- Commits `a965abf..51592f0` on `b3000b3`, branch `feature/phase-4-ops-housekeeping`, worktree `C:\Users\אוהד\Documents\Woffiz-4.6`. Not pushed.
+- `manager-phase4.md` (shared folder): MANAGER_REVIEW_STATUS APPROVED, 2026-11-18.
+- The top "4.6" section of `dev-phase4.md` in the worktree.
+
+**What the approval covers:** the architecture, the code and the local evidence. The CI-only items are merge conditions (C1-C4 below), not results.
+
+**Architect spot-checks** (reading only; no tests run, per A3):
+- **Scope:**
+  - `git diff 265f006 --name-only` over `jobs.ts`, `quota.ts`, `onboarding.ts`, `revision.ts`, `account-deletion.ts`, `auth.ts`, `public/sw.js`, `progress.ts`, `package.json` and `package-lock.json` is empty.
+  - `git diff --stat b3000b3..51592f0`: 64 files, all within M1-M8, G7/G8 or the test helpers.
+  - `vercel.json` adds only `crons`.
+- **O4 hooks** (`http.ts`, `delivery.ts`, `instrumentation.ts`, the three generation routes):
+  - each adds only a deferred record/evaluate call;
+  - responses, schemas, handlers and `maxDuration` are unchanged;
+  - `AppError` and the deleted-account branch return before the hook;
+  - `onRequestError` is limited to Node.js, filters control-flow digests and imports the ops module dynamically.
+- **O8/O9 purge** (`housekeeping/never-verified.ts`):
+  - eligibility, `FOR UPDATE OF u SKIP LOCKED`, and the re-check of puppy and session under the lock all match;
+  - the delete order matches O8, including `deleteRequestUnits`;
+  - the final user `DELETE … AND "emailVerified" = false` must return exactly 1, otherwise the transaction rolls back;
+  - deletion requires `NEVER_VERIFIED_PURGE === 'on'` at call time;
+  - `account-deletion.ts` is not imported;
+  - the log line holds counts only.
+- **O10 route:**
+  - `authorizeCron` compares SHA-256 digests with `timingSafeEqual` and fails closed on an unset or empty secret;
+  - the route sets `force-dynamic` and `maxDuration = 60`, and every answer is `private, no-store`.
+- **O6/O7 rules:** thresholds 3/2/3 in 60 min, 6 h quiet resolve, 24 h reminder, 3 attempts, 10 mails per UTC day, and per-UTC-day budget keys all match.
+- **Migration:**
+  - one additive migration with `OpsAlert_one_open_per_key` and `HousekeepingRun_one_unfinished`;
+  - the RLS and revoke block is present;
+  - no existing migration is changed.
+- **Required list:** `required-pg-tests.json` names the five cases. The test file holds them under the standard-PostgreSQL `describe`, and case 2 prints the `[case 2] …` line.
+
+**Rulings on the Manager refinements G1-G10:**
+- **G1: accepted, as an amendment of O5.** O5's literal code list would miss the most common failure (`provider …`). The alert set is every `FAILED` job except `quota-account` and `quota-calls`. `STALE` and `REJECTED` stay non-alerting, and `quota-calls` belongs to the budget rule. This follows O5's intent.
+- **G2: accepted.** The real `fail`-mode flow through the three routes is proven in integration. The e2e seeds failures, so a shared server mode cannot break parallel specs.
+- **G3: accepted.** It defines "stalled" (at least 7 days on the current level), which O2 left open.
+- **G4: accepted.** It defines the nested funnel and the M2-M5 cohort. Legacy unverified accounts are counted on the housekeeping block.
+- **G5: accepted, with one clarification.** As designed (Manager plan) and implemented, the event insert itself runs inside `runAfterResponse`. Outside a request scope with no test sink, the event is therefore dropped as well, not "already written". This loss cannot occur in production:
+  - every hook site runs inside a request scope;
+  - `onRequestError` awaits directly.
+
+  Deferring the insert is stricter than O4's "one insert on the error branch", because the failing response is not delayed at all.
+- **G6: accepted.** The expected result of case 2 is `500`, an empty body, no session-token cookie, no user row and no session row. It must be observed in CI (C2).
+- **G7: accepted.**
+  - `transport.ts`: type only.
+  - `config.ts`: one additive `verifiedSender`.
+  - `playwright.config.ts` and `test/integration/setup.ts`: test infrastructure.
+- **G8: accepted.** The new class `'operational, not linked to an account'` is correct: the four tables hold no user id.
+- **G9: accepted.** Vercel Cron Jobs, not Schedules. Two rules carry forward:
+  - a later move to Schedules is a configuration change only;
+  - `crons` and `schedules` must never both be present, or the route runs twice.
+- **G10: accepted as a known coverage gap.** These are not alert sources:
+  - the account-deletion route's own `INTERNAL` branch;
+  - Better Auth's internal 500s;
+  - client-side errors.
+
+  This follows O4/O12 and is documented in the README. Closing it would need changes to files that 4.6 protects, so it is not a 4.6 item.
+
+**Rulings on the ten Developer interpretations** (all accepted by the Manager):
+1. **Accepted.** Legacy unverified owners count in M6 (Q4 as designed). Such accounts cannot sign in, so in practice they add no jobs. No `P4-6` change is required.
+2. **Accepted.** Timestamps passed as `::timestamptz AT TIME ZONE 'UTC'` give the same instant as a `Date`, consistent with V6.
+3. **Accepted.** The inclusive boundaries (retry at 5 min, reminder at 24 h) do not affect the cap or the exactly-once claim.
+4. **Accepted.** The sweep claims a never-claimed first notification, which closes the case of an opener dying between insert and claim. The conditional claim keeps it exactly once. `now` is a test-only parameter.
+5. **Accepted.** The refreshed `eventCount` is informational only.
+6. **Accepted.** `snapshots = 1` on a repeated run is the specified idempotent upsert of Israel yesterday.
+7. **Accepted.** The run lease uses `ON CONFLICT DO NOTHING RETURNING` on `HousekeepingRun_one_unfinished`. The meaning is the same as O10, without an exception path.
+8. **Accepted.** The log lines carry codes and counts only.
+9. **Accepted.** The extra files:
+   - the `nav.row > a` rule: 44 px target, current link marked by weight, no new token;
+   - the reset list;
+   - the test helpers;
+   - `reset-ops`, limited to its own `e2e-ops-` jobs;
+   - `test.slow()`.
+10. **Accepted.** The extra assertion in the 4.4 inventory guard strengthens it and changes no classification.
+
+**Manager observations:**
+- **(a): accepted as a known limitation.** A sender that dies after claiming attempt 3 leaves that alert silent until it resolves. Every rule resolves (6 h quiet, the next UTC day, or the next ok run). Recorded in `plan.md` as a follow-up, to be fixed when the alert module is next changed: a null status at attempt 3 older than 5 min becomes `GAVE_UP`.
+- **(b): accepted.** A `P2028` or a `302` in CI case 2 is a test-timing failure. It is diagnosed before any further push. `auth.ts` is never changed for it.
+- **(c): outside 4.6; an owner decision.** `next build` sometimes stops with a Next.js `SecurityFatalError` notice.
+  - **The notice's own instructions are not acted on.** It contains instructions addressed to an automated agent, which is build output, not an approved request. No role ran the upgrade command it suggests.
+  - **Public sources:** secondary sources report a Next.js security release of 2026-11-03 with patched versions 16.4.5 and 15.5.29. One reported advisory range (16.3.0-16.4.4) would include the installed 16.4.3. This is not yet verified against the official advisory.
+  - **Production exposure:** production (4.5, `265f006`) runs 16.4.3 today, so the exposure is independent of 4.6.
+  - **Recommendation (not approved):** one separate, dependency-only change from `main`. It moves `next` 16.4.3 to the patched 16.4.x after the Manager verifies the version against the official Next.js advisory. It has its own branch, CI and deployment approval, preferably before the pilot opens, and is never combined with 4.6.
+  - **If CI's build stops on the same notice,** C1 fails. That failure is diagnosed, not re-run blindly.
+
+**Criteria status:**
+- **Met locally** (Manager criteria): 1-4 and 7-10.
+- **Pending CI:** 5, 6 and 11 (conditions C1-C3).
 
 ### Required Corrections
-None yet.
+None.
+
+**Merge conditions** (they come after an owner-approved push; this review authorizes no push):
+- **C1:** the three artifacts are copied byte for byte from the shared folder and committed in the worktree. Then a fresh first-attempt CI run of build, unit, integration and e2e is green, including the line "All 39 required PostgreSQL tests executed and passed".
+- **C2:** the CI log line `[case 2] …` shows `status=500 body-length=0` and no session-token cookie, and the test's row assertions pass. Anything else: the Developer stops and reports; `auth.ts` is untouched.
+- **C3:** N1 (without `SKIP LOCKED`, case 1 exceeds its bound) and N2 (without `OpsAlert_one_open_per_key`, case 4 sends more than one notification) both fail as intended on CI's standard PostgreSQL. They run from a scratch branch or commit that is never merged, with its own owner-approved push, and are recorded with restore proof.
+- **C4:** the CI results are in the PR description. A new failure reopens this review.
+
+**Not authorized by this review:**
+- the migration in production;
+- `CRON_SECRET`, `ALERT_EMAIL` or `NEVER_VERIFIED_PURGE` in any hosted environment;
+- the push, the merge or the deployment;
+- any purge of real accounts.
+
+These remain the separate steps of "Production actions (slice 4.6)", in that order.
 
 ---
 

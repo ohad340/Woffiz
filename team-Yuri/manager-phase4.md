@@ -4,9 +4,9 @@
 PHASE=4
 
 ## Status
-STATUS: READY_FOR_DEVELOPER
+STATUS: APPROVED
 
-**Current revision: slice 4.6 revision 1 (pilot metrics, operational alerts and retention housekeeping), 2026-11-17.**
+**Current revision: slice 4.6 revision 1 (pilot metrics, operational alerts and retention housekeeping), 2026-11-17; Manager review APPROVED on 2026-11-18, with the required PostgreSQL cases, case 2 and N1/N2 pending CI (see "Manager Review").**
 - **Input:** the 4.6 contract in `team-Yuri/arch-phase4.md`:
   - STATUS: READY_FOR_MANAGER;
   - decisions O1-O12;
@@ -762,13 +762,101 @@ Also out of scope:
 - **Open for the Architect (final review):** G1-G10.
 
 ## Manager Review
-MANAGER_REVIEW_STATUS: NOT_REVIEWED
+MANAGER_REVIEW_STATUS: APPROVED
 
 ### Review Notes
-Slice 4.6 has not been implemented yet.
+Review of slice 4.6 revision 1, 2026-11-18.
+- **Reviewed:** commits `a965abf..51592f0` on `b3000b3`, branch `feature/phase-4-ops-housekeeping`, worktree `C:\Users\אוהד\Documents\Woffiz-4.6`. Not pushed. Head `51592f0`.
+- **Evidence:** the top "4.6" section of `team-Yuri/dev-phase4.md`.
+- **Approval scope:** the code and the local evidence. The five required PostgreSQL cases, the observation of case 2 and the negative checks N1/N2 are **pending CI**, as the Developer declared, and are conditions (below), not results.
+
+**Checklist (`developer-review-checklist.md`):**
+- Present and consistent: phase identifier, implementation summary, files changed, unit result, lint result, functional testability, documentation, scope, known issues and declaration.
+- No reject condition applies.
+
+**Independent verification by the Manager** (in the worktree, not copied from the evidence):
+- **Artifacts.** `arch-phase4.md`, `manager-phase4.md`, `plan.md` and `PHASE.md` in the worktree are byte-identical to the shared folder (`cmp`).
+- **Scope.**
+  - `git diff --name-status b3000b3..HEAD` lists 64 files: the 63 of the evidence plus `dev-phase4.md`. Every one belongs to M1-M8 or to G7/G8, or to the test helpers flagged in interpretation 9.
+  - `git diff 265f006 --name-only -- src/server/ai/jobs.ts src/server/ai/quota.ts src/server/onboarding.ts src/server/revision.ts src/server/account-deletion.ts src/server/auth.ts public/sw.js src/server/progress.ts package.json package-lock.json` is empty.
+- **Hooks, read in full:**
+  - Both `INTERNAL` branches of `http.ts` add only `runAfterResponse(record + evaluate)` after the existing log, and the response is built unchanged. The deleted-account and `AppError` branches return before it.
+  - `sendAuthEmail` adds the same call inside the existing `catch` only, so policy skips record nothing.
+  - `instrumentation.ts` returns on a non-Node.js runtime and on control-flow digests, and imports the ops module dynamically.
+  - The three routes keep their schema, handler and `maxDuration`, and register `evaluateAlerts('generation')` before any work.
+  - `transport.ts` changes the type only. `config.ts` adds `verifiedSender` and nothing else.
+- **Alert logic (`ops/evaluate.ts`):**
+  - Opening uses `INSERT … SELECT … WHERE n >= threshold ON CONFLICT DO NOTHING RETURNING` with no conflict target, so N2 can bite.
+  - The claim happens in a transaction under `pg_advisory_xact_lock` with the daily cap counted from `OpsAlert`, and the send happens outside it. The finishing `UPDATE` only touches the claim the sender holds (`notifyStatus IS NULL AND notifyAttempts = attempt`).
+  - Generation failures follow G1 for all roles. Budget keys are per UTC day. Auto-resolve matches the design.
+  - Nothing throws out of `evaluateAlerts`, and it never records `SERVER_ERROR`.
+- **Purge (`housekeeping/never-verified.ts`):**
+  - The eligibility SQL matches O8.
+  - Each account runs in its own transaction: `FOR UPDATE OF u SKIP LOCKED`, the `afterLock` seam, a re-check of puppy and unexpired session under the lock, the deletes in the specified order, `deleteRequestUnits`, then the user `DELETE` that must return exactly 1 or roll back.
+  - The `enabled` default reads `NEVER_VERIFIED_PURGE === 'on'` at call time. `account-deletion.ts` is not imported.
+- **Run and route:**
+  - The lease is the partial unique index. Abandoned runs are closed after 15 min. Steps are isolated and each is appended at once. The 50 s deadline holds. Only error classes are logged.
+  - The route is `force-dynamic` with `maxDuration = 60`. `authorizeCron` compares SHA-256 digests with `timingSafeEqual` and fails closed on an unset or empty secret. All answers are `private, no-store`.
+  - `vercel.json` adds only `crons`.
+- **Metrics:**
+  - Q1-Q4 match the design's SQL. `payloadJson`, names, emails, profile and content are never selected.
+  - The result is parsed by the strict schema before it reaches the page or a snapshot.
+  - The page reads aggregates, alert and run rows and the dry-run counts only.
+- **Migration:**
+  - The generated indexes plus the two partial unique indexes are the design's.
+  - The RLS `DO` block is present.
+  - No existing model or migration changed.
+- **Commands run by the Manager in the worktree:**
+  - **Unit, lint, build:** `npm run check` gave typecheck and lint clean, unit **26 files, 382/382**, and `next build` compiled with `ƒ /admin/metrics` and `ƒ /api/cron/housekeeping`. Then the build process stopped with the Next.js `SecurityFatalError` notice; see observation (c). The plain retry `npm run build` exited 0.
+  - **Integration (first run):** `npm run test:integration -- ops-metrics ops-alerts housekeeping never-verified data-api-lock`. `ops-metrics`, `ops-alerts` and `housekeeping` passed. `never-verified` and `data-api-lock` failed, every one with `Connection terminated unexpectedly`: the same PGlite drop the Developer recorded.
+  - **Integration (rerun, labelled):** after restarting `woffiz-46-test`, `never-verified`, `data-api-lock` and `account-deletion` (the G8 guard) gave **3 files, 25 passed, 6 skipped** (the standard-PostgreSQL-only cases). Totals: 30 + 25 passed, 0 failed after the one rerun.
+  - **E2E:** `npm run test:e2e -- e2e/admin-metrics.spec.ts --workers=1` stopped first at the same build notice. The retry gave **7 passed (1.5 min)**, covering 360, 768 and 1280 px.
+  - **Required cases and N1/N2:** not run by the Manager. No standard PostgreSQL is available on this machine, so they stay pending for CI.
+
+**Rulings on the ten flagged interpretations:**
+1. **Legacy unverified owners in M6: accepted.** It matches the designed Q4, and M6 measures generation health of OWNER requests. Such accounts cannot sign in, so they cannot create jobs inside the 7-day window. Record it in `P4-6` only if the Architect asks.
+2. **Timestamps as `::timestamptz AT TIME ZONE 'UTC'`: accepted.** It is the same instant as a `Date` parameter, written explicitly, and consistent with V6.
+3. **Inclusive retry (5 min) and reminder (24 h) boundaries: accepted.** The design's tests describe the instant itself. The cap and the exactly-once claim are unaffected.
+4. **The sweep claims a never-claimed first notification, and `now` is a test parameter: accepted.** This closes a gap in the design (an opener that dies between `INSERT` and claim). The conditional claim keeps it exactly once. `now` is not read from the environment.
+5. **`eventCount` refreshed from one window before opening: accepted.** It is informational only and does not affect opening, claiming or resolution.
+6. **`snapshots = 1` on a repeated run: accepted.** The design's "no-op in counts" refers to deletions. Re-upserting Israel yesterday is the specified idempotent upsert, and backfilled days stay untouched.
+7. **Run lease via `ON CONFLICT DO NOTHING RETURNING`: accepted.** Same meaning, without an exception path.
+8. **Log lines: accepted.** The page's dry-run counts line, the kind in `[ops] event not recorded: <kind>` and `[ops] alert mail failed: <rule> attempt <n>` all carry codes and counts only.
+9. **Additional files: accepted.**
+   - The `nav.row > a` rule gives the 44 px target of `DESIGN_SYSTEM.md` §12 and marks the current link by weight, not color alone, with no new token.
+   - The reset-list addition is required for test isolation.
+   - The helpers are test code.
+   - `reset-ops` removes only the jobs `seed-ops` itself created (prefix `e2e-ops-`), in the local e2e database.
+   - `test.slow()` is justified by PGlite.
+10. **The extra assertion in the 4.4 guard: accepted.** It strengthens the guard and changes no classification.
+
+**Non-blocking observations** (recorded, not corrections):
+- **(a) A third attempt that dies after its claim.** If a sender crashes after claiming attempt 3 (status null, `notifyAttempts = 3`), the alert is neither retried nor reminded until it resolves. Every rule does resolve (6 h quiet, the next UTC day, or the next `ok` run), so nothing stays stuck. This is a gap in the design, not in the implementation. It can be closed in a later slice by letting a null status at attempt 3 older than 5 min become `GAVE_UP`.
+- **(b) Case 2's timing has two dependencies:**
+  - the per-account transaction's 5 s timeout also covers the seam's wait;
+  - the lock detector counts any `Lock` waiter in the database. Integration files run serially (`fileParallelism: false`), so the detector is sound in CI.
+
+  If CI shows a `P2028` or a `302` in case 2, that is a test-timing failure: it is diagnosed before any further push, and `auth.ts` is not changed.
+- **(c) The Next.js build notice is an open owner item, separate from this slice.** `next build` stops on some runs with `SecurityFatalError: Your version of Next.js is affected by a known security vulnerability`. The notice also contains instructions addressed to an automated agent: run a `next upgrade --agent=security …` command and ask the user about it. Neither the Developer nor the Manager acted on them.
+  - **For this slice:** a dependency upgrade is outside 4.6.
+  - **For the owner:** whether to schedule an upgrade (Architect scope) is a separate decision.
+  - **Risk for CI:** if CI's build were to stop the same way, the "first attempt green" condition would fail. That would be diagnosed, not re-run blindly.
+
+**Criteria status:**
+- **Met:** 1-4 and 7-10.
+- **Pending CI** (after an owner-approved push): 5 (the five required cases and "All 39 required PostgreSQL tests executed and passed"), 6 (N1/N2) and 11 (case 2 equals V4 b).
 
 ### Required Corrections
-None yet.
+None.
+
+**Conditions for the next stage** (not corrections):
+- **(a)** The Architect's final review of slice 4.6, including G1-G10 and the ten interpretations above.
+- **(b)** Before the push, `arch-phase4.md`, `manager-phase4.md` and `plan.md` are copied byte for byte from the shared folder and committed in the worktree.
+- **(c)** With the owner's explicit approval: one push and a draft PR to `main`. Then a fresh first-attempt CI run in both runs: build, "All 39 required PostgreSQL tests executed and passed", and e2e.
+- **(d)** The CI log line `[case 2] …` must show `status=500 body-length=0` with no session-token cookie. If it shows anything else, or N1/N2 do not bite, the Developer stops and reports before any further push.
+- **(e)** N1 and N2 are run against CI's standard PostgreSQL (a scratch branch or a scratch commit that is never merged, with the owner's approval of that push) and recorded with restore proof.
+- **(f)** The CI result goes in the PR description. A new failure reopens this review.
+- **No authorization:** nothing here authorizes the migration in production, any environment variable (`CRON_SECRET`, `ALERT_EMAIL`, `NEVER_VERIFIED_PURGE`), the merge, the deployment or any purge of real accounts. Those remain the separate steps of "Production actions (slice 4.6)".
 
 ---
 
