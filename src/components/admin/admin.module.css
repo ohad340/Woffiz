@@ -190,3 +190,15 @@
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
+
+/* Admin navigation (AdminNav): 44px touch area; the current section is bold, not color alone. */
+nav.row > a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+}
+
+nav.row > a[aria-current='page'] {
+  font-weight: 700;
+  text-decoration: none;
+}

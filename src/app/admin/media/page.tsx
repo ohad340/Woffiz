@@ -1,4 +1,5 @@
 import { Film } from 'lucide-react'
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { TechniqueSuspension } from '@/components/admin/AdminActions'
 import { STATUS_LABELS, REASON_LABELS } from '@/components/admin/labels'
@@ -7,6 +8,8 @@ import { Badge, Card } from '@/components/ui/Card'
 import { TOPIC_LABELS, type Topic } from '@/domain/types'
 import { adminOverview } from '@/server/media/admin-queries'
 import { requireAdminOrNotFound } from '@/server/session'
+
+export const metadata: Metadata = { title: 'ניהול מדיה' }
 
 const STATUS_TONE = { DRAFT: 'neutral', REVIEWED: 'info', PUBLISHED: 'success', WITHDRAWN: 'warning' } as const
 
