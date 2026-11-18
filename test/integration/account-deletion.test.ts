@@ -449,7 +449,7 @@ describe('the deleted-account mapping in postRoute (one choke point)', () => {
 
 describe('inventory guard', () => {
   // Mirrors the inventory table of the 4.4 contract. A new table fails this test until it is classified there.
-  const CLASSIFIED: Record<string, 'deleted for the owner' | 'retained shared' | 'retained pseudonymous'> = {
+  const CLASSIFIED: Record<string, 'deleted for the owner' | 'retained shared' | 'retained pseudonymous' | 'operational, not linked to an account'> = {
     user: 'deleted for the owner',
     session: 'deleted for the owner',
     account: 'deleted for the owner',
@@ -469,6 +469,11 @@ describe('inventory guard', () => {
     TechniqueSuspensionEvent: 'retained pseudonymous',
     MediaAsset: 'retained shared',
     TechniqueVersionState: 'retained shared',
+    // Slice 4.6 (P4-6): codes, counts and times only; no column references an account.
+    OpsEvent: 'operational, not linked to an account',
+    OpsAlert: 'operational, not linked to an account',
+    HousekeepingRun: 'operational, not linked to an account',
+    PilotMetricDay: 'operational, not linked to an account',
   }
 
   it('classifies every table of the public schema, so a future table cannot silently escape deletion', async () => {
@@ -478,6 +483,7 @@ describe('inventory guard', () => {
     const actual = rows.map((row) => row.table_name).sort()
     expect(actual.filter((name) => !(name in CLASSIFIED))).toEqual([]) // an unclassified table fails here
     expect(Object.keys(CLASSIFIED).filter((name) => !actual.includes(name))).toEqual([]) // and a stale entry too
+    expect([...actual, 'FutureTable'].filter((name) => !(name in CLASSIFIED))).toEqual(['FutureTable']) // the check still bites
   })
 })
 
