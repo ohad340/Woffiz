@@ -317,19 +317,32 @@ describe.skipIf(!REAL_POSTGRES)('ops and housekeeping on standard PostgreSQL', (
     vi.stubEnv('ALERT_EMAIL', 'ops-alerts@example.test')
     const now = new Date()
     await insertEvents('SERVER_ERROR', 3, now)
-    // SCRATCH N2 (never merged): run without the partial unique index, then recreate it exactly as the migration does.
+    // SCRATCH N2 (never merged): run without the partial unique index. The counts are taken before any cleanup; then the test
+    // rows are removed and the index is recreated exactly as the migration does, and the restore is verified.
     await prisma.$executeRawUnsafe('DROP INDEX "OpsAlert_one_open_per_key"')
+    let openAlerts = -1
+    let notifications = -1
     try {
       await Promise.all(Array.from({ length: 10 }, () => evaluateAlerts('server-error', { now })))
+      openAlerts = await prisma.opsAlert.count({ where: { rule: 'SERVER_ERRORS', resolvedAt: null } })
+      notifications = alertFiles(outbox).length
+      console.log(`[N2] before cleanup: open-alerts=${openAlerts} notifications=${notifications}`)
     } finally {
+      const removedAlerts = await prisma.opsAlert.deleteMany({ where: { rule: 'SERVER_ERRORS' } })
+      const removedEvents = await prisma.opsEvent.deleteMany({ where: { kind: 'SERVER_ERROR' } })
       await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX "OpsAlert_one_open_per_key" ON "OpsAlert" ("dedupKey") WHERE "resolvedAt" IS NULL')
+      const restored = await prisma.$queryRaw<{ indexdef: string; valid: boolean; unique: boolean }[]>`
+        SELECT pg_get_indexdef(i.indexrelid) AS indexdef, i.indisvalid AS valid, i.indisunique AS unique
+        FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = 'OpsAlert_one_open_per_key'`
+      console.log(`[N2] cleanup: removed-alerts=${removedAlerts.count} removed-events=${removedEvents.count}; restore: ${JSON.stringify(restored)}`)
+      expect(restored).toHaveLength(1)
+      expect(restored[0]).toMatchObject({ valid: true, unique: true })
+      expect(restored[0]!.indexdef).toContain('WHERE ("resolvedAt" IS NULL)')
+      console.log('[N2] restore verified: OpsAlert_one_open_per_key present, valid and unique')
     }
-    const restored = await prisma.$queryRaw<{ indexdef: string }[]>`SELECT indexdef FROM pg_indexes WHERE indexname = 'OpsAlert_one_open_per_key'`
-    console.log(`[N2] alerts=${await prisma.opsAlert.count({ where: { rule: 'SERVER_ERRORS' } })} notifications=${alertFiles(outbox).length} index-restored=${JSON.stringify(restored.map((r) => r.indexdef))}`)
-    const alerts = await prisma.opsAlert.findMany({ where: { rule: 'SERVER_ERRORS' } })
-    expect(alerts).toHaveLength(1)
-    expect(alerts[0]).toMatchObject({ resolvedAt: null, notifyAttempts: 1, notifyStatus: 'SENT' })
-    expect(alertFiles(outbox)).toHaveLength(1)
+    // The planned failure: more than one notification for one threshold crossing.
+    expect(notifications, 'N2: notifications for one threshold crossing').toBe(1)
+    expect(openAlerts, 'N2: open alerts for one dedupKey').toBe(1)
   })
 
   it('five concurrent housekeeping starts run once and refuse the others', async () => {
